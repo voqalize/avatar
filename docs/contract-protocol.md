@@ -440,5 +440,8 @@ For servers written against a pre-2026-08 version of this contract, the
 renames were: `createKiran`→`createAvatar`, gaze `CANDIDATE`→`USER` and
 `CODE_AREA`→`SCREEN_WORK`, state `WAITING_FOR_ANSWER`→`WAITING_FOR_USER`.
 Everything else in this document — the descriptor (`api.meta`), `perform()`,
-the listening engine, the compound states and the disagree family — landed
-2026-08 and is current.
+the listening engine, the compound states, the disagree family and the hand
+gestures — landed 2026-08 and is current. `gesture` is the newest verb
+(2026-08-07); a widget older than it ignores the `cmd` and drops the
+`perform()` verb with a warning, which is the forward-compat rule working as
+intended, so a backend may send it unconditionally.

@@ -119,28 +119,54 @@ def platform_id() -> str:
     return f"{system}-{arch}"
 
 
+# Where the wheel unpacks the native payload. A platform wheel carries exactly
+# one binary — the wheel tag already says which platform — so there is no
+# `bin/<platform>/` level here, unlike the source tree's `native/avatarsync`.
+_BUNDLE_DIR = Path(__file__).resolve().parent / "_native"
+
+
 @dataclass(frozen=True, slots=True)
 class RhubarbPaths:
     """Where the binary and its 56 MB model tree live.
 
-    Construct one and hand it to `build_viseme_engine`. **Nothing here reads the
-    environment**: a library that configures itself from `os.environ` has hidden
-    inputs its caller cannot see, cannot override per-instance, and cannot test
-    without mutating global state. Two processes in one interpreter could not
-    disagree about where the binary is, and the failure mode when the variable is
-    absent is silence rather than a `TypeError` at the call site. So the path is
-    an argument, like every other thing this library needs.
+    **Almost nobody should construct one of these.** The platform wheel carries
+    the binary and its model tree inside the package, so `build_viseme_engine`
+    finds them with no argument at all and the native half has no configuration
+    surface. That is the point: a client developer installs one package and gets
+    lipsync.
 
-    The wheel packages the Python and nothing else — the binary is ~3 MB per
-    platform and its acoustic model another 56 MB — so *something* has to say
-    where the artifact landed. `from_home` covers the usual case, `discover`
-    covers a source checkout, and the plain constructor covers a layout that is
-    neither.
+    This class is the escape hatch for the two cases the bundle cannot cover — a
+    deploy that unpacks the artifact somewhere of its own (`from_home`), and a
+    source checkout of this repo, where the binary is built rather than installed
+    (`discover`). Both are explicit, because a library that goes looking on its
+    own has an input its caller can neither see nor override.
+
+    **Nothing here reads the environment**, for the same reason. Two engines in
+    one interpreter could not disagree about where the binary is, and the failure
+    mode when a variable is absent is silence rather than an error at the call
+    site.
     """
 
     binary: Path
     res_dir: Path
     weights: Path | None = None
+
+    @classmethod
+    def bundled(cls) -> RhubarbPaths | None:
+        """The payload inside this wheel, or `None` on a platform we have no
+        wheel for (or an install from the sdist, which carries no binary).
+
+        `None` is not an error. It means this node runs the state channel and
+        the widget falls back to its own amplitude lipsync — worse, not broken.
+        """
+        binary = _BUNDLE_DIR / "avatarsync"
+        if not binary.is_file():
+            return None
+        return cls(
+            binary=binary,
+            res_dir=_BUNDLE_DIR / "res",
+            weights=_BUNDLE_DIR / "phone_weights.json",
+        )
 
     @classmethod
     def from_home(cls, home: Path | str) -> RhubarbPaths:

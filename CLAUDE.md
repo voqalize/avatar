@@ -281,7 +281,9 @@ each face owns its palette; `api.theme` is the mounted one.)
   looks like.** Restyling a character, or adding an avatar, must not change the
   parameter contract. If a visual change requires touching `params.js`, that's
   a signal to reconsider — and if it requires touching anything outside
-  `src/face*.js`, it's a bug.
+  `src/face*.js`, it's a bug. `src/hand.js` is the one drawing that is not a
+  face and not per-face: it knows what a *hand* looks like, takes the mounted
+  face's window and palette, and knows nothing else about the character.
 - **The mouth priority rule is invariant:** server viseme track > clip mouth
   track > amplitude fallback. A clip firing mid-speech contributes head and
   brows only (`MOUTH_LOCK` in `src/avatar.js` — exactly `GROUPS.mouth`).
@@ -297,7 +299,10 @@ each face owns its palette; `api.theme` is the mounted one.)
   phase-shifted relative to each other for free — a deliberate lead or lag has
   to be authored on top of what the mixer is already supplying, not from zero.
   Keep gesture oscillations under ~1.5 Hz: above that line a nod stops reading
-  as attention and starts reading as impatience.
+  as attention and starts reading as impatience. The frame-edge hand is outside
+  both halves of this rule — it takes no smoothing at all, and its waves run
+  2.8–3.0 Hz, because the ceiling is about *nods*: 2–3 Hz is the social wave
+  band and the bottom of it reads as tired.
 - **Autonomy is contingent, never decorative.** Backchannels time off the
   user's voice when a signal is supplied (pause-onset windows, refractory
   gaps); the random-timer path exists only as the no-signal fallback. Some cues
@@ -325,7 +330,7 @@ the packages are judged by test.
 node tools/sweep.mjs            # the rig conformance gate — run before committing src/
 npm test                        # client/: dispatcher logic + a jsdom package-boundary smoke
 npm run build                   # client/ -> client/dist; also runs on `npm install`
-cd py && uv run pytest          # the pipecat backend, 166 tests
+cd py && uv run pytest          # the pipecat backend, 169 tests
 ```
 
 `npm test` deliberately does **not** test the rig. A DOM emulator cannot tell
@@ -392,7 +397,7 @@ answer to "show me the avatar".
 | page | what it's for |
 |---|---|
 | `demo/call.html` | **the one to show people.** A Meet-style two-tile call with mic VAD, floor management and the token log. Hold `Space` to be the user — no microphone needed. `?avatar=NAME` or the side-panel picker swaps the rig live. |
-| `index.html?avatar=NAME` | the full harness, driving one avatar as a host would — every state, emotion, gaze, viseme, interjection, and a user-speaking toggle for the listening engine. |
+| `index.html?avatar=NAME` | the full harness, driving one avatar as a host would — every state, emotion, gaze, viseme, interjection, hand gesture, and a user-speaking toggle for the listening engine. |
 
 `demo/rig/` is the avatar-development set, indexed at `demo/rig/index.html` —
 for *building or repairing a rig*, a different job from demoing one:
@@ -402,7 +407,7 @@ for *building or repairing a rig*, a different job from demoing one:
 | `demo/rig/rig-check.html` | every registered avatar side by side through live `createAvatar` instances. Same command, same moment, so any on-screen difference is the avatar's, never the driving's. |
 | `demo/rig/contact-sheet.html?face=NAME` | static poses for one avatar — every viseme, emotion, gaze target and channel extreme, straight from `apply(p)`, no mixer, no clock. Mouth-detail row crops via `META.mouthCrop`. |
 | `demo/rig/torso-check.html?face=NAME` | shoulder / lean / trunk-turn / head-pose combinations, which only fail *together*. This is where a rig leaks background from behind the shirt if it is going to. The `(worst)` rows are the failure envelope, well past anything the mixer sends. |
-| `demo/rig/body-lab.html?face=NAME&state=…` | the rig driven by hand, deterministically: seeded RNG, `{manual:true}`, `window.stepTo(t)` in 1/60 s ticks. Not for looking at — it exists so `tools/motion.mjs` can difference frames and call the result a measurement. Every other page is stochastic, so no two runs of the liveness layer were ever comparable. |
+| `demo/rig/body-lab.html?face=NAME&state=…` | the rig driven by hand, deterministically: seeded RNG, `{manual:true}`, `window.stepTo(t)` in 1/60 s ticks. Not for looking at — it exists so `tools/motion.mjs` can difference frames and call the result a measurement. Every other page is stochastic, so no two runs of the liveness layer were ever comparable. `&gesture=HI&at=0.4` fires a hand gesture at a known sim time, which is the only way to screenshot one at peak. |
 | `demo/rig/clip-strip.html?clip=NAME` | a gesture clip as a filmstrip: a real `ClipPlayer` stepped in 1/60s ticks with the mixer's own smoothing, so phase relationships are legible in a still. `&n=32` finer, `&crop=` to reframe. Cue tracks are not applied — a shut mouth in the strip is the harness, not the rig. |
 | `demo/rig/expression-lab.html` | clip and beat authoring against real audio. |
 | `demo/rig/lipsync-eval.html` | cue tracks A/B, sphinx vs phonetic. |
@@ -414,9 +419,10 @@ Both lab pages carry a `DATA = '../'` constant for the hop back up.
 `rig-check.html` console API — `sweep()` is the conformance test:
 
 ```js
-await sweep()   // every state, emotion, gaze, interjection on every avatar,
-                // then a viseme track. Asserts params finite and |v| <= 2,
-                // and svg.isConnected. Returns {ok, problems}.
+await sweep()   // every state, emotion, gaze, interjection and hand gesture on
+                // every avatar, then a viseme track. Asserts params finite and
+                // |v| <= 2, svg.isConnected, and checkHandFraming per avatar.
+                // Returns {ok, problems}.
 pose({ headYaw: -1, headRoll: 1 }, 800)  // hold a raw vector on all rigs
 unpose()
 rigs                                     // [{name, avatar}, ...]
@@ -523,7 +529,7 @@ py/src/voqalize_avatar/visemes.py        the three-leg viseme engine + splice
 py/src/voqalize_avatar/avatarsync.py     resident subprocess pool for the aligner
 py/scripts/fit_durations.py  refits duration_table.json (the fast leg's phone
                        weights) from any {text, audio_ms} corpus
-py/tests/              166 tests; green at the declared pipecat floor and above
+py/tests/              169 tests; green at the declared pipecat floor and above
 
 native/avatarsync/     the Rhubarb Lip Sync fork: patch, src, build.sh, binaries
 

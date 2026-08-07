@@ -12,7 +12,8 @@ result to the client as RTVI server-messages over the data channel you already
 have.
 
 There is no video track, no per-minute avatar vendor, and no second media path.
-The face is ~40 KB of dependency-free JavaScript on the other end.
+The face is dependency-free JavaScript on the other end — about 75 KB gzipped
+for the widget plus the one rig you mount.
 
 ```
 pip install voqalize-avatar

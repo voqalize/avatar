@@ -5,8 +5,8 @@ any face and go by any name — the demos call theirs Kiran. The server owns
 meaning (what state the agent is in, what it's saying, where it's looking); the
 client owns motion (how a face actually moves when it means those things).
 
-No build step, no runtime dependencies, ~200KB of ES modules — about two thirds
-of that is the three face rigs, and a host that ships one face pays for one.
+No build step, no runtime dependencies, ~270KB of ES modules — a third of that
+is the three face rigs, and a host that ships one face pays for one.
 
 The two load-bearing interfaces are specified in
 [docs/contract-protocol.md](docs/contract-protocol.md) (server ↔ widget) and

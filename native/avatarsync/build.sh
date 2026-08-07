@@ -139,6 +139,28 @@ if [ "$res_only" = 1 ]; then
 	exit 0
 fi
 
+# --- portability floor --------------------------------------------------------
+# This binary ships inside a wheel, so the machine that runs it is not the
+# machine that built it and we do not get to pick either. Both knobs below exist
+# because the default is "whatever the builder happened to have", which is the
+# wrong answer for a distributed artifact.
+#
+# Linux: link libstdc++ and libgcc statically. A wheel tag can only express a
+# *glibc* floor (`manylinux_2_28_x86_64`), so a dynamic libstdc++ dependency is
+# invisible to pip and fails at import time on the user's node instead of at
+# install time. Building in a modern toolchain against an old glibc — which is
+# exactly what the manylinux images do — guarantees the mismatch, because the
+# toolchain's libstdc++ is newer than the base image's. Costs ~1.5 MB.
+#
+# macOS: pin the deployment target. Clang defaults it to the *host's* OS
+# version, so a binary built on the newest macOS silently refuses to run on
+# anything older — including the machine of the next person to clone this repo.
+case "$PLATFORM" in
+	linux-*)  EXTRA_LINK="-static-libstdc++ -static-libgcc"; EXTRA_OSX="" ;;
+	darwin-*) EXTRA_LINK=""; EXTRA_OSX="-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0" ;;
+	*)        EXTRA_LINK=""; EXTRA_OSX="" ;;
+esac
+
 # --- compile ------------------------------------------------------------------
 # CMAKE_POLICY_VERSION_MINIMUM: 1.14.0's vendored libraries declare minimums
 # below 3.5, which CMake 4 rejects outright.
@@ -153,6 +175,8 @@ echo ">> configuring" >&2
 cmake -S "$TREE" -B "$TREE/build" \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+	$EXTRA_OSX \
+	-DCMAKE_EXE_LINKER_FLAGS="$EXTRA_LINK" \
 	-DCMAKE_C_FLAGS="-ffile-prefix-map=$TREE=." \
 	-DCMAKE_CXX_FLAGS="-ffile-prefix-map=$TREE=." >&2
 
