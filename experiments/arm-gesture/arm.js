@@ -154,17 +154,24 @@ const PALM = [
 // creases in the flesh. So the notches came up to ~15% and these three marks
 // took over the job — thick at the notch floor, tapered to nothing over about a
 // third of the finger's length, in exactly the mark language of peep's own ear
-// whorl and nose hook. Three marks is the right budget for a hand living in a
-// face made of about twelve.
+// whorl and nose hook.
+// There are exactly TWO, because three finger masses have two gaps between them.
+// A third mark hinting at the ring/little split was drawn and removed: at 130 px
+// it carries no information (the split it implies is invisible at any size this
+// ships at) and at full size it reads as a scratch. Economy is not a style here,
+// it is the difference between a mark and a blemish.
 const PALM_SEPS = [
   [[13, -130], [14, -122], [15, -113]],      // little/ring from middle
   [[-20, -132], [-21, -124], [-21, -115]],   // middle from index
-  [[27, -141], [28, -134], [29, -127]],      // the ring/little split, implied
 ];
-// The one interior mark that says PALM rather than back-of-hand. Kept short and
-// tapered to nothing at both ends; a constant-width version of this read as a
-// fold in fabric.
-const PALM_CREASE = [[-40, -54], [-20, -42], [0, -39], [18, -44]];
+// The one interior mark that says PALM rather than back-of-hand — and it is the
+// THENAR crease, the arc around the ball of the thumb, not a line across the
+// palm. That is the change a person drawing a hand makes without thinking about
+// it, and the earlier horizontal version is why: a wide shallow smile low in a
+// rounded white form, at tile size, beside a face, reads as a MOUTH. The arc
+// runs off the bottom edge instead of ending, so nothing about it says "this
+// mark stopped here".
+const PALM_CREASE = [[-46, -80], [-41, -54], [-30, -26], [-14, -2], [-8, 14]];
 
 // --- dorsal: the fist, for thumbs-up ----------------------------------------
 // The back of a closed hand: an undulating top edge of metacarpal heads, and a
@@ -205,7 +212,12 @@ const FIST = [
 // clip art. A single S-curve for the curled proximal phalanges is the only
 // interior mark that earns its ink at the acceptance size. Not four knuckle
 // lines — one.
-const FIST_CURL = [[28, -46], [10, -38], [-8, -42], [-26, -52]];
+// It runs PARALLEL to the knuckle crest, about 24 units under it, which is where
+// the proximal phalanges actually are — and, drawn any lower, it sat near the
+// frame cut and left the knuckle half of the fist empty. An empty top and a
+// marked bottom is upside down: the eye goes to the crest first, and finds
+// nothing there.
+const FIST_CURL = [[24, -48], [8, -58], [-8, -60], [-24, -52]];
 // The thumb is a SEPARATE CLOSED SHAPE crossing the fist, which is what keeps
 // the middle-finger read dead. The third cut killed that read by making the
 // thumb a stub — and overshot: a digit as tall as it is wide is not a thumb, it
@@ -256,25 +268,31 @@ const FIST_THUMB = [
 // against the shirt, its meaning lives in one unambiguous silhouette rather than
 // in notches, and where it crosses the hair, value does the separating.
 const POINT = [
-  [22, 300], [24, 60], [27, 14],
-  [31, -24], [33, -50],
-  [30, -76], [21, -84], [12, -78],           // two undulations, as on FIST
-  [1, -88], [-13, -98], [-22, -94],
-  // The index. It was a post: near-constant width, no joint. A bulge at the
-  // proximal phalanx and a pinch of ~8% at the middle joint (~45% up) is all it
-  // takes to say FINGER instead of bollard, and it is done in the outline rather
-  // than with an added crease — a crease that small does not survive 130 px.
-  [-19, -106], [-20, -122], [-21.5, -131],   // inner edge: the pinch
-  [-22, -146], [-23, -160],
-  [-28, -171], [-36, -173],
-  [-42, -166], [-42.5, -154],                // outer edge
-  [-41, -131], [-43, -116],                  // the matching bulge below it
-  [-41.5, -100],
+  [24, 300], [26, 60], [30, 12],
+  [36, -22], [40, -46],                      // the heel, and the widest band
+  [39, -66], [30, -74], [22, -70],           // two undulations, as on FIST
+  [12, -80], [-2, -84],
+  [-8, -90],                                 // the web — a rounded corner, barely a notch
+  // The index, SHORTENED. It cleared the knuckles by 75 units against a visible
+  // fist of 90 — anatomically defensible, and at 0.79 of a head-width it was the
+  // longest single mark in the tile. Nothing that is not the face gets to be
+  // that. It now clears by 56 against 78, which is what a person reads as a
+  // raised finger rather than as a pole; the long-thin-against-short-fat contrast
+  // with THUMBS_UP survives on the ratio (0.36 against 0.76), which is where it
+  // was always doing its work.
+  //
+  // It tapers toward the tip and carries no joint pinch. The pinch was drawn in
+  // the OUTLINE, and a wobble that small in a contour does not read as a knuckle
+  // at any size — it reads as an unsteady line.
+  [-12, -106], [-15, -122],                  // inner edge
+  [-18, -136], [-25, -146], [-32, -143],     // domed tip, never pointed
+  [-35, -129], [-34, -112],                  // outer edge
+  [-36, -94],
   // The thumb, clamped across the curled fingers and showing as a lobe on the
   // flank. An index-up fist with no thumb anywhere in it is quietly impossible.
-  [-44, -84], [-48, -70], [-45, -56],
-  [-43, -40], [-41, -16],
-  [-36, 60], [-33, 300],
+  [-44, -76], [-47, -62], [-44, -50],
+  [-42, -38], [-41, -16],
+  [-37, 60], [-34, 300],
 ];
 
 // Author scale, and the number this cut changed most. Earlier cuts drew the hand
@@ -385,7 +403,7 @@ const SHAPES = {
   // being an empty slab.
   POINT: {
     outline: POINT,
-    marks: [{ pts: [[20, -54], [4, -48], [-12, -54]], w: W_CURL }],
+    marks: [{ pts: [[22, -50], [6, -58], [-10, -58]], w: W_CURL }],
     rings: [],
   },
 };
