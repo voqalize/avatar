@@ -51,30 +51,53 @@ onto and the user-speaking truth the listening engine times backchannels off.
 
 ## Mouth shapes
 
-Lipsync is the headline feature, and it is opt-in because it needs a native
-aligner — the [`avatarsync`](https://github.com/voqalize/avatar/tree/main/native/avatarsync)
-fork of [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync),
-which emits the A–H+X mouth-shape alphabet the wire format is built on.
+Lipsync is the headline feature, and there is nothing to configure:
 
 ```python
 from voqalize_avatar.wiring import attach_tts_hooks, build_viseme_engine
 
-engine = build_viseme_engine(avatar, sample_rate=24000, avatarsync="/opt/avatarsync")
+engine = build_viseme_engine(avatar, sample_rate=24000)
 attach_tts_hooks(tts, engine)
 ```
 
-`avatarsync` is the directory your deploy unpacked the artifact into —
-`bin/<platform>/avatarsync`, `res/`, `data/phone_weights.json`. It is the entire
-configuration surface of the native half, and it is an argument: **this library
-reads no environment variables.** Pass `RhubarbPaths.discover()` in a source
-checkout where the artifact sits beside the Python, or a `RhubarbPaths` directly
-for a layout that is neither. Omit it and you get the state channel alone.
+The wheel carries its own aligner — [`avatarsync`](https://github.com/voqalize/avatar/tree/main/native/avatarsync),
+our fork of [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync),
+which emits the A–H+X mouth-shape alphabet the wire format is built on — along
+with the 56 MB acoustic model it needs. That is why the wheel is ~44 MB and why
+it is platform-specific. **No path, no environment variable, no separate
+artifact to ship into your image.**
 
-`build_viseme_engine` **never raises**. A missing binary is an ordinary
-condition: it logs once, returns `None`, and the session runs state-channel
-only — the widget falls back to its own WebAudio amplitude lipsync, which is
-worse but not broken. So you can land states, gaze and interjections today and
-turn visemes on when the binary is in your image.
+| platform | wheel |
+|---|---|
+| Linux x86-64 / aarch64 | `manylinux_2_28` — RHEL 8+, Debian 10+, Ubuntu 18.10+ |
+| macOS arm64 / x86-64 | `macosx_11_0` |
+
+Anything else installs the sdist, which carries no binary. So does an explicit
+`--no-binary`. Both are fine: `build_viseme_engine` **never raises**. A missing
+aligner is an ordinary condition — it logs once, returns `None`, and the session
+runs state-channel only, with the widget falling back to its own WebAudio
+amplitude lipsync. Worse, not broken.
+
+`enabled=False` turns it off on a node that should not run it.
+
+<details>
+<summary>Pointing it somewhere else</summary>
+
+The bundled aligner is the answer for approximately everyone. The `avatarsync`
+argument exists for the two cases it cannot cover, and it is an argument rather
+than an environment variable so that two engines in one interpreter cannot
+disagree and a test needs no global mutation:
+
+```python
+# a deploy that unpacks the artifact itself
+build_viseme_engine(avatar, sample_rate=24000, avatarsync="/opt/avatarsync")
+
+# a source checkout of this repo, where the binary is built rather than installed
+from voqalize_avatar.avatarsync import RhubarbPaths
+build_viseme_engine(avatar, sample_rate=24000, avatarsync=RhubarbPaths.discover())
+```
+
+</details>
 
 The engine runs three legs and the client splices between them: a **fast** leg
 that predicts the timeline from text before the audio exists (~0.4 ms), an

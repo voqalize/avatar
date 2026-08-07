@@ -510,7 +510,8 @@ LICENSE                AGPL-3.0-only; py/LICENSE is a copy, because a wheel
                        carries its own
 RELEASING.md           one tag publishes both packages; the OIDC setup each
                        registry needs
-.github/workflows/     ci.yml (the gate, also called by release) and release.yml
+.github/workflows/     ci.yml (the gate, also called by release), wheels.yml (the
+                       canonical per-platform native build), release.yml
 
                        -- the browser client (TypeScript; the one build step) --
 client/src/types.ts        the wire vocabulary; twin of messages.py
@@ -531,7 +532,12 @@ py/scripts/fit_durations.py  refits duration_table.json (the fast leg's phone
                        weights) from any {text, audio_ms} corpus
 py/tests/              169 tests; green at the declared pipecat floor and above
 
-native/avatarsync/     the Rhubarb Lip Sync fork: patch, src, build.sh, binaries
+native/avatarsync/     the Rhubarb Lip Sync fork: patch, src, build.sh, binaries.
+                       build.sh is the LOCAL loop; wheels.yml is what ships.
+                       The binary + model tree ride inside the pypi wheel, so
+                       `pip install voqalize-avatar` needs no second artifact
+py/scripts/stage_native.py  stages that payload and derives the wheel's platform
+                       tag by reading the compiled binary
 
 docs/contract-protocol.md   the server <-> widget contract (binding)
 docs/contract-avatar.md     the mixer <-> face contract + new-avatar recipe (binding)

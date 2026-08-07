@@ -50,6 +50,18 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/voqalize_avatar"]
+# `_native/` is gitignored and staged by scripts/stage_native.py immediately
+# before a release build. Hatchling honours .gitignore when it collects files,
+# so it has to be told that this one is deliberate.
+artifacts = ["src/voqalize_avatar/_native/**"]
+
+[tool.hatch.build.targets.wheel.hooks.custom]
+path = "hatch_build.py"
+
+[tool.hatch.build.targets.sdist]
+# The sdist is the source, not the payload: 44 MB of compiled binary and
+# acoustic model would be neither reviewable nor rebuildable from it.
+exclude = ["src/voqalize_avatar/_native"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

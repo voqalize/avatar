@@ -138,13 +138,21 @@ hard way when the mac build turned out to be leaning on Homebrew:
 | `build-essential`, `curl`, `patch` | compile, fetch the pinned tarball, apply our patch |
 
 On an Apple-silicon mac a linux image runs under qemu emulation, which turns a
-~2 minute compile into a very long one. So the linux binary is built on a real
-x86_64 host, on demand, by `.github/workflows/native-linux.yml`:
+~2 minute compile into a very long one. So the linux binaries are built on real
+hosts by `.github/workflows/wheels.yml`, which is also what builds the wheels —
+one workflow, so the binary a developer refreshes is the binary a user gets:
 
 ```sh
-gh workflow run native-linux.yml
+gh workflow run wheels.yml
 gh run download <id> -n avatarsync-linux-x64 -D bin/linux-x64
 ```
+
+That workflow builds **inside the `manylinux_2_28` image**, not on the runner.
+The runner is Ubuntu 24.04 (glibc 2.39), and a binary built there cannot run on
+Ubuntu 22.04, Debian 12 or RHEL 9 — most of production. glibc 2.28 reaches back
+to RHEL 8 and Debian 10 and costs nothing. Boost is headers-only and ≥ 1.54, so
+AlmaLinux 8's 1.66 satisfies it; CMake comes from pip because the image's is
+older than the 3.30 that upstream's `CMP0167` policy requires.
 
 Locally, if you do have an x86_64 linux host:
 
@@ -154,13 +162,21 @@ docker run --rm -v "$PWD/../..:/w" -w /w/native/avatarsync debian:trixie \
     libboost-all-dev curl patch git && ./build.sh'
 ```
 
-**Check glibc before committing what you built.** The binary links only
-`libc`/`libm`/`libgcc_s`/`libstdc++` (Boost is static), but glibc symbol
-versioning is forward-incompatible: a binary built on trixie (glibc 2.41) would
-not run on a host with an older glibc, however little of it the binary uses. The
-workflow builds on `ubuntu-24.04` (glibc 2.39, `GLIBCXX_3.4.32`) and prints the
-highest versioned symbol it ended up requiring, which is the floor a deployment
-has to clear. Verify any rebuild the same way:
+**glibc symbol versioning is forward-incompatible**: a binary built against a
+newer glibc will not run on a host with an older one, however little of it the
+binary uses. Since the binary now ships inside a wheel, that floor is not just
+documentation — it is the wheel's `manylinux_x_y` tag, and
+`py/scripts/stage_native.py` derives the tag by reading these very symbols out
+of the compiled binary. Build somewhere newer and the tag moves with you; pip
+then declines to install it where it would not run, instead of installing it and
+failing at the first sentence.
+
+`libstdc++` and `libgcc` are linked **statically** (see the portability block in
+`build.sh`), which leaves glibc as the whole dynamic story. That is not an
+optimisation: a wheel tag cannot express a libstdc++ floor at all, so a dynamic
+one would be invisible to pip. Staging refuses a binary that still has
+`GLIBCXX_`/`CXXABI_` symbols rather than shipping the trap. Verify by hand the
+same way:
 
 ```sh
 strings bin/linux-x64/avatarsync | grep -o 'GLIBC_[0-9.]*'   | sort -uV | tail -1
@@ -179,11 +195,24 @@ real compile. Compare it against `./build.sh --recipe-id` before trusting a
 binary, and wire that comparison into whatever packages a deployment. Rebuild on
 each platform and commit the binary and its `.recipe` together.
 
-A deployment that unpacks this directory needs three things —
-`bin/<platform>/avatarsync`, `res/` (regenerate with `./build.sh --res-only`;
-56 MB, not committed) and `data/phone_weights.json` — and passes the result to
-`build_viseme_engine(..., avatarsync=<that directory>)`. The library reads no
-environment variables; where the artifact landed is something the application
+## How this reaches a user
+
+Inside the wheel. `voqalize-avatar` publishes one wheel per platform, each
+carrying `bin/<platform>/avatarsync`, `res/` and `data/phone_weights.json`
+flattened into `voqalize_avatar/_native/`, so `pip install voqalize-avatar` is
+the entire installation procedure and `build_viseme_engine` needs no argument.
+A deployment ships nothing extra.
+
+**`.github/workflows/wheels.yml` is canonical**, and it compiles rather than
+packaging a committed binary. `build.sh` is the local loop — it is how you
+iterate on `src/avatarsync.cpp` on your own machine, and it takes the same
+portability flags so a local build is debuggable against the published one, but
+nothing it produces is ever distributed. The committed binaries exist so a clone
+runs without a compiler; they are a development convenience, not the artifact.
+
+The escape hatch is still there for a deploy that unpacks this directory itself:
+pass `build_viseme_engine(..., avatarsync=<that directory>)`. The library reads
+no environment variables — where an artifact landed is something the application
 knows and states.
 
 `data/phone_weights.json` is the exception, and the reason the recipe hash

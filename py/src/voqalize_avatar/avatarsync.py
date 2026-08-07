@@ -69,6 +69,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 import platform
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -209,14 +210,27 @@ class RhubarbPaths:
         if not self.binary.is_file():
             raise RhubarbUnavailableError(
                 f"No avatarsync binary at {self.binary} (platform {platform_id()}). "
-                "Run native/avatarsync/build.sh, or pass the path this deploy "
-                "unpacked it to."
+                "Install the platform wheel for this machine, or point "
+                "build_viseme_engine at a directory that has one."
             )
+        # Some install paths lose the mode bits — a wheel unpacked by hand, a
+        # `COPY` into an image, an artifact that went through a tar without
+        # `-p`. The binary is ours and its location is inside our own package,
+        # so repairing this is not overreach; failing the whole viseme stack
+        # over a permission bit we can set would be.
+        if not os.access(self.binary, os.X_OK):
+            try:
+                self.binary.chmod(self.binary.stat().st_mode | 0o111)
+            except OSError as exc:
+                raise RhubarbUnavailableError(
+                    f"{self.binary} is not executable and could not be made so ({exc})."
+                ) from exc
         dictionary = self.res_dir / "sphinx" / "cmudict-en-us.dict"
         if not dictionary.is_file():
             raise RhubarbUnavailableError(
-                f"No pronunciation dictionary at {dictionary}. The 56 MB model tree "
-                "is not committed — run native/avatarsync/build.sh --res-only."
+                f"No pronunciation dictionary at {dictionary}. A platform wheel "
+                "carries one; a source checkout needs "
+                "native/avatarsync/build.sh --res-only."
             )
 
 

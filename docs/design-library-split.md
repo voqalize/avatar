@@ -29,13 +29,13 @@ visual-verification apparatus. The backend halves came to the contracts, not
 the other way round. Each consumer keeps its own deploy plumbing — that is the
 application's, not the library's.
 
-### 2. Two published packages, and one thing that is deliberately not a package
+### 2. Two published packages, one of them platform-specific
 
 | artifact | registry | contents | deps |
 |---|---|---|---|
 | `@voqalize/avatar` | npm | the widget (`src/`) + `./pipecat` + `./react` subpaths | none; optional peers |
 | `voqalize-avatar` | pypi | processor, state machine, wire, viseme engine, `avatarsync` runtime | `pipecat-ai>=1.4,<2` |
-| `native/avatarsync` | *not a package* | the C++ fork, its build, the prebuilt binaries | — |
+| `native/avatarsync` | *inside the pypi wheel* | the C++ fork, its build, the model tree | — |
 | — | — | `docs/` contracts, binding for all of them | — |
 
 **One npm package with subpath exports, not three packages.** The widget is
@@ -52,21 +52,45 @@ local literals for exactly this reason, with a test pinning them against the
 real enum. The check that catches the regression is packing the tarball and
 importing it from a clean project; CI does it on every push.
 
-**One pypi package, because the binary was never a pip problem.** The obvious
-move is to split the native half into its own wheel, and the code says not to:
-the whole lipsync stack is stdlib plus a subprocess, with *zero*
-avatar-specific Python dependencies. The runtime wrapper is ordinary Python and
-ships with everything else; the 3 MB binary and the 56 MB acoustic model ship
-the way each consumer already ships large artifacts — a build-cache step, or a
-`COPY` into an image — and the application tells the library where that landed
-by passing `avatarsync=<dir>`. Splitting the wheel would buy a dependency edge
-nobody needs and a second version to keep in step.
+**One pypi package, and the binary is inside it.** The whole lipsync stack is
+stdlib plus a subprocess, with *zero* avatar-specific Python dependencies, so a
+second wheel for the native half would buy a dependency edge nobody needs and a
+second version to keep in step. The 3 MB binary and the 56 MB acoustic model
+therefore ride in the wheel itself, which makes it platform-specific and ~44 MB
+and makes `pip install voqalize-avatar` the entire installation procedure.
 
-**The path is an argument, never an environment variable.** This was briefly
-the other way round (`AVATARSYNC_HOME`, `AVATARSYNC_BIN`, `AVATARSYNC_RES`,
-`AVATARSYNC_PROCS`) and it was wrong for the reason all library-level env
-reading is wrong: it is a hidden input. The caller cannot see it in the call, two
-engines in one interpreter cannot disagree about it, a test cannot set it
+This was briefly the other way round — the artifact shipped separately and the
+application passed its location — on the reasoning that consumers already ship
+large artifacts, so a `COPY` into an image was no new burden. That reasoning
+looks at the wrong party. It is true of the *first* consumer, who is also the
+author and already has the build; it is false of everyone after, for whom it is
+an undocumented second install step whose omission produces no error, just an
+avatar that never quite moves its mouth right. A library whose headline feature
+is off by default until you find the README has misplaced its default. The
+constraint that actually settled it: **mouth sync is the headline feature**, and
+a distribution choice that leaves it dark in the common case is a regression in
+the thing this project is for, whatever it saves elsewhere.
+
+The cost is honest and small — a 44 MB wheel, four platform builds instead of
+one, and no wheel at all for platforms outside the matrix. The last of those is
+survivable precisely because of the property below: an install with no binary is
+an ordinary condition, not a failure.
+
+**Bundling does not mean guessing.** The payload lives at a fixed place inside
+the package (`voqalize_avatar/_native/`), which is a *known* location, not a
+discovered one — no search path, no filesystem walk, no environment. And the
+wheel tag is derived from the compiled binary rather than declared beside it, so
+the claim "this runs here" is made by the artifact and not by a human editing a
+matrix.
+
+**Where an override does exist, it is an argument, never an environment
+variable.** The bundle covers the common case; a deploy that unpacks the
+artifact itself passes `avatarsync=<dir>`. That was briefly the *only* way in,
+and briefly before that it was environment variables (`AVATARSYNC_HOME`,
+`AVATARSYNC_BIN`, `AVATARSYNC_RES`, `AVATARSYNC_PROCS`), which was wrong for the
+reason all library-level env reading is wrong: it is a hidden input. The caller
+cannot see it in the call, two engines in one interpreter cannot disagree about
+it, a test cannot set it
 without mutating global state the next test inherits, and when it is missing the
 failure is silence — a session that quietly runs without lipsync — rather than a
 `TypeError` at the seam. Configuration that reaches a library through the
@@ -74,15 +98,15 @@ process environment has skipped the API, which is the one place its meaning is
 documented and checked. Reading the environment is an *application's* job;
 `voqalize-avatar` does none of it.
 
-What this does buy: **the viseme leg is optional at runtime, not at install
-time.** `build_viseme_engine()` never raises — a missing binary is an ordinary
-condition, logged once, and the session runs state-channel-only. So an
-application can land states, gaze and interjections by simply not shipping the
-binary yet, and turn visemes on later by adding a `COPY` and one argument. The
-degradation is bounded: the widget falls back to `src/audio-fallback.js`, the
-WebAudio amplitude path it has carried since day one for exactly this. Mouth
-sync is the headline feature (brief, constraint 2), so this is a sequencing
-decision, not an acceptable end state.
+**The viseme leg stays optional at runtime, and that survived bundling.**
+`build_viseme_engine()` never raises — no binary is an ordinary condition, logged
+once, and the session runs state-channel-only. That path is no longer the common
+case, but it is not dead code either: it is what an sdist install gets, what a
+platform outside the matrix gets, and what `enabled=False` selects on a node that
+should not run an aligner. The degradation is bounded — the widget falls back to
+`src/audio-fallback.js`, the WebAudio amplitude path it has carried since day one
+for exactly this. Keeping the fallback is what makes a four-row platform matrix
+an acceptable answer instead of a wall.
 
 ### 3. Distribution: public registries, restrictive licence
 
@@ -119,8 +143,8 @@ Neither registry holds a long-lived credential — both accept an OIDC token
 minted for this repository running this workflow. Setup and the token fallback
 are in `RELEASING.md`.
 
-The one thing that is still not a package is the native aligner; see the
-`native/avatarsync` note in decision 2.
+The native aligner is not a package of its own either — it ships inside the
+pypi wheel; see the `native/avatarsync` note in decision 2.
 
 ### 4. Two tiers of state, and the seam between them
 

@@ -39,6 +39,7 @@ from .avatarsync import (
     RhubarbPaths,
     RhubarbUnavailableError,
     VisemeRuntime,
+    platform_id,
     shared_pool,
 )
 from .visemes import VisemeEngine, cues_to_wire
@@ -67,13 +68,17 @@ def build_viseme_engine(
     with one clear log line — the avatar still animates, it just moves its mouth
     on the widget's own amplitude fallback.
 
-    `avatarsync` says where the native aligner is, and there is no default,
-    because every default would be a guess: a `str`/`Path` is the home directory
-    a deploy unpacked the artifact into (`RhubarbPaths.from_home`), a
-    `RhubarbPaths` is a layout that is not that shape, and `None` means this node
-    runs the state channel alone. A source checkout passes
-    `RhubarbPaths.discover()`. This argument is the whole configuration surface
-    of the native half — read no environment, set no environment.
+    **The native half needs no configuration.** The platform wheel carries the
+    aligner and its model tree inside the package, so the common case is to pass
+    nothing and get lipsync. `avatarsync` is the escape hatch, for the two cases
+    the bundle cannot cover: a `str`/`Path` is a directory a deploy unpacked the
+    artifact into (`RhubarbPaths.from_home`), and a `RhubarbPaths` is a layout
+    that is neither — a source checkout uses `RhubarbPaths.discover()`. It is an
+    argument and never an environment variable, so two engines in one
+    interpreter cannot disagree and a test needs no global mutation.
+
+    `enabled=False` is how you say "not on this node". Omitting the path is not:
+    omitting it means "use the one you shipped with".
 
     The runtime is a **lease on a worker-wide pool**, not a process of this
     session's own. `avatarsync` is ~86 MB of acoustic model answering requests
@@ -90,17 +95,22 @@ def build_viseme_engine(
 
     if runtime is None:
         if avatarsync is None:
-            logger.info(
-                "avatar: server-side lipsync off — no avatarsync path given. Pass "
-                "avatarsync=<home dir> to build_viseme_engine, or "
-                "RhubarbPaths.discover() in a source checkout."
+            paths = RhubarbPaths.bundled()
+            if paths is None:
+                logger.info(
+                    "avatar: server-side lipsync off — this install carries no "
+                    "avatarsync binary for {}. That is the sdist, or a platform "
+                    "we publish no wheel for; the widget's own amplitude lipsync "
+                    "covers the gap.",
+                    platform_id(),
+                )
+                return None
+        else:
+            paths = (
+                avatarsync
+                if isinstance(avatarsync, RhubarbPaths)
+                else RhubarbPaths.from_home(avatarsync)
             )
-            return None
-        paths = (
-            avatarsync
-            if isinstance(avatarsync, RhubarbPaths)
-            else RhubarbPaths.from_home(avatarsync)
-        )
         try:
             paths.check()
         except RhubarbUnavailableError as exc:

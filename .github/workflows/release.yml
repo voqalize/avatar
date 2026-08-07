@@ -70,20 +70,36 @@ jobs:
       # can check that what they installed came from what they can read.
       - run: npm publish --provenance --access public
 
+  # One wheel per platform, each carrying the aligner, plus the sdist. Compiled
+  # here from the pinned upstream tarball — never from a committed binary.
+  wheels:
+    needs: [guard, ci]
+    uses: ./.github/workflows/wheels.yml
+
   pypi:
     name: publish voqalize-avatar
-    needs: [guard, ci]
+    needs: [guard, wheels]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - name: build
-        working-directory: py
-        run: uv build
+      - uses: actions/download-artifact@v4
+        with:
+          path: py/dist
+          pattern: "{wheel-*,sdist}"
+          merge-multiple: true
+      # PyPI rejects the whole upload if one file is wrong, so a bad set fails
+      # here rather than half-publishing a release whose Linux users get lipsync
+      # and whose macOS users silently do not.
+      - name: check the set before uploading
+        run: |
+          ls -la py/dist
+          test -n "$(ls py/dist/*.tar.gz 2>/dev/null)" || { echo "::error::no sdist"; exit 1; }
+          n=$(ls py/dist/*.whl | wc -l)
+          [ "$n" -ge 4 ] || { echo "::error::only $n wheels; expected one per platform"; exit 1; }
+          ! ls py/dist/*py3-none-any.whl 2>/dev/null || { echo "::error::a pure wheel got in"; exit 1; }
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: py/dist

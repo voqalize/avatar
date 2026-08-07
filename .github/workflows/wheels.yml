@@ -1,0 +1,175 @@
+# Build the distributable `voqalize-avatar` wheels — one per platform, each
+# carrying the `avatarsync` aligner and its model tree.
+#
+# **This workflow is canonical.** `native/avatarsync/build.sh` is the local loop:
+# it exists so a developer can compile and iterate on their own machine, and it
+# takes the same portability flags so a local build is debuggable against this
+# one. But nothing a laptop produces is ever published. Every byte that reaches
+# PyPI is compiled here, from the pinned upstream tarball plus our patch, on a
+# runner whose glibc and SDK floor we chose deliberately.
+#
+# The matrix is the supported-platform list. Adding a row is how this project
+# supports a new platform; there is no other list to update, because the wheel
+# tag is derived from the binary rather than declared (py/scripts/stage_native.py).
+#
+# Linux builds inside the manylinux_2_28 image rather than on the runner. The
+# runner is Ubuntu 24.04 (glibc 2.39), which would produce a wheel that pip
+# refuses to install on Ubuntu 22.04, Debian 12 or RHEL 9 — most of production.
+# glibc 2.28 reaches back to RHEL 8 and Debian 10 and costs nothing.
+name: wheels
+
+on:
+  workflow_dispatch:
+  workflow_call: # the release workflow builds what it publishes
+
+permissions:
+  contents: read
+
+jobs:
+  wheel:
+    name: ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-x64
+            runner: ubuntu-24.04
+            container: quay.io/pypa/manylinux_2_28_x86_64
+          - id: linux-arm64
+            runner: ubuntu-24.04-arm
+            container: quay.io/pypa/manylinux_2_28_aarch64
+          - id: darwin-arm64
+            runner: macos-14
+            container: ""
+          - id: darwin-x64
+            runner: macos-13
+            container: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      # Boost is headers-only and >= 1.54 (upstream's rhubarb/CMakeLists.txt), so
+      # AlmaLinux 8's 1.66 is fine. CMake must be >= 3.30 because upstream sets
+      # policy CMP0167, and older CMake errors on a policy it has never heard of;
+      # the image's is older, so it comes from pip. Pinned off 4.x, which drops
+      # compatibility with the minimums 1.14.0's vendored libraries declare.
+      - name: build deps (linux)
+        if: startsWith(matrix.id, 'linux')
+        run: |
+          dnf install -y boost-devel patch which >/dev/null
+          /opt/python/cp312-cp312/bin/pip install --quiet 'cmake==3.31.*'
+          ln -sf /opt/python/cp312-cp312/bin/cmake /usr/local/bin/cmake
+          cmake --version
+
+      - name: build deps (macos)
+        if: startsWith(matrix.id, 'darwin')
+        run: brew install boost >/dev/null
+
+      # Compiles the binary AND materialises res/ (the 56 MB model tree, which is
+      # generated rather than committed). Both are wheel inputs.
+      - name: compile avatarsync
+        working-directory: native/avatarsync
+        run: ./build.sh
+
+      - name: report the floor this binary earned
+        working-directory: native/avatarsync
+        run: |
+          bin=bin/${{ matrix.id }}/avatarsync
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ldd "$bin" || true
+            strings "$bin" | grep -oE '(GLIBC|GLIBCXX|CXXABI)_[0-9.]+' | sort -uV | tail -5
+          else
+            otool -L "$bin"; otool -l "$bin" | grep -m1 minos
+          fi
+
+      # Before packaging, not after: a binary that cannot answer is not worth
+      # wrapping in 44 MB of model tree and shipping to PyPI.
+      - name: smoke-test the binary
+        working-directory: native/avatarsync
+        run: |
+          printf '%s\n' '{"id":1,"op":"text","ms":1200,"text":"Hello there."}' \
+            | ./bin/${{ matrix.id }}/avatarsync --res res --weights data/phone_weights.json \
+            | tee /dev/stderr | grep -q '"cues"'
+
+      - name: install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      # stage_native.py reads the compiled binary and derives the wheel's
+      # platform tag from what it actually requires — the highest versioned glibc
+      # symbol, or the recorded macOS deployment target. It refuses a binary that
+      # links libstdc++ dynamically, because a wheel tag cannot express that
+      # floor and pip would offer the wheel to machines it cannot run on.
+      - name: stage the payload and build the wheel
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          python3 py/scripts/stage_native.py
+          cd py && uv build --wheel
+
+      # The failure this guards is silent and expensive: if staging is skipped or
+      # the hook does not fire, hatchling happily produces a 64 KB py3-none-any
+      # wheel. It publishes, it installs everywhere, and it has no lipsync.
+      - name: refuse a wheel with no payload
+        run: |
+          set -e
+          whl=$(ls py/dist/*.whl)
+          echo "built $whl"
+          case "$whl" in
+            *py3-none-any.whl) echo "::error::pure wheel — the payload was not staged"; exit 1 ;;
+          esac
+          size=$(wc -c < "$whl")
+          [ "$size" -gt 20000000 ] || { echo "::error::$whl is only $size bytes"; exit 1; }
+
+      # Proves the artifact, not the tree: unpack the wheel somewhere else
+      # entirely and drive the binary through the same entry point a consumer
+      # uses. Catches the executable bit being lost in the zip, a path that only
+      # resolves inside the checkout, and a model tree that did not make it in.
+      - name: install the wheel and run lipsync from it
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          uv venv /tmp/verify
+          uv pip install --python /tmp/verify/bin/python py/dist/*.whl
+          cd /tmp && /tmp/verify/bin/python -c '
+          import asyncio, os
+          from voqalize_avatar.avatarsync import RhubarbPaths, RhubarbRuntime
+          p = RhubarbPaths.bundled()
+          assert p is not None, "the installed wheel carries no binary"
+          assert os.access(p.binary, os.X_OK), "lost the executable bit in the wheel"
+          p.check()
+          cues = asyncio.run(RhubarbRuntime(p).text_cues("Hello there.", 1200))
+          assert cues, "no cues from the installed wheel"
+          print("installed wheel produces cues:", "".join(c.v for c in cues[:12]))
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.id }}
+          path: py/dist/*.whl
+          if-no-files-found: error
+
+      # The bare binary, so `native/avatarsync/bin/<platform>/` in the repo can be
+      # refreshed from a canonical build rather than from somebody's laptop:
+      #   gh run download <id> -n avatarsync-<platform> -D native/avatarsync/bin/<platform>
+      - uses: actions/upload-artifact@v4
+        with:
+          name: avatarsync-${{ matrix.id }}
+          path: |
+            native/avatarsync/bin/${{ matrix.id }}/avatarsync
+            native/avatarsync/bin/${{ matrix.id }}/avatarsync.recipe
+          if-no-files-found: error
+
+  sdist:
+    name: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # Source only — no binary, no model tree. Installing it gives the state
+      # channel and the widget's own amplitude fallback, which the library treats
+      # as an ordinary condition rather than an error.
+      - run: cd py && uv build --sdist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: py/dist/*.tar.gz
+          if-no-files-found: error

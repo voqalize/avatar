@@ -13,7 +13,7 @@ import asyncio
 
 import pytest
 
-from voqalize_avatar.avatarsync import Cue
+from voqalize_avatar.avatarsync import Cue, RhubarbPaths
 from voqalize_avatar.wiring import _voice_of, attach_tts_hooks, build_viseme_engine
 from tests.helpers import AvatarPipe
 
@@ -170,16 +170,55 @@ async def test_a_missing_binary_degrades_instead_of_raising(tmp_path) -> None:
         assert pipe.avatar.audio_sink is None
 
 
-async def test_no_path_means_no_engine() -> None:
-    """The default is off, not a guess.
+async def test_omitting_the_path_uses_whatever_the_wheel_shipped() -> None:
+    """The headline promise: `pip install` and lipsync works, no configuration.
 
-    A library that goes looking for a binary on its own — in `os.environ`, or by
-    walking the filesystem — has an input its caller cannot see or override. The
-    caller says where it is or gets the state channel alone.
+    This asserts against `bundled()` rather than a fixed answer because both
+    answers are correct and which one you get is a property of the install, not
+    of the code. A platform wheel carries the aligner and the engine builds; an
+    sdist install, or a platform we publish no wheel for, carries none and the
+    session runs the state channel alone. The bug this catches is either half
+    disagreeing with `RhubarbPaths.bundled()` — an engine when there is no
+    binary, or no engine when there is one.
     """
+    from voqalize_avatar.avatarsync import RhubarbPaths
+
+    bundled = RhubarbPaths.bundled()
     async with AvatarPipe() as pipe:
-        assert build_viseme_engine(pipe.avatar, sample_rate=24000) is None
+        engine = build_viseme_engine(pipe.avatar, sample_rate=24000)
+        if bundled is None:
+            assert engine is None
+            assert pipe.avatar.audio_sink is None
+        else:
+            assert engine is not None
+            await engine.aclose()
+
+
+async def test_the_off_switch_is_a_flag_not_an_omission() -> None:
+    """`enabled=False` says "not on this node". Omitting the path does not —
+    it says "use the one you shipped with", which is the whole point."""
+    async with AvatarPipe() as pipe:
+        assert build_viseme_engine(pipe.avatar, enabled=False, sample_rate=24000) is None
         assert pipe.avatar.audio_sink is None
+
+
+async def test_the_bundle_is_addressed_relative_to_the_package() -> None:
+    """Wherever the wheel unpacked to. An absolute path baked at build time, or
+    one resolved against the working directory, would work in the checkout that
+    produced it and nowhere else."""
+    from pathlib import Path
+
+    import voqalize_avatar
+    from voqalize_avatar.avatarsync import _BUNDLE_DIR
+
+    assert _BUNDLE_DIR == Path(voqalize_avatar.__file__).resolve().parent / "_native"
+
+    bundled = RhubarbPaths.bundled()
+    if bundled is not None:
+        # One binary, no `bin/<platform>/` level: the wheel tag already says
+        # which platform this is.
+        assert bundled.binary == _BUNDLE_DIR / "avatarsync"
+        assert bundled.res_dir == _BUNDLE_DIR / "res"
 
 
 async def test_a_home_directory_is_accepted_as_a_path_or_a_string(tmp_path) -> None:
