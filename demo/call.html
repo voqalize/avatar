@@ -212,6 +212,7 @@
   <button class="pill" id="btnJoin">Join</button>
   <button class="pill" id="btnSpeak">Agent speaks now</button>
   <button class="pill" id="btnGreet">Greet</button>
+  <button class="pill" id="btnBye">Bye</button>
   <div id="hint">hold <kbd>Space</kbd> = you are speaking</div>
   <div id="meter"><div id="meterFill"></div></div>
 </div>
@@ -408,7 +409,10 @@ $('btnCam').onclick = () => {
   $('btnCam').classList.toggle('off', on);
 };
 $('btnSpeak').onclick = () => floor.takeTurn();
-$('btnGreet').onclick = () => { avatar.interject('WAVE'); emit({ kind: 'clip', text: 'WAVE' }); };
+// `gesture`, not `interject('WAVE')`: the hand is its own verb on the wire, and
+// this is the page where a stakeholder gets to see the difference.
+$('btnGreet').onclick = () => { avatar.gesture('HI'); emit({ kind: 'clip', text: 'HI', note: 'gesture' }); };
+$('btnBye').onclick = () => { avatar.gesture('BYE'); emit({ kind: 'clip', text: 'BYE', note: 'gesture' }); };
 
 // --- hold-to-talk ------------------------------------------------------------
 // Space feeds the floor machine exactly what the VAD feeds it, so barge-in, the

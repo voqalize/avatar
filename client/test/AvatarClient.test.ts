@@ -31,6 +31,18 @@ describe("AvatarClient dispatch", () => {
     expect(calls.setUserSpeaking).toEqual([true, false]);
   });
 
+  it("routes gesture to gesture(), never to interject()", () => {
+    const { api, calls } = createFakeAvatar();
+    const client = new AvatarClient(api);
+
+    client.dispatch({ cmd: "gesture", id: "HI" });
+
+    expect(calls.gesture).toEqual([{ id: "HI" }]);
+    // The face half is the widget's business — a server asking for a gesture
+    // must not also see an interjection dispatched behind its back.
+    expect(calls.interject).toHaveLength(0);
+  });
+
   it("ignores an unknown cmd silently but still reports it via onUnknownCmd", () => {
     const { api, calls } = createFakeAvatar();
     const onUnknownCmd = vi.fn();

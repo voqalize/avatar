@@ -24,6 +24,7 @@ const avatar = createAvatar({ mount: '#avatar' });
 
 avatar.setState('LISTENING', { emotion: 'warm' });
 avatar.interject('MM_HMM');
+avatar.gesture('HI');                     // a hand at the frame edge, plus its face half
 avatar.setGaze('SCREEN_WORK');
 avatar.speak({ audio: audioEl, cues });   // cues: [{t: 0, v: 'D'}, ...]
 ```
@@ -571,6 +572,36 @@ attachAudio('OKAY', '/audio/agent-okay.mp3');
 Clips ramp in over 70ms and out over 150ms, are interruptible, and a repeat of
 the clip already playing collapses rather than stacking.
 
+### Hand gestures
+
+`gesture(id)` — `HI`, `BYE`, `THUMBS_UP`, `ONE_MOMENT`. A hand rises into the
+bottom of the frame, and the matching interjection above plays with it, because
+a hand that arrives while the head sits perfectly still is not attached to
+anybody.
+
+There is still no arm. The hand enters the way a webcam sees one — only fingers
+and palm ever clear the edge, the wrist never does — which is what makes it a
+different proposition from the articulated forearm chain this project removed.
+It is not part of the rig either: no parameter channel, no per-face geometry.
+Every avatar gets it from its own `viewBox` and theme, and a face that never
+plays a gesture renders exactly what it rendered before.
+
+Two guarantees worth stating, because they are the reasons it could ship at
+all: **nothing but a single digit ever passes the mouth** (lipsync is the
+headline feature — a gesture is free to fire mid-speech), and the hand never
+leaves the frame sideways. `checkHandFraming(meta)` asserts both against the
+real timelines for every registered avatar, in `sweep()`.
+
+```js
+avatar.gesture('HI');
+avatar.setHandSide(-1);          // which side it enters from; +1 is the default
+avatar.gesturing;                // the id in flight, or null
+createAvatar({ mount, hand: false });   // no hand; gesture() plays the face half alone
+```
+
+`gesture` is a separate verb from `interject` on the wire too — `interject('WAVE')`
+is still the face alone, so a server that upgrades gets no hand until it asks.
+
 ### Misc
 
 ```js
@@ -582,7 +613,7 @@ avatar.setAudioFallback(el);     // null to detach
 avatar.setOverrides({ ... });    // direct param injection, for tuning UIs
 avatar.setOverrides(null);
 avatar.params;                   // live smoothed parameter vector (read-only)
-avatar.state / .emotion / .gaze / .speaking / .clip / .performing / .audioLevel
+avatar.state / .emotion / .gaze / .speaking / .clip / .gesturing / .performing / .audioLevel
 avatar.mouthGain / .gestureGain / .motionGain / .svg / .meta
 avatar.destroy();
 ```
@@ -592,7 +623,7 @@ are properties, not methods. (`meta` is the mounted avatar's descriptor — the
 call demo sizes its tile from `meta.viewBox`.)
 
 Events: `state` (new state name), `speakEnd`, `clipEnd` (clip id),
-`backchannel` (autonomous ack id), `performEnd`.
+`backchannel` (autonomous ack id), `gestureEnd` (hand gesture id), `performEnd`.
 
 ---
 
@@ -613,6 +644,7 @@ Events: `state` (new state name), `speakEnd`, `clipEnd` (clip id),
 | `src/idle.js` | per-state liveness profiles, the `ListeningEngine`, autonomous backchannel |
 | `src/clips.js` | keyframe player for gesture timelines |
 | `src/interjections.js` | the 26 clips |
+| `src/hand.js` | the frame-edge hand: four gestures, placed from `META.viewBox` |
 | `src/perform.js` | the action-timeline player behind `perform()` |
 | `src/audio-fallback.js` | WebAudio amplitude/spectral lipsync |
 | `src/avatar.js` | public API, the per-frame mixer, and the `AVATARS` registry |

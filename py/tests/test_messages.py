@@ -16,7 +16,14 @@ from __future__ import annotations
 
 import json
 
-from voqalize_avatar import AvatarMessage, AvatarState, Emotion, Gaze, Interjection
+from voqalize_avatar import (
+    AvatarMessage,
+    AvatarState,
+    Emotion,
+    Gaze,
+    HandGesture,
+    Interjection,
+)
 from voqalize_avatar.messages import Hint, SpeechEvent
 
 STATE_NAMES = {
@@ -67,6 +74,8 @@ INTERJECTION_IDS = {
     "TAKE_YOUR_TIME",
 }
 
+HAND_GESTURE_IDS = {"HI", "BYE", "THUMBS_UP", "ONE_MOMENT"}
+
 EMOTION_NAMES = {"neutral", "warm", "curious", "concerned", "encouraging", "thoughtful"}
 
 GAZE_NAMES = {
@@ -93,6 +102,13 @@ def test_the_interjection_vocabulary_is_the_widgets() -> None:
     assert {i.value for i in Interjection} == INTERJECTION_IDS
 
 
+def test_the_hand_gesture_vocabulary_is_the_widgets() -> None:
+    """A separate enum from `Interjection`, not extra members of it: the widget
+    keeps `interject("WAVE")` meaning the face alone, so the two id spaces are
+    allowed to overlap and must not be merged."""
+    assert {g.value for g in HandGesture} == HAND_GESTURE_IDS
+
+
 def test_the_emotion_vocabulary_is_the_widgets() -> None:
     """Lowercase, unlike everything else on this wire — because it is lowercase
     in the widget."""
@@ -110,6 +126,7 @@ def test_every_builder_produces_the_same_envelope() -> None:
     built = [
         AvatarMessage.state(AvatarState.LISTENING),
         AvatarMessage.interject(Interjection.CLAIM_FLOOR),
+        AvatarMessage.gesture(HandGesture.HI),
         AvatarMessage.perform([{"t": 0, "do": "gaze", "name": "NOTES"}], ctx="1.1"),
         AvatarMessage.cues(ctx="1.1", from_ms=0, cues=[], final=False),
         AvatarMessage.speech(SpeechEvent.START, ctx="1.1"),

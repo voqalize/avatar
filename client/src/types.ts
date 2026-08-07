@@ -25,7 +25,7 @@ export interface AvatarCue {
 /** `perform()` timeline action — see docs/contract-protocol.md § Composing behavior. */
 export interface AvatarPerformAction {
   t: number;
-  do: "state" | "emotion" | "gaze" | "interject";
+  do: "state" | "emotion" | "gaze" | "interject" | "gesture";
   name?: string;
   id?: string;
   i?: number;
@@ -41,6 +41,16 @@ export interface AvatarStateCmd {
 
 export interface AvatarInterjectCmd {
   cmd: "interject";
+  id: string;
+}
+
+/**
+ * A hand gesture — the hand at the frame edge plus its face half. Separate from
+ * `interject` on purpose: `interject("WAVE")` is the face alone and always was,
+ * so a server that upgrades gets no hand until it asks for one.
+ */
+export interface AvatarGestureCmd {
+  cmd: "gesture";
   id: string;
 }
 
@@ -97,6 +107,7 @@ export interface AvatarUnknownCmd {
 export type AvatarCommand =
   | AvatarStateCmd
   | AvatarInterjectCmd
+  | AvatarGestureCmd
   | AvatarPerformCmd
   | AvatarCuesCmd
   | AvatarSpeechCmd

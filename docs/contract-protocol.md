@@ -10,7 +10,7 @@ saying and looking at, and tells the widget; the widget's only job is to look
 right while rendering that. Nothing in this contract lets the client decide
 call content, and nothing in it requires the server to know what a face looks
 like. The whole protocol is: **a state enum, an emotion enum, a gaze enum, an
-interjection id, and a stream of timed viseme letters.**
+interjection id, a hand-gesture id, and a stream of timed viseme letters.**
 
 Everything below is reachable from one import:
 
@@ -19,7 +19,8 @@ import { createAvatar } from './src/avatar.js';
 const avatar = createAvatar({ mount: '#avatar' });   // also: avatar, face, theme, mouthGain, gestureGain
 ```
 
-All setters are chainable. Unknown state and interjection ids **throw**;
+All setters are chainable. Unknown state, interjection and gesture ids
+**throw**;
 unknown emotion falls back to `neutral` silently; unknown gaze falls back to
 `USER` silently.
 
@@ -154,6 +155,44 @@ until `attachAudio` gives them a voice.
 A repeated `interject(id)` while that clip is already playing is collapsed to a
 no-op; a *different* id replaces the running clip immediately.
 
+## Hand gestures — `gesture(id)`
+
+A hand rising into the bottom of the frame, plus the face half that makes it
+belong to somebody. **This is a separate verb from `interject` on purpose.**
+The four ids below are disjoint from `INTERJECTION_IDS`, and `interject('WAVE')`
+still means exactly what it always meant — the face alone. A server that
+upgrades the widget gets no hand until it asks for one.
+
+| id | dur | what it does |
+|---|---|---|
+| `HI` | 1250 | open palm rises and waves — greeting. Face half: `WAVE` |
+| `BYE` | 1550 | the same wave, one swing longer and a touch slower — parting. Face half: `WAVE` |
+| `THUMBS_UP` | 1300 | fist, back of hand to camera, thumb up — approval. Face half: `THUMBS_UP` |
+| `ONE_MOMENT` | 1700 | a single raised index finger, held — "one moment". Face half: `ONE_MOMENT`, which speaks |
+
+Calling `gesture(id)` fires the face half as an `interject()` on the caller's
+behalf — do **not** send both; the second one replaces the first mid-clip. It
+also suppresses autonomous backchannels for the gesture's duration plus 500 ms,
+because a nod landing on top of a deliberate hand is the listening engine
+talking over the server.
+
+What the widget guarantees, and why it is stated here rather than left to the
+drawing: **nothing but a single digit ever passes the mouth.** Mouth sync is
+the headline feature, so a gesture is free to fire mid-speech. The hand also
+never leaves the frame sideways and never shows a wrist — see
+`docs/contract-avatar.md` § The hand for the rules and the per-avatar check.
+
+Degradation is total and silent. An avatar mounted with `hand: false` — a face
+drawn in some other idiom, or a tile too small to spend the pixels — plays the
+face half and nothing else, which is the same fallback every id already had
+before the hand existed. `api.gesturing` is the id in flight, or `null` — which
+is what it always reads under `hand: false`, and `gestureEnd` correspondingly
+never fires there: both describe the *hand*, and there is no hand. An unknown
+id throws, as `interject` does.
+
+`setHandSide(+1 | -1)` picks which side of the frame the hand enters from;
+`+1` (the viewer's right) is the default.
+
 ## Speech — `speak({ cues, audio?, clock? })`, `pushCues(cues)`, `stopSpeaking()`
 
 The headline feature. A **cue** is:
@@ -240,6 +279,8 @@ track is live. Anything that degrades this ordering is a regression.
   its own (fires with the interjection id)
 - `on('performEnd', fn)` — a performance's last action has fired (see
   *Composing behavior*)
+- `on('gestureEnd', fn)` — the hand has left the frame (fires with the gesture
+  id). Only where a hand is mounted — see *Hand gestures*
 - `setMouthGain(g)` — scales viseme excursion away from rest (1 = as authored;
   useful when the avatar renders small). Never drags a closed mouth open.
 - `setGestureGain(g)` — scales clip deltas; small gestures under-render
@@ -252,7 +293,7 @@ track is live. Anything that degrades this ordering is a regression.
   "fidgety" starts moves with tile size and with the audience, so this is
   deliberately a host decision rather than a constant.
 - Getters: `state`, `emotion`, `gaze`, `speaking`, `performing`, `clip`,
-  `params` (the live smoothed vector), `audioLevel`, `svg`.
+  `gesturing`, `params` (the live smoothed vector), `audioLevel`, `svg`.
 - `setOverrides({channel: value})` — direct parameter injection, post-clamp.
   For tuning UIs and tests, not production.
 - `blink(double?)`, `destroy()`.
@@ -298,6 +339,7 @@ and tuned on the rig. A backend wanting a new move asks for a new enum entry
 | `emotion` | `name`, `i?` 0..1 (default 1) | `setEmotion(name, i)` |
 | `gaze` | `name` | `setGaze(name)` |
 | `interject` | `id` | `interject(id)` |
+| `gesture` | `id` | `gesture(id)` — the hand *and* its face half |
 
 The natural unit a server assembles is audio + cue track + action track on
 **one clock** (`demo/perf-clips.json` scripts every demo turn this way, and
@@ -356,6 +398,7 @@ through that stack never calls the API above directly; it mounts
 |---|---|
 | `state` | `name`, `emotion?`, `gaze?` → `setState` |
 | `interject` | `id` → `interject` |
+| `gesture` | `id` → `gesture` (a hand gesture id, not an interjection id) |
 | `perform` | `actions`, `ctx` → `perform` |
 | `cues` | `ctx`, `from_ms`, `cues`, `final?` → splice, then `speak`/`pushCues` |
 | `speech` | `event: start\|stop`, `ctx` → anchor / release the turn clock |

@@ -19,6 +19,11 @@
   difference frames and call the result a measurement.
 
   ?face=peep&state=LISTENING&seed=7&w=440&talk=0&user=0
+  ?gesture=HI&at=0.4&side=1   fires a hand gesture at an absolute sim time, so a
+                              frame-edge hand can be filmstripped the same way
+                              body motion is. `at` gives the idle layer time to
+                              settle first — a gesture fired at t=0 is measured
+                              against a rig that has not started moving yet.
 -->
 <style>
   html, body { margin:0; background:#fff; }
@@ -47,6 +52,7 @@ const avatar = createAvatar({
   mount,
   avatar: q.get('face') || 'peep',
   manual: true,
+  handSide: Number(q.get('side') || 1),
 });
 avatar.setState(q.get('state') || 'LISTENING');
 if (q.get('user') === '1') avatar.setUserSpeaking(true);
@@ -66,10 +72,22 @@ if (q.get('talk') === '1') {
 const DT = 1 / 60;
 let sim = 0;
 
+// A hand gesture is fired from inside the stepper rather than up here, because
+// its clock is the mixer's `elapsed` — firing before the first step would start
+// it at t=0 with the body still at its rest pose.
+const gesture = q.get('gesture');
+const gestureAt = Number(q.get('at') || 0.4);
+let gestureFired = false;
+
 /** Walk the mixer to absolute simulated time `t`. Monotonic — never rewinds. */
 window.stepTo = (t) => {
   let n = 0;
-  while (sim < t - DT / 2) { avatar.step(DT); sim += DT; n++; }
+  while (sim < t - DT / 2) {
+    if (gesture && !gestureFired && sim >= gestureAt) { avatar.gesture(gesture); gestureFired = true; }
+    avatar.step(DT);
+    sim += DT;
+    n++;
+  }
   return n;
 };
 window.simTime = () => sim;

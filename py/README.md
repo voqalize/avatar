@@ -5,8 +5,8 @@ a 2-D talking head for AI voice calls that renders in the browser, not in a
 video track.
 
 The widget is a state machine wearing a face: it renders a state enum, an
-emotion, a gaze target, interjection ids and a stream of timed viseme letters,
-and it decides none of them. This package is the half that decides. It reads
+emotion, a gaze target, interjection and hand-gesture ids, and a stream of timed
+viseme letters, and it decides none of them. This package is the half that decides. It reads
 your pipeline's frames, infers what the avatar should be doing, and pushes the
 result to the client as RTVI server-messages over the data channel you already
 have.
@@ -94,6 +94,15 @@ reach for:
 from voqalize_avatar import AvatarControlFrame, AvatarMessage, Interjection
 
 await self.push_frame(AvatarControlFrame(message=AvatarMessage.interject(Interjection.MM_HMM)))
+```
+
+Hand gestures ride the same seam and are never inferred — a hand in frame is an
+application's decision:
+
+```python
+from voqalize_avatar import HandGesture
+
+await self.push_frame(AvatarControlFrame(message=AvatarMessage.gesture(HandGesture.HI)))
 ```
 
 **Or subclass `AvatarStateMachine`** when your application's frames are simply

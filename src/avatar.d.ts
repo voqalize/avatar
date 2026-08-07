@@ -89,6 +89,12 @@ export type AvatarInterjectionId =
   | "GOT_IT"
   | "TAKE_YOUR_TIME";
 
+/** `HAND_GESTURE_IDS` — see docs/contract-protocol.md § Hand gestures. A hand at
+ * the frame edge plus the face half that makes it belong to somebody. Disjoint
+ * from the interjection ids on purpose: `interject("WAVE")` is still the face
+ * alone. */
+export type AvatarHandGestureId = "HI" | "BYE" | "THUMBS_UP" | "ONE_MOMENT";
+
 /** Rhubarb Lip Sync letter — see docs/contract-protocol.md § Speech. */
 export type VisemeLetter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "X";
 
@@ -108,7 +114,7 @@ export interface GazeCustom {
 /** A `perform()` timeline action — see docs/contract-protocol.md § Composing behavior. */
 export interface AvatarAction {
   t: number;
-  do: "state" | "emotion" | "gaze" | "interject";
+  do: "state" | "emotion" | "gaze" | "interject" | "gesture";
   name?: string;
   id?: string;
   i?: number;
@@ -139,7 +145,8 @@ export interface PerformHandle {
   stop: () => void;
 }
 
-export type AvatarEventName = "state" | "speakEnd" | "clipEnd" | "backchannel" | "performEnd";
+export type AvatarEventName =
+  | "state" | "speakEnd" | "clipEnd" | "backchannel" | "performEnd" | "gestureEnd";
 
 /** What a host needs to frame an avatar it has never seen: the drawing's own
  * window, and where the mouth is inside it. See CLAUDE.md § The two
@@ -158,6 +165,9 @@ export interface AvatarApi {
   pushCues(cues: Cue[]): AvatarApi;
   stopSpeaking(): AvatarApi;
   interject(id: AvatarInterjectionId | (string & {})): AvatarApi;
+  gesture(id: AvatarHandGestureId | (string & {})): AvatarApi;
+  /** +1 the viewer's right (the character's own left hand), -1 the other. */
+  setHandSide(dir: number): AvatarApi;
   perform(actions: AvatarAction[], o?: PerformOptions): PerformHandle;
   setAudioFallback(source?: HTMLMediaElement | MediaStream | null): AvatarApi;
   setUserAudio(source?: HTMLMediaElement | MediaStream | null): AvatarApi;
@@ -166,11 +176,15 @@ export interface AvatarApi {
   readonly mouthGain: number;
   setGestureGain(g: number): AvatarApi;
   readonly gestureGain: number;
+  setMotionGain(g: number): AvatarApi;
+  readonly motionGain: number;
   blink(double?: boolean): AvatarApi;
+  /** Advance one frame by hand — only meaningful under `{ manual: true }`. */
+  step(dt: number): AvatarApi;
   setOverrides(o: Record<string, number> | null): AvatarApi;
   on(event: "state", fn: (name: AvatarStateName) => void): AvatarApi;
   on(event: "speakEnd" | "performEnd", fn: () => void): AvatarApi;
-  on(event: "clipEnd" | "backchannel", fn: (id: string) => void): AvatarApi;
+  on(event: "clipEnd" | "backchannel" | "gestureEnd", fn: (id: string) => void): AvatarApi;
   on(event: AvatarEventName, fn: (...args: unknown[]) => void): AvatarApi;
   readonly state: AvatarStateName;
   readonly emotion: AvatarEmotionName;
@@ -178,6 +192,8 @@ export interface AvatarApi {
   readonly speaking: boolean;
   readonly performing: boolean;
   readonly clip: string | null;
+  /** The hand gesture in flight, or null — always null under `hand: false`. */
+  readonly gesturing: AvatarHandGestureId | null;
   readonly params: Record<string, number>;
   readonly audioLevel: number;
   readonly userSpeaking: boolean;
@@ -209,6 +225,15 @@ export interface CreateAvatarOptions {
   theme?: unknown;
   mouthGain?: number;
   gestureGain?: number;
+  motionGain?: number;
+  /** Withhold the frame-edge hand entirely — for a face drawn in some other
+   * idiom, or a tile too small to spend the pixels. `gesture()` then degrades
+   * to the gesture's face half. Default true. */
+  hand?: boolean;
+  /** Which hand the character gestures with: +1 the viewer's right. */
+  handSide?: number;
+  /** Withhold the rAF loop so a tool can drive frames itself via `step(dt)`. */
+  manual?: boolean;
 }
 
 export function createAvatar(opts: CreateAvatarOptions): AvatarApi;
@@ -226,6 +251,16 @@ export const GAZE_TARGETS: Record<string, { x: number; y: number }>;
 export const EMOTION_NAMES: AvatarEmotionName[];
 export const INTERJECTIONS: Record<string, unknown>;
 export const INTERJECTION_IDS: AvatarInterjectionId[];
+export const HAND_GESTURES: Record<string, Record<string, unknown>>;
+export const HAND_GESTURE_IDS: AvatarHandGestureId[];
+/** Asserts the two framing rules against a face's own window. Throws on
+ * violation — `tools/sweep.mjs` runs it for every registered avatar. */
+export function checkHandFraming(meta: AvatarMeta): {
+  ok: true;
+  wristDrop: number;
+  outboardLimit: number;
+  worst: Record<string, number>;
+};
 /** The subset that has (or expects) audio — the rest are silent gestures. */
 export const SPOKEN_IDS: AvatarInterjectionId[];
 export const VISEME_LETTERS: VisemeLetter[];

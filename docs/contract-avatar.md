@@ -201,6 +201,36 @@ no dark palette **by decision** (inverting two-value line art recolours the
 hair and ages the character; that is geometry wearing a palette's clothes) —
 its theme keys stay overridable, but do not add a `dark` selector.
 
+## The hand — a layer no face draws
+
+`src/hand.js` puts a hand into the bottom of the frame for `gesture(id)`
+(protocol side: [contract-protocol.md](contract-protocol.md) § Hand gestures).
+It is deliberately **not** part of this contract's parameter space: it writes a
+transform on its own `<g>` appended over the face's svg, it has no channel in
+`params.js`, and a face that never plays a gesture renders byte-for-byte what
+it rendered before. That is the whole reason it could be added at all — a hand
+channel only one avatar could draw is precisely the mistake CLAUDE.md
+constraint 9 names.
+
+**What a face owes it: a `META.viewBox`, and `theme.ink` / `theme.paper`.**
+Nothing else, and no new META field. Placement derives four numbers from the
+window itself — centre `x + w/2`, floor `y + h`, a reach scaled off `w`, and an
+outboard limit of `w/2 − 8` — and every gesture timeline is authored in wrist
+depth *below the floor* rather than absolute `y`, so the same drawing lands
+correctly on windows of different heights. peep's bottom is 876 and wren's and
+myna's is 850; all three place identically.
+
+Two framing rules are asserted, not assumed. `checkHandFraming(meta)` throws if
+any keyframe would let the wrist rise into the window (the hand must always be
+*cut* by the bottom edge, never end in a floating stump) or let the hand's
+rotated width cross the window's side (a portrait window pillarboxed in a 16:9
+tile slices anything outboard with a hard vertical line that reads as a
+rendering fault). `sweep()` runs it for every registered avatar, so a new face
+with an unusual window fails the gate rather than the eye.
+
+If a character's idiom cannot carry it, mount with `hand: false`; `gesture()`
+then plays the face half alone.
+
 ## Checklist for a new avatar
 
 1. Serve with `python3 serve.py 8777` (never `python3 -m http.server` — its
@@ -218,9 +248,12 @@ its theme keys stay overridable, but do not add a `dark` selector.
    through the mixer's own smoothing, as a filmstrip.
 5. `demo/rig/rig-check.html` → `await sweep()` — conformance: params finite,
    `|v| ≤ 2`, svg connected, across every state/emotion/gaze/interjection and
-   a viseme track. Sweep also cannot see *looks*; it reaches shoulders/torso
+   a viseme track, plus `checkHandFraming` against your window and a pass of
+   every hand gesture. Sweep also cannot see *looks*; it reaches shoulders/torso
    only through clips, so drive those with a `setOverrides` loop over
-   `[-1, 0, 1]` per channel.
+   `[-1, 0, 1]` per channel — and look at one hand gesture at peak extension
+   (`demo/rig/body-lab.html?face=NAME&gesture=HI&at=0.4`), because figure/ground
+   between hand and shirt is a judgement the framing check cannot make.
 6. Auto-traced art has known failure modes to budget for: zero-margin abutting
    contours open seams under parallax; the trace stops at the source crop;
    hard horizontal edges invisible in the source appear under motion.
@@ -324,7 +357,8 @@ A new face module supplies:
 5. **A registry entry** — `{ create, meta }` in `src/avatar.js`.
 
 What you get for free: the mixer, visemes, emotions, gaze, idle, clips,
-interjections, the pose mechanics, the memoizer, and every host page and rig
+interjections, the frame-edge hand (§ The hand — it needs only your viewBox and
+two theme keys), the pose mechanics, the memoizer, and every host page and rig
 tool — the demos' avatar pickers, contact sheet, torso check, clip strip and
 `sweep()` all enumerate the registry. The wren run measured the split: the
 plumbing steps (2, 4, 5) are mechanical; the art (step 1) and the read of

@@ -1,8 +1,9 @@
 """Driving a browser talking-head avatar from a pipecat pipeline.
 
 The widget is a state machine wearing a face — it renders a state enum, an
-emotion enum, a gaze enum, interjection ids and a stream of timed viseme
-letters, and decides none of them. This package is the half that decides.
+emotion enum, a gaze enum, interjection and hand-gesture ids, and a stream of
+timed viseme letters, and decides none of them. This package is the half that
+decides.
 
 - `messages` — the wire vocabulary, verbatim from the widget's contract
   (`docs/contract-protocol.md`).
@@ -29,6 +30,7 @@ from .messages import (
     AvatarState,
     Emotion,
     Gaze,
+    HandGesture,
     Hint,
     Interjection,
     SpeechEvent,
@@ -46,6 +48,7 @@ __all__ = [
     "AvatarStateMachine",
     "Emotion",
     "Gaze",
+    "HandGesture",
     "Hint",
     "Interjection",
     "SpeechEvent",

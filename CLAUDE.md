@@ -130,6 +130,15 @@ These are not negotiable without a conversation.
    `GO_ON_ARM`, `RAISE_HAND`) keep their meanings, re-authored from face,
    shoulders and torso. **Adding a channel to `params.js` that only one avatar
    can render is the shape of the mistake to avoid**, whatever the body part.
+   **There is still no arm — but since 2026-08-07 there is a hand**
+   (`src/hand.js`, promoted from `experiments/arm-gesture/` after the
+   stakeholder saw it: *"generally speaking - happy with the inclusion of the
+   arm"*). It clears constraint 9 by being the other design entirely: no
+   forearm, no parameter channel, no per-face geometry — one drawing that rises
+   past the frame's bottom edge, placed from `META.viewBox`, painted in the
+   mounted face's theme, appended over its SVG. A face that never plays a
+   gesture renders exactly what it rendered before. Adding an *arm* still needs
+   a conversation.
 
 ## Current directives (updated 2026-08-07)
 
@@ -176,8 +185,10 @@ mixer: each state carries an idle *profile* (blink rate, breath rate/amplitude,
 sway, holds, typing rhythm, glance patterns — `DEFAULT_PROFILE` in
 `src/idle.js`), a `ListeningEngine` times backchannels off the user's voice
 (`setUserAudio`/`setUserSpeaking`), and `perform()` runs server-assembled
-action timelines against the audio clock. See `README.md` for the design
-narrative and `docs/contract-protocol.md` for the wire surface.
+action timelines against the audio clock. Beside the mixer rather than inside
+it: `src/hand.js`, which writes a transform on its own SVG group — no channel,
+no smoothing, timelines authored as *delivered* motion. See `README.md` for the
+design narrative and `docs/contract-protocol.md` for the wire surface.
 
 ## The two abstractions that matter
 
@@ -480,6 +491,8 @@ src/idle.js            per-state profiles (blink/breath/sway/weight-shift/holds/
                        ListeningEngine (contingent backchannels), glance/flick
 src/clips.js           keyframe player for gesture timelines
 src/interjections.js   the 26 interjection clips
+src/hand.js            the frame-edge hand: four gestures, no rig channel, placed
+                       from META.viewBox alone
 src/perform.js         action-timeline player: the composable vocabulary
 src/audio-fallback.js  WebAudio amplitude/spectral lipsync fallback
 src/avatar.js          public API + per-frame mixer + the AVATARS registry
@@ -571,13 +584,18 @@ experiments/rhubarb-textsync/   server-side, ships nowhere near the widget:
   priority mechanism — it would let the client refuse server commands, which
   violates constraint 1; our arbitration (backchannels gated on no clip
   playing, server clips always win, timelines fire verbatim) is the design.
-- **The arm-gesture experiment awaits stakeholder judgement.**
-  `experiments/arm-gesture/` (sanctioned 2026-08-07 as the one narrowly scoped
-  arm trial): a frame-edge hand overlay on peep — mitten-grade, enters from
-  the visible tile's bottom edge, four gestures (HI, BYE, ONE_MOMENT, GO_ON),
-  zero `src/` changes. If accepted, the wire design is deliberately unbuilt
-  (server actions vs. a hand variant on existing interjection IDs), and GO_ON
-  wants more amplitude at 130 px.
+- **The frame-edge hand shipped (2026-08-07) and the experiment is retired.**
+  `experiments/arm-gesture/` was accepted after five cuts and is now
+  `src/hand.js` (it is in git history if the rejected cuts are ever wanted).
+  The wire question it left open was answered the conservative way: a *separate*
+  `gesture(id)` verb over four ids of its own (`HI`, `BYE`, `THUMBS_UP`,
+  `ONE_MOMENT`), not a hand variant on the existing interjection ids — two live
+  consumers exist, and `interject('WAVE')` silently growing a hand on upgrade is
+  a behaviour change nobody asked for. The hand plays the face half itself.
+  What is still open: `GO_ON` has no hand version and was cut structurally (a
+  real "go on" is a finger curl, and a splayed palm at that height reads as
+  *stop*) — reviving it means a new shape, not new timing. Every avatar gets the
+  hand for free; `checkHandFraming` gates each one in `sweep()`.
 - **A `speak` verb inside `perform()` timelines was deliberately deferred** —
   speech defines the clock a performance rides on; the composed unit stays
   `{audio, cues, beats}` as sibling calls. Rationale in contract-protocol.md.

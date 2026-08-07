@@ -3,7 +3,7 @@
  *
  * A performance is the server's choreography: timed verbs `{t, do, ...}` fired
  * against a clock, where every verb resolves to one of the widget's own enums —
- * states, emotions, gaze targets, interjections. The vocabulary is deliberately
+ * states, emotions, gaze targets, interjections, hand gestures. The vocabulary is deliberately
  * closed: the backend sequences what the rig already does well, it cannot
  * invent motion. That constraint is what makes the wire format assemblable by
  * a dialogue manager and reviewable by a human.
@@ -21,7 +21,10 @@
  * effects, and replaying a nod is worse than missing one.
  */
 
-const VERBS = new Set(['state', 'emotion', 'gaze', 'interject']);
+const VERBS = new Set(['state', 'emotion', 'gaze', 'interject', 'gesture']);
+// The verbs addressed by `id` rather than `name`. Both id verbs name a clip the
+// widget already owns; both name-verbs name an enum value.
+const ID_VERBS = new Set(['interject', 'gesture']);
 
 /**
  * Shape hygiene for action arrays, in the spirit of normalizeCues: sort by
@@ -45,8 +48,9 @@ export function normalizeActions(actions) {
       console.warn(`perform: dropped unknown verb "${a && a.do}"`, a);
       continue;
     }
-    if ((a.do === 'interject' ? a.id : a.name) == null) {
-      console.warn(`perform: dropped ${a.do} with no ${a.do === 'interject' ? 'id' : 'name'}`, a);
+    const idVerb = ID_VERBS.has(a.do);
+    if ((idVerb ? a.id : a.name) == null) {
+      console.warn(`perform: dropped ${a.do} with no ${idVerb ? 'id' : 'name'}`, a);
       continue;
     }
     out.push(a);

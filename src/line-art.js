@@ -104,6 +104,32 @@ export function region(flat) {
   return d + 'Z';
 }
 
+/**
+ * On-curve points -> the polybezier form above, Catmull-Rom at the standard 1/6
+ * tension. The house idiom for a FACE is hand-authored control points: a brow or
+ * a lip contour is tuned a handle at a time and interpolation would fight that.
+ * This is for marks whose geometry is easier to read as a list of places the
+ * line goes through than as three-in-four control points — the hand's contours,
+ * where the authoring question is "how far does the thumb clear the knuckles"
+ * and every point is measured against another point. Curve control is worth
+ * less there than a shape whose numbers can be argued about.
+ */
+export function smooth(pts) {
+  const out = [pts[0]];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    out.push(
+      [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6],
+      [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6],
+      p2
+    );
+  }
+  return out;
+}
+
 /** Deterministic jitter, so a drawing is the same every load. */
 export function rng(seed) {
   let s = seed >>> 0;

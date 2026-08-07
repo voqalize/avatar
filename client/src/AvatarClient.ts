@@ -198,6 +198,9 @@ export class AvatarClient {
         case "interject":
           this.avatar.interject((msg as { id: string }).id);
           break;
+        case "gesture":
+          this.avatar.gesture((msg as { id: string }).id);
+          break;
         case "perform":
           this.handlePerform(msg as AvatarPerformCmd);
           break;

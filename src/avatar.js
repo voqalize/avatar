@@ -8,6 +8,7 @@
  *   avatar.speak({ audio, cues })        // cues are {t, v, i?} in ms
  *   avatar.pushCues(moreCues)            // streaming top-up
  *   avatar.interject('OKAY')
+ *   avatar.gesture('HI')                 // a hand at the frame edge + its face
  *   avatar.perform(beats, { audio })     // timed {t, do, ...} verbs, same clock
  *   avatar.setUserAudio(micStream)       // or setUserSpeaking(bool) — the
  *                                        // user's voice, so listening is
@@ -37,6 +38,7 @@ import { INTERJECTIONS } from './interjections.js';
 import { VisemeTrack, shapeFor, SILENT } from './visemes.js';
 import { PerformTrack } from './perform.js';
 import { AudioFallback } from './audio-fallback.js';
+import { createHand, HAND_GESTURES } from './hand.js';
 
 // Each state's `idle` is a profile for the liveness layer (see DEFAULT_PROFILE
 // in idle.js). Blink gaps come from docs/research-biomechanics.md §5: the rate
@@ -295,10 +297,18 @@ export function createAvatar(opts = {}) {
   });
   const backchannel = new ListeningEngine((id) => { interject(id); emit('backchannel', id); });
   const performTrack = new PerformTrack();
+  // The hand is a sibling of the mixer, not a layer inside it: it writes SVG
+  // directly rather than parameter channels, because a hand at the frame edge is
+  // not part of the rig's body (see hand.js, and CLAUDE.md constraint 9 for the
+  // arm chain this replaces). `hand: false` opts out — for a face drawn in some
+  // other idiom, or a tile too small to spend the pixels.
+  const hand = opts.hand === false ? null : createHand(face.svg, face.theme, meta, { dir: opts.handSide });
 
   gaze.onLargeShift = () => idle.blink();
 
-  const listeners = { state: [], speakEnd: [], clipEnd: [], backchannel: [], performEnd: [] };
+  const listeners = {
+    state: [], speakEnd: [], clipEnd: [], backchannel: [], performEnd: [], gestureEnd: [],
+  };
   const emit = (ev, ...a) => listeners[ev] && listeners[ev].forEach((f) => f(...a));
   clip.onEnd = (c) => { if (c) emit('clipEnd', c.id); };
   speech.onEnd = () => { emit('speakEnd'); };
@@ -504,6 +514,16 @@ export function createAvatar(opts = {}) {
     for (const c of CHANNELS) cur[c] = approach(cur[c], target[c], TAU[c], dt);
 
     face.apply(cur);
+
+    // 9. the hand, outside all of the above. It writes a transform on its own
+    //    group rather than parameter channels, so it neither smooths nor
+    //    composes — its timelines are authored as delivered motion, not as
+    //    targets to chase. `elapsed` is the mixer's own clock, so a manual
+    //    stepper gets a reproducible gesture for free.
+    if (hand) {
+      const done = hand.update(elapsed * 1000);
+      if (done) emit('gestureEnd', done.id);
+    }
   }
 
   const REST_SHAPE = shapeFor(SILENT, 1);
@@ -591,6 +611,33 @@ export function createAvatar(opts = {}) {
     return api;
   }
 
+  /**
+   * A hand gesture: the hand at the frame edge, plus the face half that makes it
+   * belong to somebody.
+   *
+   * The face half is not a convenience — a hand rising to the jaw over a head
+   * and shoulders sitting perfectly still is a cut-out, not a gesture. Each
+   * entry in HAND_GESTURES names an interjection that already exists and was
+   * already tuned (`WAVE`, `THUMBS_UP`, `ONE_MOMENT`); firing it here is the
+   * library composing two authored things, not the client inventing motion.
+   *
+   * The two halves stay separable in both directions. `interject('WAVE')` is
+   * still the face alone and is unchanged by this — a server that upgrades gets
+   * no new behaviour until it asks for one — and on an avatar mounted with
+   * `hand: false` this call degrades to exactly that interjection, which is the
+   * same graceful failure the arm removal already forced every id through.
+   */
+  function gesture(id) {
+    const def = HAND_GESTURES[id];
+    if (!def) throw new Error(`unknown hand gesture: ${id}`);
+    if (hand) hand.play(id, elapsed * 1000);
+    if (def.face) interject(def.face);
+    // A hand in frame is a deliberate move; a backchannel landing on top of it
+    // is the listening engine talking over the server.
+    backchannel.reset(def.dur / 1000 + 0.5);
+    return api;
+  }
+
   function setAudioFallback(source) {
     if (!source) { fallback.detach(); useFallback = false; return api; }
     fallback.attach(source);
@@ -627,6 +674,7 @@ export function createAvatar(opts = {}) {
       else if (a.do === 'emotion') setEmotion(a.name, a.i ?? 1);
       else if (a.do === 'gaze') setGaze(a.name);
       else if (a.do === 'interject') interject(a.id);
+      else if (a.do === 'gesture') gesture(a.id);
     } catch (e) {
       console.warn(`perform: ${a.do} at ${a.t}ms skipped — ${e.message}`);
     }
@@ -636,8 +684,8 @@ export function createAvatar(opts = {}) {
 
   /**
    * Play a timed action track — the composition surface a server assembles
-   * turns from. Verbs: state / emotion / gaze / interject (see perform.js for
-   * hygiene, docs/contract-protocol.md for the schema).
+   * turns from. Verbs: state / emotion / gaze / interject / gesture (see
+   * perform.js for hygiene, docs/contract-protocol.md for the schema).
    *
    * Clock resolution mirrors speak(): explicit `clock` fn, else the audio
    * element's own time, else ms elapsed since this call. perform() never
@@ -667,7 +715,11 @@ export function createAvatar(opts = {}) {
 
   const api = {
     setState, setEmotion, setGaze, speak, pushCues, stopSpeaking, interject,
-    perform,
+    gesture, perform,
+    /** Which hand the character gestures with: +1 the viewer's right (its own
+     *  left), -1 the other. Both are anatomically real — the thumb splays away
+     *  from the body either way — so this is a character choice, not a fix. */
+    setHandSide: (d) => { if (hand) hand.setDir(d); return api; },
     setAudioFallback, setUserAudio, setUserSpeaking,
     /** Articulation gain: 1 is the VISEME_SHAPES table as authored. */
     setMouthGain: (g) => { mouthGain = g; return api; },
@@ -691,6 +743,8 @@ export function createAvatar(opts = {}) {
     get speaking() { return speech.playing; },
     get performing() { return performTrack.playing; },
     get clip() { return clip.id; },
+    /** The hand gesture in flight, or null. `null` forever if `hand: false`. */
+    get gesturing() { return hand ? hand.id : null; },
     get params() { return cur; },
     get audioLevel() { return fallback.level; },
     get userSpeaking() { return backchannel.speaking; },
@@ -701,7 +755,13 @@ export function createAvatar(opts = {}) {
      *  page behind a transparent mount — needs the same colours the drawing
      *  used, and guessing them per avatar is how the two drift apart. */
     theme: face.theme,
-    destroy() { cancelAnimationFrame(raf); fallback.detach(); userAudio.detach(); face.destroy(); },
+    destroy() {
+      cancelAnimationFrame(raf);
+      fallback.detach();
+      userAudio.detach();
+      if (hand) hand.destroy();
+      face.destroy();
+    },
   };
 
   setState('IDLE');
@@ -712,6 +772,7 @@ export function createAvatar(opts = {}) {
 export { INTERJECTIONS, INTERJECTION_IDS, SPOKEN_IDS, attachAudio } from './interjections.js';
 export { GAZE_NAMES, GAZE_TARGETS } from './gaze.js';
 export { normalizeActions } from './perform.js';
+export { HAND_GESTURES, HAND_GESTURE_IDS, checkHandFraming } from './hand.js';
 export { EMOTION_NAMES } from './emotions.js';
 export {
   VISEME_LETTERS, VISEME_SHAPES, normalizeCues, textToCues,

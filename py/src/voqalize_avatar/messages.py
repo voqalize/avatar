@@ -92,6 +92,25 @@ class Interjection(StrEnum):
     TAKE_YOUR_TIME = "TAKE_YOUR_TIME"
 
 
+class HandGesture(StrEnum):
+    """A hand at the frame edge, plus the face half that goes with it.
+
+    Deliberately a separate enum from `Interjection`, not extra members of it:
+    `Interjection.WAVE` is the face alone and stays that way, so a widget
+    upgrade never grows a hand a backend did not ask for. The widget fires the
+    face half itself — send `gesture(HI)`, not `gesture(HI)` *and*
+    `interject(WAVE)`.
+
+    Nothing here is autonomous, and the state machine sends none of them: a
+    hand in frame is an application's decision.
+    """
+
+    HI = "HI"
+    BYE = "BYE"
+    THUMBS_UP = "THUMBS_UP"
+    ONE_MOMENT = "ONE_MOMENT"
+
+
 class Emotion(StrEnum):
     """Affect, a separate axis from state so the enums don't multiply."""
 
@@ -184,11 +203,22 @@ class AvatarMessage:
         return cls(cmd="interject", payload={"id": str(clip)})
 
     @classmethod
+    def gesture(cls, hand: HandGesture) -> AvatarMessage:
+        """A hand gesture. The widget plays the hand *and* its face half.
+
+        Degrades on its own: a widget mounted with `hand: false` — a face drawn
+        in another idiom, a tile too small to spend the pixels — plays the face
+        half alone, so a backend never has to know which it is talking to.
+        """
+        return cls(cmd="gesture", payload={"id": str(hand)})
+
+    @classmethod
     def perform(cls, actions: list[dict[str, Any]], *, ctx: str) -> AvatarMessage:
         """A timed action list run against the turn's audio clock.
 
-        The verbs are `state` / `emotion` / `gaze` / `interject` — a backend
-        sequences from that constrained vocabulary and cannot invent motion.
+        The verbs are `state` / `emotion` / `gaze` / `interject` / `gesture` —
+        a backend sequences from that constrained vocabulary and cannot invent
+        motion.
         """
         return cls(cmd="perform", payload={"actions": actions, "ctx": ctx})
 

@@ -60,8 +60,8 @@ class AvatarControlFrame(DataFrame):
     wrong words.
 
     Build `message` with the `AvatarMessage` classmethods — `state()`,
-    `interject()`, `perform()`, `gaze` via `state(..., gaze=...)`. They are the
-    only things that know the widget's payload keys.
+    `interject()`, `gesture()`, `perform()`, `gaze` via `state(..., gaze=...)`.
+    They are the only things that know the widget's payload keys.
     """
 
     message: AvatarMessage = None  # type: ignore[assignment]
