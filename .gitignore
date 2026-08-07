@@ -1,0 +1,7 @@
+.DS_Store
+node_modules/
+# Screenshots taken to review the rig by eye. Regenerate them; do not commit.
+.review/
+# Built by `npm run build` / `prepare`. The widget in src/ has no build step;
+# only the TypeScript client does.
+client/dist/

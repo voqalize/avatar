@@ -1,0 +1,74 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Avatar — clip filmstrip</title>
+<!--
+  A clip laid out as frames instead of played back.
+
+  Motion is the one thing a screenshot cannot show, and a multi-beat clip is
+  exactly where that hurts: SHRUG is right or wrong in the relationship between
+  the shoulders, the brows and the mouth from one frame to the next, and
+  watching it play tells you it "looks like a shrug" without telling you which
+  layer is wrong. Sampling it into a strip makes the phase relationships legible.
+
+  Each tile steps a real `ClipPlayer` forward from t=0 in fixed 1/60s ticks with
+  the mixer's own `approach` smoothing, then renders. That reproduces the live
+  path for every channel a gesture clip touches — the divergence from `avatar.js`
+  is only in the layers a gesture does not drive (gaze, visemes, idle).
+
+  ?clip=SHRUG&n=16&face=wren&crop=x y w h
+-->
+<style>
+  body { margin:0; background:#111; color:#7fd; font:11px ui-monospace,monospace; }
+  #g { display:grid; grid-template-columns:repeat(8,1fr); gap:4px; padding:8px; }
+  .c { background:#000; position:relative; }
+  .m { width:100%; }
+  .l { position:absolute; left:4px; top:2px; text-shadow:0 0 3px #000; }
+</style>
+<div id="g"></div>
+<script type="module">
+import { makeParams, REST, CHANNELS, TAU, RANGE, clamp, approach } from '../../src/params.js';
+import { ClipPlayer } from '../../src/clips.js';
+import { INTERJECTIONS } from '../../src/interjections.js';
+import { AVATARS, DEFAULT_AVATAR } from '../../src/avatar.js';
+
+const q = new URLSearchParams(location.search);
+const which = q.get('face') || DEFAULT_AVATAR;
+const entry = AVATARS[which];
+if (!entry) throw new Error(`no avatar "${which}" — have ${Object.keys(AVATARS)}`);
+const createFace = entry.create;
+const clip = INTERJECTIONS[q.get('clip') || 'SHRUG'];
+const N = Number(q.get('n') || 16);
+const crop = q.get('crop') ? q.get('crop').split(/[ ,]+/).map(Number) : null;
+document.title = `Avatar — ${clip.id} filmstrip`;
+
+const DT = 1000 / 60;
+// Sample past the clip's end so the settle is in frame too — a gesture's
+// release is as easy to get wrong as its attack and is never in the keyframes.
+const SPAN = clip.duration * 1.12;
+
+const g = document.getElementById('g');
+for (let i = 0; i < N; i++) {
+  const at = (SPAN * i) / (N - 1);
+
+  const cur = { ...REST };
+  const player = new ClipPlayer();
+  player.play(clip);
+  for (let t = 0; t < at; t += DT) {
+    const { delta, weight } = player.update(DT);
+    const target = { ...REST };
+    if (delta) for (const ch in delta) target[ch] = clamp(REST[ch] + delta[ch], ...(RANGE[ch] || [-1, 1]));
+    for (const ch of CHANNELS) cur[ch] = approach(cur[ch], target[ch], TAU[ch], DT / 1000);
+  }
+
+  const c = document.createElement('div'); c.className = 'c';
+  const m = document.createElement('div'); m.className = 'm';
+  const l = document.createElement('div'); l.className = 'l';
+  l.textContent = `${Math.round(at)}ms`;
+  c.append(m, l); g.append(c);
+  const face = createFace(m);
+  face.apply(makeParams(cur));
+  if (crop) face.svg.setAttribute('viewBox', crop.join(' '));
+  const [, , w, h] = face.svg.getAttribute('viewBox').split(/\s+/).map(Number);
+  m.style.aspectRatio = `${w}/${h}`;
+}
+</script>

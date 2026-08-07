@@ -1,0 +1,123 @@
+Three changes to pristine rhubarb-lip-sync 1.14.0, all of them about turning a
+one-shot CLI into a resident service. Nothing here alters what Rhubarb decides;
+`animate()` and both recognizers are untouched.
+
+  1. CMakeLists.txt — build our `avatarsync` executable from src/avatarsync/.
+  2. pocketSphinxTools.cpp — cache the decoder pool across calls
+     (RHUBARB_WARM_POOL). Upstream rebuilds it per call, which is right for a
+     process that runs once and exits and ruinous for a service: ps_init()
+     against an 82 MB acoustic model dominates every short clip. Measured 181 ms
+     cold → 31 ms warm for `phonetic`.
+  3. pocketSphinxTools.cpp — let RHUBARB_RES_DIR override the model directory.
+     Upstream derives it from the executable's own location, which forces one
+     56 MB copy of the models per platform binary; we keep a single shared tree.
+
+--- a/rhubarb/CMakeLists.txt
++++ b/rhubarb/CMakeLists.txt
+@@ -518,7 +518,25 @@
+ 	rhubarb-lib
+ )
+ target_compile_options(rhubarb PUBLIC ${enableWarningsFlags})
++
++# Define the avatarsync executable: one resident process serving both viseme
++# legs — text+duration -> cues with no audio (rhubarb-recognition for
++# tokenizeText/wordToPhones plus rhubarb-animation's animate(), never touching
++# the acoustic model), and real `phonetic` recognition over PCM handed in on
++# stdin (rhubarb-lib's animateAudioClip).
++add_executable(avatarsync
++	src/avatarsync/avatarsync.cpp
++)
++target_link_libraries(avatarsync
++	rhubarb-lib
++	rhubarb-animation
++	rhubarb-recognition
++	rhubarb-core
++	rhubarb-time
++	rhubarb-logging
++	rhubarb-tools
++)
+
+ # Define test project
+ set(TEST_FILES
+ 	tests/stringToolsTests.cpp
+--- a/rhubarb/src/recognition/pocketSphinxTools.cpp
++++ b/rhubarb/src/recognition/pocketSphinxTools.cpp
+@@ -1,6 +1,9 @@
+ #include "pocketSphinxTools.h"
+
+ #include "tools/platformTools.h"
++#include <cstdlib>
++#include <map>
++#include <mutex>
+ #include <regex>
+ #include "audio/DcOffset.h"
+ #include "audio/voiceActivityDetection.h"
+@@ -109,9 +112,46 @@
+
+ 	redirectPocketSphinxOutput();
+
+-	// Prepare pool of decoders
+-	ObjectPool<ps_decoder_t, lambda_unique_ptr<ps_decoder_t>> decoderPool(
+-		[&] { return createDecoder(dialog); });
++	// Prepare pool of decoders.
++	//
++	// Upstream builds this pool per call, which is right for a CLI that runs once
++	// and exits. In a resident service it means paying ps_init() — an 82MB
++	// acoustic model off disk, ~160ms native — on every single request, and it is
++	// the dominant cost for the short clips a TTS sidecar sees.
++	//
++	// The pool is safe to keep alive across calls because the decoder depends only
++	// on (recognizer, dialog): PhoneticRecognizer's factory ignores dialog
++	// entirely (UNUSED(dialog)), and PocketSphinxRecognizer bakes the dialog into
++	// the language model, so keying on it is exact rather than a heuristic.
++	// Opt-in via RHUBARB_WARM_POOL because the cache is unbounded — fine for a
++	// service that sees one recognizer and no dialog, wrong for batch CLI use over
++	// thousands of distinct scripts.
++	using Pool = ObjectPool<ps_decoder_t, lambda_unique_ptr<ps_decoder_t>>;
++	static const bool warm = getenv("RHUBARB_WARM_POOL") != nullptr;
++	std::unique_ptr<Pool> ownedPool;
++	Pool* pool;
++	if (warm) {
++		static std::mutex cacheMutex;
++		static std::map<std::pair<const void*, string>, std::unique_ptr<Pool>> cache;
++		// decoderFactory is a std::function, which is not orderable. Both
++		// recognizers hand in a plain function pointer, so unwrap it for the key.
++		using RawFactory = lambda_unique_ptr<ps_decoder_t> (*)(optional<string>);
++		const RawFactory* raw = createDecoder.target<RawFactory>();
++		const auto key = std::make_pair(
++			raw ? reinterpret_cast<const void*>(*raw) : nullptr, dialog.value_or(string()));
++		std::lock_guard<std::mutex> lock(cacheMutex);
++		auto it = cache.find(key);
++		if (it == cache.end()) {
++			// By value, not by reference: this factory outlives the call.
++			it = cache.emplace(key, std::make_unique<Pool>(
++				[createDecoder, dialog] { return createDecoder(dialog); })).first;
++		}
++		pool = it->second.get();
++	} else {
++		ownedPool = std::make_unique<Pool>([&] { return createDecoder(dialog); });
++		pool = ownedPool.get();
++	}
++	Pool& decoderPool = *pool;
+
+ 	BoundedTimeline<Phone> phones(audioClip->getTruncatedRange());
+ 	std::mutex resultMutex;
+@@ -168,7 +208,17 @@
+ 	return phones;
+ }
+
++// Upstream resolves the model directory from the executable's own location and
++// hard-fails if res/sphinx is not a sibling of the binary. That forces one 56 MB
++// copy of the models per platform binary in a repo that ships several. When
++// RHUBARB_RES_DIR is set we take it verbatim, which also skips the
++// getBinDirectory() sanity check — the only caller of it.
+ const path& getSphinxModelDirectory() {
+-	static path sphinxModelDirectory(getBinDirectory() / "res" / "sphinx");
++	static path sphinxModelDirectory = [] {
++		if (const char* res = getenv("RHUBARB_RES_DIR")) {
++			return path(res) / "sphinx";
++		}
++		return getBinDirectory() / "res" / "sphinx";
++	}();
+ 	return sphinxModelDirectory;
+ }

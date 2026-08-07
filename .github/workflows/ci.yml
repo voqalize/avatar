@@ -1,0 +1,115 @@
+# The gate. Three suites, because they answer different questions: the rig is
+# judged by eye and only *conformance* can be automated, the client is judged by
+# test, and the backend is judged by test at both ends of its declared pipecat
+# range. Nothing here can tell you whether a face reads as `THINKING` or as
+# asleep — that is what the rig pages are for.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call: # the release workflow runs this before it publishes anything
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  widget:
+    name: widget + client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `prepare` compiles client/ on install, so this also proves the one
+      # build step in the repo still works.
+      - run: npm ci
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: unit tests
+        run: npm test
+
+      # Dev-only tooling with its own lockfile; nothing here ships.
+      - name: install rig tooling
+        working-directory: tools
+        run: npm ci
+
+      - name: rig conformance sweep
+        # Every state, emotion, gaze and interjection on every registered
+        # avatar, asserting finite params and a connected SVG. A crash here is
+        # a parameter-space bug that would bite the default rig too.
+        env:
+          PUPPETEER_ARGS: --no-sandbox
+        run: node tools/sweep.mjs
+
+      - name: npm package contents
+        # The tarball is the artifact consumers actually get; `files` has been
+        # wrong before (client/dist is gitignored, and npm applies .gitignore
+        # inside a files entry).
+        run: |
+          npm pack --dry-run
+          test -f client/dist/react.js
+          test -f client/dist/pipecat.js
+
+  backend:
+    name: backend (pipecat ${{ matrix.pipecat }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of the declared range. The floor is a real claim — one
+        # pipecat constructor moved inside it, and py/tests/helpers.py spans
+        # the seam — so "we support 1.4" is checked, not asserted.
+        include:
+          - pipecat: floor
+            resolution: lowest-direct
+          - pipecat: resolved
+            resolution: highest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # 56 MB of cmudict, phonetic LM and acoustic model, extracted from an
+      # 85 MB upstream tarball that is deliberately not vendored. The binary
+      # itself is committed; only the model tree is generated.
+      - name: cache the aligner model tree
+        id: res-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            native/avatarsync/res
+            native/avatarsync/.cache
+          key: avatarsync-res-${{ hashFiles('native/avatarsync/build.sh') }}
+
+      - name: materialise the aligner model tree
+        if: steps.res-cache.outputs.cache-hit != 'true'
+        run: native/avatarsync/build.sh --res-only
+
+      - name: tests
+        working-directory: py
+        env:
+          UV_RESOLUTION: ${{ matrix.resolution }}
+        # `--frozen` is wrong here: the whole point of the matrix is to
+        # re-resolve at each end of the range rather than replay the lockfile.
+        run: uv run --resolution "$UV_RESOLUTION" pytest -q
+
+      - name: distributions build and validate
+        if: matrix.pipecat == 'resolved'
+        working-directory: py
+        run: |
+          uv build
+          uvx twine check dist/*

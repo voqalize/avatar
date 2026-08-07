@@ -1,0 +1,21 @@
+{
+  "_": "Fitted by scripts/fit_durations.py; see py/tests/fixtures/README.md for the corpus. ms = ms_per_char * len(text) + onset_ms, per (voice, lang). Every 5th clip in manifest order is held out; the errors below are out-of-sample.",
+  "voices": {
+    "reference/a|en": {
+      "ms_per_char": 54.2758,
+      "onset_ms": 213.53,
+      "n_train": 480,
+      "n_holdout": 120,
+      "median_rel_err": 0.0599,
+      "p90_rel_err": 0.1507
+    },
+    "reference/b|en": {
+      "ms_per_char": 37.3375,
+      "onset_ms": 225.96,
+      "n_train": 480,
+      "n_holdout": 120,
+      "median_rel_err": 0.048,
+      "p90_rel_err": 0.1346
+    }
+  }
+}

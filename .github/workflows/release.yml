@@ -1,0 +1,107 @@
+# Publish both halves of the library from one tag.
+#
+# The two packages version in lockstep and ship together, because they are two
+# ends of one wire format: `@voqalize/avatar` renders what `voqalize-avatar`
+# sends, and a version pair that can drift is a protocol mismatch waiting to be
+# debugged in production. So there is one tag, `v<semver>`, it must equal both
+# manifests, and a release that cannot publish both publishes neither.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# Neither job holds a long-lived credential. npm and PyPI both accept an OIDC
+# token minted by this workflow for this repository — see RELEASING.md for the
+# one-time setup on each registry.
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
+  workflow_dispatch: # re-run a failed half without re-tagging
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: tag matches both manifests
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          npm_version=$(node -p "require('./package.json').version")
+          py_version=$(grep -m1 '^version = ' py/pyproject.toml | cut -d'"' -f2)
+          echo "tag=$tag  npm=$npm_version  pypi=$py_version"
+          if [ "$tag" != "$npm_version" ] || [ "$tag" != "$py_version" ]; then
+            echo "::error::tag $tag disagrees with package.json ($npm_version) or pyproject.toml ($py_version)"
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  ci:
+    name: ci
+    needs: guard
+    uses: ./.github/workflows/ci.yml
+
+  npm:
+    name: publish @voqalize/avatar
+    needs: [guard, ci]
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # mints the OIDC token npm exchanges for a publish grant
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing landed in npm 11.5.1; the runner's bundled npm is
+      # usually newer, but pinning the floor makes the failure legible.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      # --provenance signs an attestation linking the tarball to this workflow
+      # run and this commit. Free on a public repo, and the only way a consumer
+      # can check that what they installed came from what they can read.
+      - run: npm publish --provenance --access public
+
+  pypi:
+    name: publish voqalize-avatar
+    needs: [guard, ci]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: build
+        working-directory: py
+        run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: py/dist
+
+  github-release:
+    name: github release
+    needs: [guard, npm, pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # --generate-notes diffs against the previous tag
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && exit 0
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

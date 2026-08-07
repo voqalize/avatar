@@ -1,0 +1,94 @@
+--- a/rhubarb/CMakeLists.txt
++++ b/rhubarb/CMakeLists.txt
+@@ -518,7 +518,29 @@
+ 	rhubarb-lib
+ )
+ target_compile_options(rhubarb PUBLIC ${enableWarningsFlags})
++
++# Define textsync executable: text + predicted duration -> mouth shapes, no audio.
++# Links rhubarb-recognition only for tokenizeText() and wordToPhones(); it never
++# reaches the acoustic model, whose load is lazy.
++add_executable(textsync
++	src/textsync/textsync.cpp
++)
++target_link_libraries(textsync
++	rhubarb-animation
++	rhubarb-recognition
++	rhubarb-core
++	rhubarb-time
++	rhubarb-logging
++	rhubarb-tools
++)
+ 
++add_executable(residentbench
++	src/textsync/residentbench.cpp
++)
++target_link_libraries(residentbench
++	rhubarb-lib
++)
++
+ # Define test project
+ set(TEST_FILES
+ 	tests/stringToolsTests.cpp
+--- a/rhubarb/src/recognition/pocketSphinxTools.cpp
++++ b/rhubarb/src/recognition/pocketSphinxTools.cpp
+@@ -1,6 +1,9 @@
+ #include "pocketSphinxTools.h"
+ 
+ #include "tools/platformTools.h"
++#include <cstdlib>
++#include <map>
++#include <mutex>
+ #include <regex>
+ #include "audio/DcOffset.h"
+ #include "audio/voiceActivityDetection.h"
+@@ -109,9 +112,46 @@
+ 
+ 	redirectPocketSphinxOutput();
+ 
+-	// Prepare pool of decoders
+-	ObjectPool<ps_decoder_t, lambda_unique_ptr<ps_decoder_t>> decoderPool(
+-		[&] { return createDecoder(dialog); });
++	// Prepare pool of decoders.
++	//
++	// Upstream builds this pool per call, which is right for a CLI that runs once
++	// and exits. In a resident service it means paying ps_init() — an 82MB
++	// acoustic model off disk, ~160ms native — on every single request, and it is
++	// the dominant cost for the short clips a TTS sidecar sees.
++	//
++	// The pool is safe to keep alive across calls because the decoder depends only
++	// on (recognizer, dialog): PhoneticRecognizer's factory ignores dialog
++	// entirely (UNUSED(dialog)), and PocketSphinxRecognizer bakes the dialog into
++	// the language model, so keying on it is exact rather than a heuristic.
++	// Opt-in via RHUBARB_WARM_POOL because the cache is unbounded — fine for a
++	// service that sees one recognizer and no dialog, wrong for batch CLI use over
++	// thousands of distinct scripts.
++	using Pool = ObjectPool<ps_decoder_t, lambda_unique_ptr<ps_decoder_t>>;
++	static const bool warm = getenv("RHUBARB_WARM_POOL") != nullptr;
++	std::unique_ptr<Pool> ownedPool;
++	Pool* pool;
++	if (warm) {
++		static std::mutex cacheMutex;
++		static std::map<std::pair<const void*, string>, std::unique_ptr<Pool>> cache;
++		// decoderFactory is a std::function, which is not orderable. Both
++		// recognizers hand in a plain function pointer, so unwrap it for the key.
++		using RawFactory = lambda_unique_ptr<ps_decoder_t> (*)(optional<string>);
++		const RawFactory* raw = createDecoder.target<RawFactory>();
++		const auto key = std::make_pair(
++			raw ? reinterpret_cast<const void*>(*raw) : nullptr, dialog.value_or(string()));
++		std::lock_guard<std::mutex> lock(cacheMutex);
++		auto it = cache.find(key);
++		if (it == cache.end()) {
++			// By value, not by reference: this factory outlives the call.
++			it = cache.emplace(key, std::make_unique<Pool>(
++				[createDecoder, dialog] { return createDecoder(dialog); })).first;
++		}
++		pool = it->second.get();
++	} else {
++		ownedPool = std::make_unique<Pool>([&] { return createDecoder(dialog); });
++		pool = ownedPool.get();
++	}
++	Pool& decoderPool = *pool;
+ 
+ 	BoundedTimeline<Phone> phones(audioClip->getTruncatedRange());
+ 	std::mutex resultMutex;

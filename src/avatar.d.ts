@@ -1,0 +1,241 @@
+/**
+ * avatar.d.ts — hand-maintained types for the widget's public surface.
+ *
+ * The widget is dependency-free ES modules with no build step, so there is no
+ * compiler to derive these from; this file is written by hand against
+ * `docs/contract-protocol.md` (the binding server ↔ widget contract) and a
+ * reading of `avatar.js`. It lives here rather than in a consumer because it
+ * is only correct next to the code it describes — the previous copy lived in
+ * a vendored tree two repos away and went stale the first time an enum grew.
+ *
+ * It is deliberately not a conversion of the widget to TypeScript. String-keyed
+ * enums (state / gaze / emotion / interjection ids) are literal unions for
+ * editor ergonomics, but every setter also accepts plain `string`, because the
+ * widget enforces these enums itself at runtime — unknown state and
+ * interjection ids throw, unknown emotion and gaze fall back silently — and a
+ * stale `.d.ts` must never claim to be stricter than the code it describes.
+ */
+
+/** `STATE_NAMES` — see docs/contract-protocol.md § States. */
+export type AvatarStateName =
+  | "IDLE"
+  | "LISTENING"
+  | "THINKING"
+  | "SPEAKING"
+  | "REVIEWING_SCREEN"
+  | "WAITING_FOR_USER"
+  | "TYPING"
+  | "TYPING_CHAT"
+  | "DISTRACTED"
+  | "SEARCHING_SCREEN"
+  | "CANT_HEAR"
+  | "TAKING_FLOOR"
+  | "WANTS_IN"
+  | "YIELDED"
+  | "DEGRADED"
+  | "OFFLINE";
+
+/** `EMOTION_NAMES` — see docs/contract-protocol.md § Emotion. */
+export type AvatarEmotionName =
+  | "neutral"
+  | "warm"
+  | "curious"
+  | "concerned"
+  | "encouraging"
+  | "thoughtful";
+
+/** `GAZE_NAMES` — see docs/contract-protocol.md § Gaze. `"CUSTOM"` is the escape hatch (any name + a `custom` point works). */
+export type AvatarGazeName =
+  | "USER"
+  | "USER_EAR"
+  | "SCREEN_CENTER"
+  | "SCREEN_LEFT"
+  | "SCREEN_RIGHT"
+  | "SCREEN_TOP"
+  | "SCREEN_BOTTOM"
+  | "SCREEN_WORK"
+  | "NOTES"
+  | "AWAY_THINKING"
+  | "AWAY_RIGHT"
+  | "AWAY_DOWN"
+  | "CUSTOM";
+
+/** `INTERJECTION_IDS` — see docs/contract-protocol.md § Interjections. */
+export type AvatarInterjectionId =
+  | "NOD_SMALL"
+  | "NOD_SLOW"
+  | "NOD_UP"
+  | "BROW_ACK"
+  | "HEAD_SHAKE"
+  | "HEAD_SHAKE_SOFT"
+  | "BLINK_LONG"
+  | "CLAIM_FLOOR"
+  | "YIELD_FLOOR"
+  | "RAISE_HAND"
+  | "WAVE"
+  | "THUMBS_UP"
+  | "SHRUG"
+  | "GO_ON_ARM"
+  | "MM_HMM"
+  | "OKAY"
+  | "YES"
+  | "SURE"
+  | "I_SEE"
+  | "RIGHT"
+  | "GO_ON"
+  | "ONE_MOMENT"
+  | "SORRY"
+  | "HMM"
+  | "GOT_IT"
+  | "TAKE_YOUR_TIME";
+
+/** Rhubarb Lip Sync letter — see docs/contract-protocol.md § Speech. */
+export type VisemeLetter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "X";
+
+/** One viseme cue: `t` is a ms offset into the utterance, `i` is optional 0..1 loudness. */
+export interface Cue {
+  t: number;
+  v: string;
+  i?: number;
+}
+
+/** Normalized-screen-coordinate escape hatch for `setGaze('CUSTOM', custom)`. */
+export interface GazeCustom {
+  x: number;
+  y: number;
+}
+
+/** A `perform()` timeline action — see docs/contract-protocol.md § Composing behavior. */
+export interface AvatarAction {
+  t: number;
+  do: "state" | "emotion" | "gaze" | "interject";
+  name?: string;
+  id?: string;
+  i?: number;
+  keepGaze?: boolean;
+}
+
+export interface SetStateOptions {
+  emotion?: AvatarEmotionName | (string & {});
+  intensity?: number;
+  gaze?: AvatarGazeName | (string & {});
+  keepGaze?: boolean;
+}
+
+export interface SpeakOptions {
+  cues?: Cue[];
+  audio?: HTMLMediaElement;
+  clock?: () => number;
+}
+
+export interface PerformOptions {
+  audio?: HTMLMediaElement;
+  clock?: () => number;
+  onAction?: (a: AvatarAction) => void;
+}
+
+export interface PerformHandle {
+  /** Cancels the *future* of this performance only — see docs/contract-protocol.md. */
+  stop: () => void;
+}
+
+export type AvatarEventName = "state" | "speakEnd" | "clipEnd" | "backchannel" | "performEnd";
+
+/** What a host needs to frame an avatar it has never seen: the drawing's own
+ * window, and where the mouth is inside it. See CLAUDE.md § The two
+ * abstractions that matter for why it carries nothing else. */
+export interface AvatarMeta {
+  viewBox: { x: number; y: number; w: number; h: number };
+  mouthCrop?: { x: number; y: number; w: number; h: number };
+}
+
+/** The object `createAvatar()` returns — the whole server-facing surface. */
+export interface AvatarApi {
+  setState(name: AvatarStateName | (string & {}), o?: SetStateOptions): AvatarApi;
+  setEmotion(name: AvatarEmotionName | (string & {}), intensity?: number): AvatarApi;
+  setGaze(name: AvatarGazeName | (string & {}), custom?: GazeCustom): AvatarApi;
+  speak(o?: SpeakOptions): AvatarApi;
+  pushCues(cues: Cue[]): AvatarApi;
+  stopSpeaking(): AvatarApi;
+  interject(id: AvatarInterjectionId | (string & {})): AvatarApi;
+  perform(actions: AvatarAction[], o?: PerformOptions): PerformHandle;
+  setAudioFallback(source?: HTMLMediaElement | MediaStream | null): AvatarApi;
+  setUserAudio(source?: HTMLMediaElement | MediaStream | null): AvatarApi;
+  setUserSpeaking(speaking: boolean | null): AvatarApi;
+  setMouthGain(g: number): AvatarApi;
+  readonly mouthGain: number;
+  setGestureGain(g: number): AvatarApi;
+  readonly gestureGain: number;
+  blink(double?: boolean): AvatarApi;
+  setOverrides(o: Record<string, number> | null): AvatarApi;
+  on(event: "state", fn: (name: AvatarStateName) => void): AvatarApi;
+  on(event: "speakEnd" | "performEnd", fn: () => void): AvatarApi;
+  on(event: "clipEnd" | "backchannel", fn: (id: string) => void): AvatarApi;
+  on(event: AvatarEventName, fn: (...args: unknown[]) => void): AvatarApi;
+  readonly state: AvatarStateName;
+  readonly emotion: AvatarEmotionName;
+  readonly gaze: AvatarGazeName;
+  readonly speaking: boolean;
+  readonly performing: boolean;
+  readonly clip: string | null;
+  readonly params: Record<string, number>;
+  readonly audioLevel: number;
+  readonly userSpeaking: boolean;
+  readonly svg: SVGSVGElement;
+  readonly meta: AvatarMeta;
+  destroy(): void;
+}
+
+/** A face module's factory — `createFace(mount, theme)`. See
+ * docs/contract-avatar.md § Adding a new avatar. */
+export type FaceFactory = (
+  mount: Element,
+  theme?: unknown,
+) => {
+  svg: SVGSVGElement;
+  apply: (params: Record<string, number>) => void;
+  theme: unknown;
+  destroy: () => void;
+};
+
+export interface CreateAvatarOptions {
+  /** Element, or CSS selector resolved via `document.querySelector`. */
+  mount: string | Element;
+  /** Name from `AVATAR_NAMES`. Defaults to `DEFAULT_AVATAR`. */
+  avatar?: string;
+  /** A bare face factory, for an avatar the registry doesn't know about.
+   * `meta` then falls back to the svg's own viewBox. */
+  face?: FaceFactory;
+  theme?: unknown;
+  mouthGain?: number;
+  gestureGain?: number;
+}
+
+export function createAvatar(opts: CreateAvatarOptions): AvatarApi;
+
+/** The registry: `{ create, meta }` per avatar. */
+export const AVATARS: Record<string, { create: FaceFactory; meta: AvatarMeta }>;
+export const AVATAR_NAMES: string[];
+export const DEFAULT_AVATAR: string;
+
+/** Per-state base pose + idle profile. Read-only in practice — the mixer owns it. */
+export const STATES: Record<string, Record<string, unknown>>;
+export const STATE_NAMES: AvatarStateName[];
+export const GAZE_NAMES: AvatarGazeName[];
+export const GAZE_TARGETS: Record<string, { x: number; y: number }>;
+export const EMOTION_NAMES: AvatarEmotionName[];
+export const INTERJECTIONS: Record<string, unknown>;
+export const INTERJECTION_IDS: AvatarInterjectionId[];
+/** The subset that has (or expects) audio — the rest are silent gestures. */
+export const SPOKEN_IDS: AvatarInterjectionId[];
+export const VISEME_LETTERS: VisemeLetter[];
+export const VISEME_SHAPES: Record<string, Record<string, number>>;
+/** Cues lead the audio by this many ms — perceptual tolerance is asymmetric. */
+export const LEAD_MS: number;
+export const ARPABET_TO_VISEME: Record<string, string>;
+export const AZURE_VISEME_TO_LETTER: Record<number, string>;
+
+export function attachAudio(id: string, url: string): void;
+export function normalizeActions(actions: AvatarAction[]): AvatarAction[];
+export function normalizeCues(cues: Cue[]): Cue[];
+export function textToCues(text: string, opts?: { wpm?: number }): Cue[];

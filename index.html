@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Avatar — talking head rig</title>
+<link rel="stylesheet" href="demo/demo.css">
+</head>
+<body>
+<div class="app">
+  <section class="stage">
+    <div class="frame"><div id="avatar"></div></div>
+    <div class="row" id="avatarPick"></div>
+    <div class="readout" id="readout"></div>
+    <div class="hint">Server drives state + gaze + viseme cues. Everything below is a stand-in for that.</div>
+  </section>
+
+  <aside class="panel">
+    <div class="grp" data-key="interject">
+      <h2>Interjections <span>fire-and-forget, pre-baked</span></h2>
+      <div class="row wrap" id="interjections"></div>
+    </div>
+
+    <div class="grp">
+      <h2>Speak <span>text → cues → mouth</span></h2>
+      <textarea id="text" rows="2">Thanks for walking me through that. Could you tell me a bit about how you handled the trade-offs?</textarea>
+      <div class="row">
+        <button id="speak" class="primary">Speak</button>
+        <button id="stopSpeak">Stop</button>
+        <label class="inline">wpm <input id="wpm" type="range" min="110" max="230" value="165"><b id="wpmV">165</b></label>
+      </div>
+    </div>
+
+    <div class="grp">
+      <h2>State</h2>
+      <div class="row wrap" id="states"></div>
+    </div>
+
+    <div class="grp">
+      <h2>Emotion</h2>
+      <div class="row wrap" id="emotions"></div>
+      <label class="inline">intensity <input id="emoAmt" type="range" min="0" max="100" value="100"><b id="emoAmtV">1.00</b></label>
+    </div>
+
+    <div class="grp">
+      <h2>Gaze <span>eyes lead, head follows, blink on shift</span></h2>
+      <div class="row wrap" id="gazes"></div>
+      <div class="pad" id="pad"><div class="dot" id="padDot"></div><span>drag for custom (x,y)</span></div>
+    </div>
+
+    <div class="grp">
+      <h2>Visemes <span>hold a shape to inspect it</span></h2>
+      <div class="row wrap" id="visemes"></div>
+      <label class="inline">intensity <input id="visAmt" type="range" min="0" max="100" value="100"><b id="visAmtV">1.00</b></label>
+    </div>
+
+    <div class="grp">
+      <h2>Mic fallback <span>amplitude lipsync, no cues</span></h2>
+      <div class="row"><button id="mic">Enable microphone</button><span class="meter"><i id="micLevel"></i></span></div>
+    </div>
+
+    <div class="grp">
+      <h2>User voice <span>drives contingent backchannels in LISTENING</span></h2>
+      <div class="row"><button id="userTalk">Hold: user is speaking</button></div>
+    </div>
+
+    <details class="grp">
+      <summary><h2>Raw parameters</h2></summary>
+      <div id="sliders" class="sliders"></div>
+      <div class="row"><button id="release">Release overrides</button></div>
+    </details>
+  </aside>
+</div>
+<script type="module" src="demo/demo.js"></script>
+</body>
+</html>

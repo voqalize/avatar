@@ -1,0 +1,12 @@
+{
+  "name": "avatar-tools",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Headless render/screenshot/diff tooling for the avatar rigs. Dev-only; the widget itself has no dependencies.",
+  "type": "module",
+  "dependencies": {
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
+    "puppeteer": "^25.5.0"
+  }
+}

@@ -1,0 +1,56 @@
+[project]
+name = "voqalize-avatar"
+version = "0.1.0"
+description = "Drive a browser talking-head avatar from a pipecat pipeline"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Voqalize" }]
+keywords = ["avatar", "lipsync", "viseme", "rhubarb", "pipecat", "voice-agent"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Typing :: Typed",
+]
+dependencies = [
+    # Base pipecat only — no transport, STT or TTS extras. This package sits in
+    # somebody else's pipeline and must not have an opinion about which services
+    # they chose; every extra we named here would be one they pay for twice.
+    #
+    # The floor is 1.4 because that is where `FunctionCallsStartedFrame` and
+    # `UserTurnInferenceCompletedFrame` exist, and both consumers are at or above
+    # it — a higher floor would make one of them upgrade before it could adopt
+    # this at all. The ceiling is the major, because the whole package is an
+    # opinion about pipecat's frame vocabulary and a 2.0 gets to change that.
+    "pipecat-ai>=1.4,<2",
+    "loguru>=0.7.3",
+]
+
+[project.urls]
+Homepage = "https://github.com/voqalize/avatar"
+Repository = "https://github.com/voqalize/avatar"
+Issues = "https://github.com/voqalize/avatar/issues"
+# The wire format this package speaks, and the widget that renders it.
+Protocol = "https://github.com/voqalize/avatar/blob/main/docs/contract-protocol.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/voqalize_avatar"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
