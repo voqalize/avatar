@@ -1,0 +1,148 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Experiment — hand gestures at the frame edge</title>
+<!--
+  One narrowly scoped question: does a hand entering from the bottom frame edge
+  make HI / BYE / THUMBS_UP / ONE_MOMENT read better than face-and-shoulders
+  alone?
+
+  Fifth cut. The webcam rules are the second cut's — no forearm ever enters the
+  frame, the motion starts from bottom centre, a wave arcs out to the side about
+  a third of the way up. The third cut re-drew the hand after the thumbs-up was
+  rejected for reading as a middle finger. The fourth and fifth cuts answered
+  "trending in the right direction, but needs more refinements": every gesture
+  was re-timed shorter (a ballistic rise, a ~half-second hold, an accelerating
+  exit) and every hand re-drawn against a second artist review — domed fingertips
+  and shallow U webs instead of a saw of V notches, interior marks instead of
+  silhouette notches, and a fist that is wider than it is tall above the frame
+  cut. See arm.js's header and README.md.
+
+  The rig is the real peep via createAvatar; the hand is an overlay (arm.js)
+  appended into its SVG. Nothing in src/ knows this page exists.
+
+  Live:    open normally, press the gesture buttons. "Other hand" flips which
+           hand the character gestures with.
+  Manual:  ?manual=1&gesture=HI&at=400&seed=7[&side=-1] — seeded RNG,
+           {manual:true}, window.stepTo(t) in 1/60s ticks (the body-lab idiom),
+           so filmstrips are reproducible pixel-for-pixel.
+-->
+<style>
+  html, body { margin: 0; background: #202124; font: 13px system-ui, sans-serif; }
+  #wrap { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+  /* The same box call.html gives a participant: 16:9, svg fitted by height
+     (xMidYMid meet), tile colour showing at the sides. The visible bottom
+     edge of this box IS the rig viewBox bottom — the line the hand rises past
+     and the wrist never crosses. */
+  #tile {
+    aspect-ratio: 16 / 9; background: #3c4043; border-radius: 8px;
+    overflow: hidden; display: flex; justify-content: center;
+  }
+  #tile > div { height: 100%; }
+  #bar { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  button {
+    background: #3c4043; color: #e8eaed; border: 1px solid #5f6368;
+    border-radius: 6px; padding: 7px 14px; font: inherit; cursor: pointer;
+  }
+  button:hover { background: #4a4e51; }
+  #flip { margin-left: auto; }
+  p.note { color: #9aa0a6; }
+  /* A 130 px copy alongside, because that is the size the gesture is accepted
+     at (research-perception.md section 2). Judging one of these at 900 px is
+     judging it unjudged. */
+  #row { display: flex; gap: 16px; align-items: flex-start; }
+  #row > #tile { flex: 1 1 auto; }
+  #small { width: 231px; flex: 0 0 auto; }
+  #small #tile2 {
+    aspect-ratio: 16 / 9; background: #3c4043; border-radius: 6px;
+    overflow: hidden; display: flex; justify-content: center;
+  }
+  #tile2 > div { height: 100%; }
+</style>
+<div id="wrap">
+  <div id="row">
+    <div id="tile"><div id="m"></div></div>
+    <div id="small">
+      <div id="tile2"><div id="m2"></div></div>
+      <p class="note">130 px — the acceptance size</p>
+    </div>
+  </div>
+  <div id="bar">
+    <button data-g="HI">Hi</button>
+    <button data-g="BYE">Bye</button>
+    <button data-g="THUMBS_UP">Thumbs up</button>
+    <button data-g="ONE_MOMENT">One moment</button>
+    <button id="flip">Other hand</button>
+  </div>
+  <p class="note">peep + a frame-edge hand — experiments/arm-gesture/</p>
+</div>
+<script type="module">
+const q = new URLSearchParams(location.search);
+const manual = q.get('manual') === '1';
+
+if (manual) {
+  // Seed BEFORE the rig module loads — IdleLayer draws sway phases in its
+  // constructor (see demo/rig/body-lab.html for the full rationale).
+  let _s = (Number(q.get('seed') || 7) >>> 0) || 7;
+  Math.random = () => {
+    _s = (Math.imul(1664525, _s) + 1013904223) >>> 0;
+    return _s / 4294967296;
+  };
+}
+
+const { createAvatar } = await import('../../src/avatar.js');
+const { createArm, checkFraming } = await import('./arm.js');
+
+// Both framing rules, asserted at load: a wrist in frame was the first cut's
+// failure and ink through the portrait window's side edge was the second's.
+checkFraming();
+
+const dir = Number(q.get('side') || 1) === -1 ? -1 : 1;
+// ?face=0 plays the hand with the body held still — the A/B for "is the hand
+// actually attached to anybody", which is what the face clip buys.
+const face = q.get('face') !== '0';
+const rigs = [];
+for (const id of manual ? ['m'] : ['m', 'm2']) {
+  const avatar = createAvatar({ mount: document.getElementById(id), avatar: 'peep', manual });
+  avatar.setState('LISTENING');
+  rigs.push({ avatar, arm: createArm(avatar, { dir, face }) });
+}
+const { avatar, arm } = rigs[0];
+
+if (manual) {
+  const DT = 1 / 60;
+  let sim = 0;
+  const gesture = q.get('gesture');
+  const at = Number(q.get('at') || 400);
+  if (gesture) arm.play(gesture, at);
+  window.stepTo = (t) => {
+    let n = 0;
+    while (sim < t - DT / 2) {
+      avatar.step(DT);
+      sim += DT;
+      arm.update(sim * 1000);
+      n++;
+    }
+    return n;
+  };
+  window.simTime = () => sim;
+} else {
+  const loop = () => {
+    const t = performance.now();
+    for (const r of rigs) r.arm.update(t);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+  document.getElementById('bar').addEventListener('click', (e) => {
+    const g = e.target.dataset && e.target.dataset.g;
+    if (g) for (const r of rigs) r.arm.play(g, performance.now());
+  });
+  let d = dir;
+  document.getElementById('flip').addEventListener('click', () => {
+    d = -d;
+    for (const r of rigs) r.arm.setDir(d);
+  });
+}
+window.avatar = avatar;
+window.arm = arm;
+window.ready = true;
+</script>
