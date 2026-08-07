@@ -55,19 +55,30 @@ importing it from a clean project; CI does it on every push.
 **One pypi package, because the binary was never a pip problem.** The obvious
 move is to split the native half into its own wheel, and the code says not to:
 the whole lipsync stack is stdlib plus a subprocess, with *zero*
-avatar-specific Python dependencies. `RhubarbPaths.resolve()` already finds the
-binary by env var (`…_BIN`, then `…_HOME`) and falls back to walking up to a
-`native/` directory. So the runtime wrapper is ordinary Python and ships with
-everything else; the 3 MB binary and the 56 MB acoustic model ship the way each
-consumer already ships large artifacts — a build-cache step, or a `COPY` into
-an image. Splitting the wheel would buy a dependency edge nobody needs and a
-second version to keep in step.
+avatar-specific Python dependencies. The runtime wrapper is ordinary Python and
+ships with everything else; the 3 MB binary and the 56 MB acoustic model ship
+the way each consumer already ships large artifacts — a build-cache step, or a
+`COPY` into an image — and the application tells the library where that landed
+by passing `avatarsync=<dir>`. Splitting the wheel would buy a dependency edge
+nobody needs and a second version to keep in step.
+
+**The path is an argument, never an environment variable.** This was briefly
+the other way round (`AVATARSYNC_HOME`, `AVATARSYNC_BIN`, `AVATARSYNC_RES`,
+`AVATARSYNC_PROCS`) and it was wrong for the reason all library-level env
+reading is wrong: it is a hidden input. The caller cannot see it in the call, two
+engines in one interpreter cannot disagree about it, a test cannot set it
+without mutating global state the next test inherits, and when it is missing the
+failure is silence — a session that quietly runs without lipsync — rather than a
+`TypeError` at the seam. Configuration that reaches a library through the
+process environment has skipped the API, which is the one place its meaning is
+documented and checked. Reading the environment is an *application's* job;
+`voqalize-avatar` does none of it.
 
 What this does buy: **the viseme leg is optional at runtime, not at install
 time.** `build_viseme_engine()` never raises — a missing binary is an ordinary
 condition, logged once, and the session runs state-channel-only. So an
 application can land states, gaze and interjections by simply not shipping the
-binary yet, and turn visemes on later by adding a `COPY` and an env var. The
+binary yet, and turn visemes on later by adding a `COPY` and one argument. The
 degradation is bounded: the widget falls back to `src/audio-fallback.js`, the
 WebAudio amplitude path it has carried since day one for exactly this. Mouth
 sync is the headline feature (brief, constraint 2), so this is a sequencing

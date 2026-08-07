@@ -69,7 +69,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import os
 import platform
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -120,69 +119,72 @@ def platform_id() -> str:
     return f"{system}-{arch}"
 
 
-def _env(name: str) -> str | None:
-    """Read `AVATARSYNC_<name>`."""
-    return os.getenv(f"AVATARSYNC_{name}")
-
-
-def _repo_native_dir() -> Path | None:
-    """Find `native/avatarsync` by walking up from this file (dev checkouts only).
-
-    The wheel packages the Python and nothing else — the binary is 3 MB and its
-    acoustic model 56 MB, so both ship the way each consumer already ships large
-    artifacts. On a deployed node this walk finds nothing and `AVATARSYNC_HOME`
-    resolves the binary. Keeping the walk anyway means a fresh clone of the
-    library works with no environment at all.
-    """
-    for parent in Path(__file__).resolve().parents:
-        for name in ("avatarsync", "rhubarb"):
-            candidate = parent / "native" / name
-            if candidate.is_dir():
-                return candidate
-    return None
-
-
 @dataclass(frozen=True, slots=True)
 class RhubarbPaths:
-    """Where the binary and its 56 MB model tree live."""
+    """Where the binary and its 56 MB model tree live.
+
+    Construct one and hand it to `build_viseme_engine`. **Nothing here reads the
+    environment**: a library that configures itself from `os.environ` has hidden
+    inputs its caller cannot see, cannot override per-instance, and cannot test
+    without mutating global state. Two processes in one interpreter could not
+    disagree about where the binary is, and the failure mode when the variable is
+    absent is silence rather than a `TypeError` at the call site. So the path is
+    an argument, like every other thing this library needs.
+
+    The wheel packages the Python and nothing else — the binary is ~3 MB per
+    platform and its acoustic model another 56 MB — so *something* has to say
+    where the artifact landed. `from_home` covers the usual case, `discover`
+    covers a source checkout, and the plain constructor covers a layout that is
+    neither.
+    """
 
     binary: Path
     res_dir: Path
-    weights: Path | None
+    weights: Path | None = None
 
     @classmethod
-    def resolve(cls) -> RhubarbPaths:
-        """Environment first, then the checkout.
+    def from_home(cls, home: Path | str) -> RhubarbPaths:
+        """A directory laid out like `native/avatarsync`.
 
-        `AVATARSYNC_BIN` names one file; `AVATARSYNC_HOME` names a directory
-        laid out like `native/avatarsync`. Neither is set in dev.
+            <home>/bin/<platform>/avatarsync
+            <home>/res/sphinx/…
+            <home>/data/phone_weights.json
+
+        Which is exactly what `native/avatarsync/build.sh` produces and what a
+        deploy unpacks its artifact into.
         """
-        explicit = _env("BIN")
-        home_env = _env("HOME")
-        home = Path(home_env) if home_env else _repo_native_dir()
+        root = Path(home)
+        return cls(
+            binary=root / "bin" / platform_id() / "avatarsync",
+            res_dir=root / "res",
+            weights=root / "data" / "phone_weights.json",
+        )
 
-        if explicit:
-            binary = Path(explicit)
-        elif home is not None:
-            binary = home / "bin" / platform_id() / "avatarsync"
-        else:
-            raise RhubarbUnavailableError(
-                "Cannot locate the avatarsync binary: no AVATARSYNC_BIN, no "
-                "AVATARSYNC_HOME, and no native/avatarsync directory above "
-                f"{Path(__file__).resolve()}."
-            )
+    @classmethod
+    def discover(cls, start: Path | str | None = None) -> RhubarbPaths | None:
+        """Walk up from `start` looking for `native/avatarsync`; `None` if absent.
 
-        res_env = _env("RES")
-        res_dir = Path(res_env) if res_env else (home / "res" if home else binary.parent / "res")
-        weights = (home / "data" / "phone_weights.json") if home else None
-        return cls(binary=binary, res_dir=res_dir, weights=weights if weights else None)
+        For source checkouts — this repo's own tests and demos — where the built
+        artifact sits beside the Python rather than at a deployed path. It is a
+        method you call, not something the library does behind you: discovery
+        that runs on its own is the same hidden input as an environment variable,
+        just sourced from the filesystem instead of `os.environ`.
+        """
+        origin = Path(start).resolve() if start is not None else Path(__file__).resolve()
+        for parent in origin.parents:
+            for name in ("avatarsync", "rhubarb"):
+                candidate = parent / "native" / name
+                if candidate.is_dir():
+                    return cls.from_home(candidate)
+        return None
 
     def check(self) -> None:
         """Fail with the actual missing path, not a generic 'unavailable'."""
         if not self.binary.is_file():
             raise RhubarbUnavailableError(
                 f"No avatarsync binary at {self.binary} (platform {platform_id()}). "
-                "Run native/avatarsync/build.sh, or set AVATARSYNC_BIN."
+                "Run native/avatarsync/build.sh, or pass the path this deploy "
+                "unpacked it to."
             )
         dictionary = self.res_dir / "sphinx" / "cmudict-en-us.dict"
         if not dictionary.is_file():
@@ -217,10 +219,10 @@ class RhubarbRuntime:
     Not started in `__init__`: the first request starts it, so constructing the
     engine costs nothing on a call that never speaks.
 
-    `paths` is required rather than defaulted to `RhubarbPaths.resolve()`. The
-    resolve *fails* on a node with no binary, and failing at construction — deep
-    inside a session start — is exactly the wrong place: `wiring.py` resolves and
-    checks first so a missing binary degrades the session instead of ending it.
+    `paths` is required and has no default. Any default would have to guess, and
+    a guess that misses *fails at construction* — deep inside a session start,
+    which is exactly the wrong place: `wiring.py` checks the paths first so a
+    missing binary degrades the session instead of ending it.
     """
 
     def __init__(
@@ -549,13 +551,14 @@ _shared_pool: RhubarbPool | None = None
 _shared_pool_loop: asyncio.AbstractEventLoop | None = None
 
 
-def shared_pool(paths: RhubarbPaths, *, size: int | None = None) -> RhubarbPool:
+def shared_pool(paths: RhubarbPaths, *, size: int = DEFAULT_POOL_SIZE) -> RhubarbPool:
     """The worker's pool, created on first use.
 
-    `size` defaults to `AVATARSYNC_PROCS`, then `DEFAULT_POOL_SIZE`. Only
-    the first caller's size counts; later ones get the existing pool, because
-    resizing would mean deciding what to do with the requests in flight on a
-    process nobody wants any more.
+    Only the first caller's `size` counts; later ones get the existing pool,
+    because resizing would mean deciding what to do with the requests in flight
+    on a process nobody wants any more. That the pool is worker-wide is a
+    property of the resource — one 86 MB acoustic model per process — not a
+    licence for its size to arrive from the environment.
     """
     global _shared_pool, _shared_pool_loop
     try:
@@ -572,9 +575,6 @@ def shared_pool(paths: RhubarbPaths, *, size: int | None = None) -> RhubarbPool:
         logger.warning("avatar: lipsync pool rebuilt on a new event loop; the old one is orphaned")
         _shared_pool = None
     if _shared_pool is None:
-        if size is None:
-            raw = _env("PROCS")
-            size = int(raw) if raw and raw.isdigit() and int(raw) > 0 else DEFAULT_POOL_SIZE
         _shared_pool = RhubarbPool(paths, size=size)
         _shared_pool_loop = loop
         logger.info("avatar: lipsync pool of {} avatarsync process(es)", size)

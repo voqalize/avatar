@@ -181,8 +181,10 @@ each platform and commit the binary and its `.recipe` together.
 
 A deployment that unpacks this directory needs three things —
 `bin/<platform>/avatarsync`, `res/` (regenerate with `./build.sh --res-only`;
-56 MB, not committed) and `data/phone_weights.json` — and points
-`AVATARSYNC_HOME` at the result.
+56 MB, not committed) and `data/phone_weights.json` — and passes the result to
+`build_viseme_engine(..., avatarsync=<that directory>)`. The library reads no
+environment variables; where the artifact landed is something the application
+knows and states.
 
 `data/phone_weights.json` is the exception, and the reason the recipe hash
 deliberately excludes it: the weights are packaged as data and read at runtime,
