@@ -70,9 +70,16 @@ async def _no_pool_across_loops() -> AsyncIterator[None]:
 
 @pytest.fixture(scope="session")
 def rhubarb_paths() -> RhubarbPaths:
-    """Resolved binary + model paths, or a skip naming the missing one."""
+    """Binary + model paths for this checkout, or a skip naming the missing one.
+
+    `discover()` explicitly, because that is what a source checkout is: the
+    artifact sits beside the Python. Nothing infers it for us, here or in
+    production.
+    """
+    paths = RhubarbPaths.discover()
+    if paths is None:
+        pytest.skip("no native/avatarsync directory above the package")
     try:
-        paths = RhubarbPaths.resolve()
         paths.check()
     except RhubarbUnavailableError as exc:
         pytest.skip(str(exc))

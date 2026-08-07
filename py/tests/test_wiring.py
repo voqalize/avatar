@@ -157,13 +157,47 @@ async def test_the_flag_turns_the_whole_thing_off() -> None:
         assert pipe.avatar.audio_sink is None
 
 
-async def test_a_missing_binary_degrades_instead_of_raising(monkeypatch) -> None:
+async def test_a_missing_binary_degrades_instead_of_raising(tmp_path) -> None:
     """Building per-platform means some platform will not have one. The session
-    still has to run — the widget falls back to its own amplitude lipsync."""
-    monkeypatch.setenv("AVATARSYNC_BIN", "/nonexistent/avatarsync")
+    still has to run — the widget falls back to its own amplitude lipsync.
+
+    Note there is no `monkeypatch` here. The path is an argument, so pointing a
+    test at a home that does not exist is a value, not a mutation of the
+    process's environment that every other test then has to be isolated from.
+    """
+    async with AvatarPipe() as pipe:
+        assert build_viseme_engine(pipe.avatar, sample_rate=24000, avatarsync=tmp_path) is None
+        assert pipe.avatar.audio_sink is None
+
+
+async def test_no_path_means_no_engine() -> None:
+    """The default is off, not a guess.
+
+    A library that goes looking for a binary on its own — in `os.environ`, or by
+    walking the filesystem — has an input its caller cannot see or override. The
+    caller says where it is or gets the state channel alone.
+    """
     async with AvatarPipe() as pipe:
         assert build_viseme_engine(pipe.avatar, sample_rate=24000) is None
         assert pipe.avatar.audio_sink is None
+
+
+async def test_a_home_directory_is_accepted_as_a_path_or_a_string(tmp_path) -> None:
+    """`from_home` is the common case, so the argument takes the bare directory.
+
+    `RhubarbPaths` stays available for a layout that is not that shape — the
+    convenience does not become the only way in.
+    """
+    from voqalize_avatar.avatarsync import RhubarbPaths, platform_id
+
+    paths = RhubarbPaths.from_home(tmp_path)
+    assert paths.binary == tmp_path / "bin" / platform_id() / "avatarsync"
+    assert paths.res_dir == tmp_path / "res"
+    assert paths.weights == tmp_path / "data" / "phone_weights.json"
+
+    async with AvatarPipe() as pipe:
+        assert build_viseme_engine(pipe.avatar, sample_rate=24000, avatarsync=str(tmp_path)) is None
+        assert build_viseme_engine(pipe.avatar, sample_rate=24000, avatarsync=paths) is None
 
 
 async def test_closing_the_engine_stops_the_runtime() -> None:

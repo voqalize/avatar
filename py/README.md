@@ -58,9 +58,16 @@ which emits the A–H+X mouth-shape alphabet the wire format is built on.
 ```python
 from voqalize_avatar.wiring import attach_tts_hooks, build_viseme_engine
 
-engine = build_viseme_engine(avatar, sample_rate=24000)
+engine = build_viseme_engine(avatar, sample_rate=24000, avatarsync="/opt/avatarsync")
 attach_tts_hooks(tts, engine)
 ```
+
+`avatarsync` is the directory your deploy unpacked the artifact into —
+`bin/<platform>/avatarsync`, `res/`, `data/phone_weights.json`. It is the entire
+configuration surface of the native half, and it is an argument: **this library
+reads no environment variables.** Pass `RhubarbPaths.discover()` in a source
+checkout where the artifact sits beside the Python, or a `RhubarbPaths` directly
+for a layout that is neither. Omit it and you get the state channel alone.
 
 `build_viseme_engine` **never raises**. A missing binary is an ordinary
 condition: it logs once, returns `None`, and the session runs state-channel

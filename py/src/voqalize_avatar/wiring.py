@@ -27,12 +27,14 @@ Not imported by `avatar/__init__.py`. Import it by name.
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine, Sequence
+from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from loguru import logger
 
 from .processor import AvatarProcessor
 from .avatarsync import (
+    DEFAULT_POOL_SIZE,
     Cue,
     RhubarbPaths,
     RhubarbUnavailableError,
@@ -54,6 +56,8 @@ def build_viseme_engine(
     enabled: bool = True,
     sample_rate: int,
     pad_ms: int = 0,
+    avatarsync: RhubarbPaths | Path | str | None = None,
+    pool_size: int = DEFAULT_POOL_SIZE,
     runtime: VisemeRuntime | None = None,
 ) -> VisemeEngine | None:
     """The engine, or `None` if this node cannot or should not run it.
@@ -63,10 +67,19 @@ def build_viseme_engine(
     with one clear log line — the avatar still animates, it just moves its mouth
     on the widget's own amplitude fallback.
 
+    `avatarsync` says where the native aligner is, and there is no default,
+    because every default would be a guess: a `str`/`Path` is the home directory
+    a deploy unpacked the artifact into (`RhubarbPaths.from_home`), a
+    `RhubarbPaths` is a layout that is not that shape, and `None` means this node
+    runs the state channel alone. A source checkout passes
+    `RhubarbPaths.discover()`. This argument is the whole configuration surface
+    of the native half — read no environment, set no environment.
+
     The runtime is a **lease on a worker-wide pool**, not a process of this
     session's own. `avatarsync` is ~86 MB of acoustic model answering requests
     that take 15-31 ms; per-session processes made memory scale with concurrency
-    for no throughput gain at all. See `avatarsync` for the sizing.
+    for no throughput gain at all. `pool_size` sizes it, and only the first
+    caller in a worker gets a say — see `avatarsync.shared_pool`.
 
     `pad_ms` is the trailing silence your TTS appends to every sentence — zero
     for most, and cumulative if you get it wrong. `visemes.INTER_SENTENCE_PAD_MS`
@@ -76,8 +89,19 @@ def build_viseme_engine(
         return None
 
     if runtime is None:
+        if avatarsync is None:
+            logger.info(
+                "avatar: server-side lipsync off — no avatarsync path given. Pass "
+                "avatarsync=<home dir> to build_viseme_engine, or "
+                "RhubarbPaths.discover() in a source checkout."
+            )
+            return None
+        paths = (
+            avatarsync
+            if isinstance(avatarsync, RhubarbPaths)
+            else RhubarbPaths.from_home(avatarsync)
+        )
         try:
-            paths = RhubarbPaths.resolve()
             paths.check()
         except RhubarbUnavailableError as exc:
             logger.warning("avatar: server-side lipsync disabled — {}", exc)
@@ -85,7 +109,7 @@ def build_viseme_engine(
         except Exception:
             logger.exception("avatar: could not resolve the lipsync runtime; disabling it")
             return None
-        runtime = shared_pool(paths).lease()
+        runtime = shared_pool(paths, size=pool_size).lease()
 
     async def emit(ctx: str, from_ms: int, cues: list[Cue], final: bool) -> None:
         await processor.push_cues(
