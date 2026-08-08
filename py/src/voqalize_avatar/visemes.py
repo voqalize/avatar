@@ -73,11 +73,10 @@ be an error rather than the removal of one — which is why `_emit_sentence` and
 
 Cue `t` is milliseconds from the turn's **first audio sample**, and the client
 anchors t=0 when bot playout starts. So offsets accumulate over *wire* bytes,
-not speech. Where the two differ is `pad_ms`: a service that appends a fixed
-tail of silence to every sentence puts that silence on the timeline (it plays,
-so it earns an `X` cue) while contributing no speech, making true speech
-duration `bytes/2/sample_rate - pad_ms`. Zero for most services; see
-`INTER_SENTENCE_PAD_MS`.
+and every byte counts the same whether it carries speech or silence. Some TTS
+services append a fixed tail of silence to each sentence; nothing here treats
+that as a special case, because recognition already handles it — silence in the
+PCM comes back as `X` cues, which is exactly what the pad should look like.
 
 While earlier sentences are still unresolved, a later sentence's start is itself
 an estimate. When an audio leg resolves sentence *k*, every still-pending
@@ -137,15 +136,6 @@ from .avatarsync import (
     shared_pool,
     shift,
 )
-
-# Some TTS services append a fixed pad of silence to every sentence including the
-# last. It plays, so it belongs on the timeline as an `X` cue and must be
-# subtracted before a byte count can be read as a speech duration — but it is a
-# property of the *service*, not of speech, which is why `VisemeEngine.pad_ms`
-# defaults to zero and this is only the value for the service the engine was
-# fitted against (250 ms). Measure your own: synthesize one short sentence and
-# look at the trailing silence.
-INTER_SENTENCE_PAD_MS = 250
 
 # Streaming TTS websockets idle, and some send a tiny keepalive frame to hold the
 # connection. Counting those as audio would shift every later cue by a fraction
@@ -244,19 +234,10 @@ class _Sentence:
 
     text: str
     est_speech_ms: int
-    # The engine's pad, carried per sentence rather than read off the module
-    # constant. The estimated timeline and the measured one must subtract and add
-    # the *same* number: a service with no pad whose estimates still budget 250 ms
-    # per sentence drifts a quarter-second further out with every sentence.
-    pad_ms: int = 0
     # Cues relative to this sentence's own start, kept so a corrected offset can
     # be re-emitted without re-running the leg.
     fast_cues: list[Cue] = field(default_factory=list)
     emitted_start_ms: int | None = None
-
-    @property
-    def est_wire_ms(self) -> float:
-        return self.est_speech_ms + self.pad_ms
 
 
 @dataclass
@@ -274,7 +255,7 @@ class _Turn:
     early_done: bool = False
 
 
-def build_viseme_engine(emit: EmitCues, *, sample_rate: int, pad_ms: int = 0) -> VisemeEngine:
+def build_viseme_engine(emit: EmitCues, *, sample_rate: int) -> VisemeEngine:
     """The engine, pre-warmed, leasing the worker's shared aligner pool.
 
     **Raises** `RhubarbUnavailableError` when the native aligner is not on this
@@ -287,13 +268,6 @@ def build_viseme_engine(emit: EmitCues, *, sample_rate: int, pad_ms: int = 0) ->
     `pip install` and nothing else; a source checkout of this repo is found by
     walking up to `native/avatarsync`.
 
-    `pad_ms` is the one thing the frame stream cannot tell us: the trailing
-    silence the TTS service appends to every sentence (`INTER_SENTENCE_PAD_MS`).
-    It is a property of the service, not of the audio — the bytes are
-    indistinguishable from a speaker pausing — and getting it wrong costs a
-    turn's lipsync cumulatively, so it is `AvatarProcessor.PAD_MS` rather than
-    a guess.
-
     The runtime is a **lease on a worker-wide pool**, not a process of this
     session's own. `avatarsync` is ~86 MB of acoustic model answering requests
     that take 15-31 ms; per-session processes made memory scale with concurrency
@@ -301,7 +275,7 @@ def build_viseme_engine(emit: EmitCues, *, sample_rate: int, pad_ms: int = 0) ->
     """
     paths = RhubarbPaths.locate()
     paths.check()
-    engine = VisemeEngine(emit, shared_pool(paths).lease(), sample_rate=sample_rate, pad_ms=pad_ms)
+    engine = VisemeEngine(emit, shared_pool(paths).lease(), sample_rate=sample_rate)
     # Spawn `avatarsync` now, in the background. Lazily started it starts on the
     # call's first sentence — ~250 ms charged to exactly the window the fast leg
     # exists to cover, so the one turn that genuinely needs predicted cues is the
@@ -319,11 +293,8 @@ class VisemeEngine:
     session ends up talking to a binary nobody chose; `build_viseme_engine` is
     the one place that chooses.
 
-    `pad_ms` is the trailing silence your TTS appends to every sentence (see
-    `INTER_SENTENCE_PAD_MS`). It defaults to zero because most services append
-    nothing, and getting it wrong is a *cumulative* error: the estimated timeline
-    and the measured one must agree, or every sentence starts a further `pad_ms`
-    away from where its audio actually is.
+    Trailing silence some services append to each sentence needs no declaring:
+    it is wire time like any other, and recognition returns `X` for it.
     """
 
     def __init__(
@@ -332,12 +303,10 @@ class VisemeEngine:
         runtime: VisemeRuntime,
         *,
         sample_rate: int = SAMPLE_RATE,
-        pad_ms: int = 0,
     ) -> None:
         self._emit = emit
         self._runtime = runtime
         self._sample_rate = sample_rate
-        self._pad_ms = pad_ms
         self._turns: dict[str, _Turn] = {}
         self._prewarm_task: asyncio.Task[None] | None = None
 
@@ -373,11 +342,7 @@ class VisemeEngine:
     async def on_sentence_queued(self, ctx: str, text: str) -> None:
         """A sentence has been handed to TTS. Emit fast-leg cues for it."""
         turn = self._turn(ctx)
-        sentence = _Sentence(
-            text=text,
-            est_speech_ms=estimate_duration_ms(text),
-            pad_ms=self._pad_ms,
-        )
+        sentence = _Sentence(text=text, est_speech_ms=estimate_duration_ms(text))
         turn.queue.put_nowait(lambda: self._run_fast_leg(turn, sentence))
 
     async def on_sentence_audio(
@@ -540,7 +505,7 @@ class VisemeEngine:
         cursor = turn.resolved_wire_ms
         for sentence in turn.pending:
             start_ms = round(cursor)
-            cursor += sentence.est_wire_ms
+            cursor += sentence.est_speech_ms
             # `from_ms` is a recognised boundary, so predicted cues resume *at*
             # it and never before — including via the lead, which would
             # otherwise let a sentence starting near the splice overwrite the
@@ -555,7 +520,6 @@ class VisemeEngine:
 
     async def _run_audio_leg(self, turn: _Turn, pcm: bytes, sentences: int | None) -> None:
         total_ms = wire_ms(pcm, self._sample_rate)
-        speech_ms = max(0.0, total_ms - self._pad_ms)
         start_ms = round(turn.resolved_wire_ms)
 
         # Every sentence this chunk covers is now resolved by measurement, so
@@ -564,15 +528,16 @@ class VisemeEngine:
         covered = [turn.pending.popleft() for _ in range(n)]
         turn.resolved_wire_ms += total_ms
 
-        # Recognise the speech, not the pad. Rhubarb's VAD would skip the
-        # silence anyway; trimming keeps the reported clip length honest and
-        # saves the base64 round trip on 12 kB of zeros.
-        speech_bytes = int(speech_ms * self._sample_rate / 1000) * BYTES_PER_SAMPLE
+        # The whole chunk, silence included. A service that pads its sentences
+        # gets that pad recognised rather than declared: rhubarb reads it as the
+        # silence it is and returns `X`, which is the cue we would have had to
+        # synthesize anyway. Trimming it first would buy a base64 round trip on
+        # 12 kB of zeros at the price of a number every caller has to measure.
         cues: list[Cue] = []
-        if speech_bytes > 0:
-            cues = await self._runtime.audio_cues(pcm[:speech_bytes], self._sample_rate)
+        if pcm:
+            cues = await self._runtime.audio_cues(pcm, self._sample_rate)
 
-        await self._emit_chunk(turn.ctx, start_ms, cues, round(speech_ms))
+        await self._emit_chunk(turn.ctx, start_ms, cues, round(total_ms))
 
         for sentence in covered:
             sentence.emitted_start_ms = start_ms
@@ -603,7 +568,7 @@ class VisemeEngine:
 
     def _projected_start_ms(self, turn: _Turn) -> int:
         """Where the next sentence starts: measured wire so far, plus estimates."""
-        return round(turn.resolved_wire_ms + sum(s.est_wire_ms for s in turn.pending))
+        return round(turn.resolved_wire_ms + sum(s.est_speech_ms for s in turn.pending))
 
     async def _reemit_pending(self, turn: _Turn) -> None:
         """Re-place still-pending sentences after a splice moved the ground.
@@ -617,7 +582,7 @@ class VisemeEngine:
         cursor = turn.resolved_wire_ms
         for sentence in turn.pending:
             start_ms = round(cursor)
-            cursor += sentence.est_wire_ms
+            cursor += sentence.est_speech_ms
             if sentence.emitted_start_ms == start_ms:
                 continue
             await self._emit_sentence(turn, sentence, start_ms)
@@ -641,7 +606,7 @@ class VisemeEngine:
         await self._emit(turn.ctx, max(0, start_ms - FAST_LEAD_MS), normalize_cues(track), False)
 
     async def _emit_chunk(
-        self, ctx: str, start_ms: int, cues: Sequence[Cue], speech_ms: int
+        self, ctx: str, start_ms: int, cues: Sequence[Cue], chunk_ms: int
     ) -> None:
         """Shift a *recognised* track onto the turn timeline, close it, emit.
 
@@ -652,7 +617,9 @@ class VisemeEngine:
         turn, because a later sentence may still re-place it. Only `_close_turn`
         emits with `final` set.
         """
-        # The pad is real playout time. Without an explicit X the widget holds
-        # the last shape through it and the mouth sits open between sentences.
-        track = [*shift(cues, start_ms), Cue(t=start_ms + speech_ms, v=SILENT)]
+        # Close at the chunk's true end. Recognition normally lands an X on any
+        # trailing silence itself, so this usually collapses into that one; it
+        # matters when the chunk ends mid-shape, where without it the widget
+        # holds the last cue open until the next sentence arrives.
+        track = [*shift(cues, start_ms), Cue(t=start_ms + chunk_ms, v=SILENT)]
         await self._emit(ctx, start_ms, normalize_cues(track), False)

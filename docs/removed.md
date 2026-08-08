@@ -8,8 +8,12 @@ brief was explicit that the way to do this is deletion rather than flags —
 the public interface by adding switches / flags. Deleting things is fine — we
 can recover from git."*
 
+It has since become the standing catalogue for anything cut from the public
+surface, so one entry below names a later tag; read the entry, not the heading.
+
 This file is the recovery map. Nothing below is lost; **`v0.1.0` is the tag
-where every one of these still works**, so the general move is:
+where these still work** unless the entry says otherwise, so the general move
+is:
 
 ```sh
 git show v0.1.0:<path>                 # read it
@@ -255,6 +259,36 @@ the library had to go looking for.
 py/src/voqalize_avatar/error_observer.py py/tests/test_wiring.py
 py/tests/test_error_observer.py`, and `git show v0.1.0:py/src/voqalize_avatar/processor.py`
 for the constructor.
+
+---
+
+## `AvatarProcessor.PAD_MS`
+
+**Was:** a class attribute (0.2.1 only — `git show v0.2.1:` for any of it)
+declaring the fixed tail of silence a TTS service appends to every sentence.
+`INTER_SENTENCE_PAD_MS = 250` in `visemes.py` was the one measured value, and
+the engine used the number twice: it trimmed the pad off a chunk's PCM before
+recognition, and it added the pad to a sentence's predicted length when placing
+the *next* sentence's fast-leg cues.
+
+**Why it went:** neither use survived scrutiny. The trim was tidiness —
+rhubarb's VAD skips silence anyway, and what comes back for a pad is `X`, which
+is exactly the cue the closing shape would have had to synthesize. And the
+estimate only ever places sentence 2 onward, which is the part of the timeline
+generation outruns: those cues are overwritten by measurement before playout
+reaches them. So a public knob every consumer had to measure was buying an
+adjustment to cues nobody sees. The requester's call, and the code agreed with
+it: *"The 250ms only ever matters for the fast path lip sync, which is only
+500ms… Silence in actual audio isn't a problem - rhubarb handles it just fine."*
+
+**Instead:** nothing. Padded silence is wire time like any other — it counts in
+`turn.resolved_wire_ms` byte for byte, and recognition returns `X` for it.
+`estimate_duration_ms` predicts *speech* and is used only where measurement has
+not arrived yet.
+
+**Recover:** `git show v0.2.1:py/src/voqalize_avatar/visemes.py` and
+`git show v0.2.1:py/src/voqalize_avatar/processor.py`; the tests that covered
+it are in `git show v0.2.1:py/tests/test_visemes.py`.
 
 ---
 

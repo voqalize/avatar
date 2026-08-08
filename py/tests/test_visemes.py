@@ -6,12 +6,11 @@ with a recorder standing in for `AvatarProcessor`'s emitter. The recorder is the
 only seam — it is an async callable that appends, which is what the contract
 says an emitter is.
 
-**Every engine here is built `pad_ms=INTER_SENTENCE_PAD_MS`, deliberately.** The
-fixture clips came from a service that appends 250 ms of silence to every
-sentence, and the `PAD_BYTES` the tests splice on are that silence, real and
-zeroed rather than a number subtracted on faith. The engine's own default is
-zero — see `test_a_service_with_no_pad_lays_sentences_end_to_end` for the other
-half, which is what a stock TTS gets.
+**The fixture clips carry a real pad.** They came from a service that appends
+250 ms of silence to every sentence, and `PAD_BYTES` is that silence — real and
+zeroed, spliced onto the clips the way the service sends it. The engine is told
+nothing about it: the pad is wire time like any other, and recognition returns
+`X` for it. Several tests assert on offsets that include it, which is the point.
 """
 
 from __future__ import annotations
@@ -32,7 +31,6 @@ from voqalize_avatar.avatarsync import (
 from voqalize_avatar.visemes import (
     EARLY_SPLICE_MS,
     FAST_LEAD_MS,
-    INTER_SENTENCE_PAD_MS,
     MIN_CUE_MS,
     VisemeEngine,
     cues_to_wire,
@@ -46,9 +44,10 @@ from .conftest import load_clip
 
 CTX = "7.1"
 
-# The fixture service's silence between sentences: real zeroed PCM, not a number
-# we subtract on faith.
-PAD_BYTES = b"\x00" * (INTER_SENTENCE_PAD_MS * 24000 // 1000 * 2)
+# The fixture service's silence between sentences: real zeroed PCM, spliced on
+# the way it arrives. Nothing declares it to the engine.
+FIXTURE_PAD_MS = 250
+PAD_BYTES = b"\x00" * (FIXTURE_PAD_MS * 24000 // 1000 * 2)
 
 
 @dataclass
@@ -131,7 +130,7 @@ def test_cues_to_wire_shape() -> None:
 
 async def test_fast_leg_emits_a_clean_track_before_any_audio(rhubarb: RhubarbRuntime) -> None:
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     _, text, _ = load_clip("thank-you-for-your-time-today")
 
     await engine.on_sentence_queued(CTX, text)
@@ -154,30 +153,13 @@ async def test_fast_leg_emits_a_clean_track_before_any_audio(rhubarb: RhubarbRun
     assert emission.cues[-1].t <= est_ms
 
 
-async def test_fast_leg_lays_sentences_end_to_end_over_the_pad(rhubarb: RhubarbRuntime) -> None:
-    recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
-    first, second = "Take your time.", "That is good to hear."
+async def test_the_fast_leg_lays_sentences_end_to_end(rhubarb: RhubarbRuntime) -> None:
+    """Predicted starts run on predicted speech, and nothing else.
 
-    await engine.on_sentence_queued(CTX, first)
-    await engine.on_sentence_queued(CTX, second)
-    await engine.flush(CTX)
-
-    # Each sentence starts one pad past the last one's speech, less the lead —
-    # except the turn's first, which cannot be shown before playout begins.
-    assert [call.from_ms for call in recorder.calls] == [
-        0,
-        estimate_duration_ms(first) + INTER_SENTENCE_PAD_MS - FAST_LEAD_MS,
-    ]
-
-
-async def test_a_service_with_no_pad_lays_sentences_end_to_end(rhubarb: RhubarbRuntime) -> None:
-    """The default, and what a stock TTS gets.
-
-    The failure this guards is cumulative and silent: an engine that budgets a
-    pad its service never sends puts every sentence a further `pad_ms` past
-    where its audio actually is, so a six-sentence turn ends up 1.5 s adrift and
-    the mouth is moving to the previous sentence.
+    A sentence with no audio yet can only be placed from the estimate of the one
+    before it. This is the *only* place a pad could have been budgeted, and it
+    is deliberately not: any silence the service appends shows up when the audio
+    arrives and re-places these sentences by measurement.
     """
     recorder = Recorder()
     engine = VisemeEngine(recorder, rhubarb)
@@ -198,7 +180,7 @@ async def test_a_dead_runtime_costs_cues_not_the_turn(tmp_path: Path) -> None:
     # degradation path: the leg raises, the worker logs, the turn survives.
     missing = RhubarbPaths(binary=tmp_path / "nope", res_dir=tmp_path / "res", weights=None)
     recorder = Recorder()
-    engine = VisemeEngine(recorder, RhubarbRuntime(missing), pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, RhubarbRuntime(missing))
 
     await engine.on_sentence_queued(CTX, "Take your time.")
     await engine.flush(CTX)
@@ -230,7 +212,7 @@ async def test_predicted_cues_go_out_early(rhubarb: RhubarbRuntime) -> None:
     not (-125 ms leading, +45 ms lagging). So the whole predicted track slides
     into the half the eye forgives."""
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     _, text, _ = load_clip("thank-you-for-your-time-today")
     est_ms = estimate_duration_ms(text)
 
@@ -255,7 +237,7 @@ async def test_recognised_cues_do_not_lead(rhubarb: RhubarbRuntime) -> None:
     """The accurate leg's times were measured against the audio they describe.
     Shifting those would introduce the error the lead exists to move."""
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, first, true_ms = load_clip("take-your-time")
 
     await engine.on_sentence_queued(CTX, first)
@@ -269,7 +251,7 @@ async def test_recognised_cues_do_not_lead(rhubarb: RhubarbRuntime) -> None:
     assert len(measured) >= 2, f"no chunk landed on a measured boundary: {recorder.calls}"
     # The second sentence starts exactly one wire length in — not one wire
     # length less a lead.
-    assert any(call.from_ms == true_ms + INTER_SENTENCE_PAD_MS for call in recorder.calls)
+    assert any(call.from_ms == true_ms + FIXTURE_PAD_MS for call in recorder.calls)
 
 
 # ── the audio leg and the splice ─────────────────────────────────────────────
@@ -279,7 +261,7 @@ async def test_audio_leg_corrects_the_fast_leg_from_the_splice_point(
     rhubarb: RhubarbRuntime,
 ) -> None:
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, text, ms = load_clip("that-is-good-to-hear")
 
     await engine.on_sentence_queued(CTX, text)
@@ -310,7 +292,7 @@ async def test_audio_leg_corrects_the_fast_leg_from_the_splice_point(
 
 async def test_splice_reseats_the_sentences_behind_it(rhubarb: RhubarbRuntime) -> None:
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, first, true_ms = load_clip("take-your-time")
     second = "That is good to hear."
 
@@ -324,7 +306,7 @@ async def test_splice_reseats_the_sentences_behind_it(rhubarb: RhubarbRuntime) -
 
     # Where the second sentence's predicted cues go once the first is measured:
     # one pad past the true speech, less the lead every predicted track carries.
-    true_start = true_ms + INTER_SENTENCE_PAD_MS - FAST_LEAD_MS
+    true_start = true_ms + FIXTURE_PAD_MS - FAST_LEAD_MS
     # The estimate for this clip is ~19% long, so the second sentence really did
     # move; if the fixture ever changes to one the estimator nails, the re-emit
     # is correctly silent and this test is vacuous — hence the assertion.
@@ -342,7 +324,7 @@ async def test_one_chunk_can_retire_every_sentence_it_covers(rhubarb: RhubarbRun
     resolved by measurement — leaving any of them pending would re-emit its
     predicted cues at an offset already spoken."""
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, first, _ = load_clip("take-your-time")
 
     await engine.on_sentence_queued(CTX, first)
@@ -361,7 +343,7 @@ async def test_offsets_accumulate_over_wire_bytes_including_the_pad(
     rhubarb: RhubarbRuntime,
 ) -> None:
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     first_pcm, _, first_ms = load_clip("take-your-time")
     second_pcm, _, _ = load_clip("that-is-good-to-hear")
 
@@ -370,7 +352,7 @@ async def test_offsets_accumulate_over_wire_bytes_including_the_pad(
     await engine.on_sentence_audio(CTX, second_pcm + PAD_BYTES)
     await engine.flush(CTX)
 
-    assert [call.from_ms for call in recorder.calls] == [0, first_ms + INTER_SENTENCE_PAD_MS]
+    assert [call.from_ms for call in recorder.calls] == [0, first_ms + FIXTURE_PAD_MS]
     # The pad plays as silence, so the first sentence must close its mouth
     # before the second starts rather than holding the last shape across it.
     assert recorder.calls[0].cues[-1].v == "X"
@@ -395,7 +377,7 @@ async def test_keepalives_do_not_shift_the_timeline(rhubarb: RhubarbRuntime) -> 
 
     async def run(chunked: bool) -> list[Emission]:
         recorder = Recorder()
-        engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+        engine = VisemeEngine(recorder, rhubarb)
         for audio in (pcm + PAD_BYTES, second_pcm + PAD_BYTES):
             if chunked:
                 # 200 ms wire chunks with a 2-byte keepalive between each, which
@@ -428,7 +410,7 @@ async def test_the_context_close_is_the_only_final_chunk(rhubarb: RhubarbRuntime
     audio leg — the mistake that left it unreachable for a whole sprint.
     """
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, text, ms = load_clip("take-your-time")
 
     await engine.on_sentence_queued(CTX, text)
@@ -441,7 +423,7 @@ async def test_the_context_close_is_the_only_final_chunk(rhubarb: RhubarbRuntime
     assert last.final is True
     # It lands the end of the turn's *wire* — one pad past the last sentence's
     # speech, a moment no sentence chunk ever places.
-    assert last.from_ms == ms + INTER_SENTENCE_PAD_MS
+    assert last.from_ms == ms + FIXTURE_PAD_MS
     assert last.cues == [Cue(t=last.from_ms, v="X")]
 
 
@@ -451,7 +433,7 @@ async def test_an_interrupted_turn_never_claims_to_have_completed(
     """A barge-in cancels the turn's worker, so the close never runs. The widget
     must not be told a track finished when its audio was cut."""
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, text, _ = load_clip("take-your-time")
 
     await engine.on_sentence_queued(CTX, text)
@@ -468,7 +450,7 @@ async def test_an_interrupted_turn_never_claims_to_have_completed(
 
 async def test_end_turn_stops_the_worker(rhubarb: RhubarbRuntime) -> None:
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
 
     await engine.on_sentence_queued(CTX, "Take your time.")
     await engine.flush(CTX)
@@ -499,7 +481,7 @@ async def test_the_early_leg_replaces_predicted_cues_behind_the_playhead(
     correction.
     """
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, text, _ = load_clip("thank-you-for-your-time-today")
 
     await engine.on_sentence_queued(CTX, text)
@@ -530,7 +512,7 @@ async def test_the_early_leg_puts_the_predicted_tail_back(rhubarb: RhubarbRuntim
     rest of this sentence and every sentence after it. They have to come back,
     or the mouth stops moving between the prefix and the boundary."""
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, first, _ = load_clip("thank-you-for-your-time-today")
     second = "That is good to hear."
 
@@ -548,7 +530,10 @@ async def test_the_early_leg_puts_the_predicted_tail_back(rhubarb: RhubarbRuntim
     # itself, and then the second sentence at the offset it always had.
     assert resumed[0].from_ms == 1200 - 100
     assert resumed[0].cues[-1].v == "X"
-    second_start = estimate_duration_ms(first) + INTER_SENTENCE_PAD_MS - FAST_LEAD_MS
+    # Still an estimate, and an estimate is speech only — the fixture's pad is
+    # not budgeted for here, it arrives with the audio and re-places this
+    # sentence by measurement.
+    second_start = estimate_duration_ms(first) - FAST_LEAD_MS
     assert [call.from_ms for call in resumed[1:]] == [second_start]
 
 
@@ -556,7 +541,7 @@ async def test_the_early_leg_resolves_nothing(rhubarb: RhubarbRuntime) -> None:
     """It corrects cues; it must not move the turn's clock. The byte count is
     what places every later sentence, and a prefix is not a sentence."""
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, text, ms = load_clip("thank-you-for-your-time-today")
 
     await engine.on_sentence_queued(CTX, text)
@@ -571,14 +556,14 @@ async def test_the_early_leg_resolves_nothing(rhubarb: RhubarbRuntime) -> None:
     assert_wire_clean(accurate[-1].cues)
     # …and the turn ends exactly where the bytes say, one pad past the speech.
     assert recorder.calls[-1].final is True
-    assert recorder.calls[-1].from_ms == ms + INTER_SENTENCE_PAD_MS
+    assert recorder.calls[-1].from_ms == ms + FIXTURE_PAD_MS
 
 
 async def test_the_early_leg_runs_once_per_turn_and_only_for_sentence_one(
     rhubarb: RhubarbRuntime,
 ) -> None:
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, text, _ = load_clip("thank-you-for-your-time-today")
 
     await engine.on_sentence_queued(CTX, text)
@@ -609,7 +594,7 @@ async def test_a_prefix_too_short_to_survive_the_splice_changes_nothing(
     """Below `EARLY_SPLICE_MS + guard` there is no window left to emit into, and
     a zero-width splice would delete the fast tail for nothing."""
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, text, _ = load_clip("thank-you-for-your-time-today")
 
     await engine.on_sentence_queued(CTX, text)
@@ -625,7 +610,7 @@ async def test_a_prefix_too_short_to_survive_the_splice_changes_nothing(
 @pytest.mark.parametrize("name", ["take-your-time", "thank-you-for-your-time-today"])
 async def test_every_emission_is_wire_clean(rhubarb: RhubarbRuntime, name: str) -> None:
     recorder = Recorder()
-    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    engine = VisemeEngine(recorder, rhubarb)
     pcm, text, _ = load_clip(name)
 
     await engine.on_sentence_queued(CTX, text)

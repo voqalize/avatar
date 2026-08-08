@@ -116,10 +116,10 @@ def model_for(voice: str | None, lang: str = "en") -> DurationModel:
 
 
 def estimate_duration_ms(text: str, voice: str | None = None, lang: str = "en") -> int:
-    """Predicted *speech* duration in ms — no inter-sentence pad included.
+    """Predicted speech duration in ms.
 
-    A pad, where the service appends one, is wire time and not speech time; the
-    caller adds it when laying sentences out on the turn's timeline (see
-    `visemes.INTER_SENTENCE_PAD_MS`).
+    Used only where measurement is not available yet — the fast leg, and the
+    running estimate of a still-unresolved sentence's start. Every sentence whose
+    audio has arrived is timed by its byte count instead.
     """
     return model_for(voice, lang).estimate_ms(text)

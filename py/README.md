@@ -149,25 +149,6 @@ map existed and was removed in 0.2 — an application that knows its tool is
 searching says so in one `AvatarControlFrame`. See
 [docs/removed.md](https://github.com/voqalize/avatar/blob/main/docs/removed.md).
 
-### If your TTS pads its sentences
-
-The one number the frame stream cannot supply. Some services append a fixed tail
-of silence to every sentence; those bytes are indistinguishable from a speaker
-pausing, so the engine cannot find them and a byte count reads as a longer
-sentence than was spoken. The error is *cumulative* — every sentence after the
-first starts further past where the mouth actually is.
-
-```python
-from voqalize_avatar import AvatarProcessor
-from voqalize_avatar.visemes import INTER_SENTENCE_PAD_MS   # 250, for the fitted service
-
-class MyAvatarProcessor(AvatarProcessor):
-    PAD_MS = INTER_SENTENCE_PAD_MS
-```
-
-Zero — the default — is right for most services. Measure your own once:
-synthesize a short sentence and look at the trailing silence.
-
 ## What this package will not do
 
 It never decides what the agent says or when. The server is the source of truth

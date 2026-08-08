@@ -121,16 +121,6 @@ class AvatarProcessor(FrameProcessor):
     #: that is a `class` statement is hard to reach for by accident.
     STATE_MACHINE: type[AvatarStateMachine] = AvatarStateMachine
 
-    #: Trailing silence your TTS appends to every sentence, in ms. The one number
-    #: the frame stream cannot supply — padding is bytes, and bytes of silence
-    #: look exactly like a speaker pausing. Zero is right for most services; if
-    #: yours pads, measure it once (synthesize a short sentence, look at the
-    #: tail) and set it, because the error is cumulative down a turn:
-    #:
-    #:     class MyAvatarProcessor(AvatarProcessor):
-    #:         PAD_MS = INTER_SENTENCE_PAD_MS   # 250, for the service we fitted against
-    PAD_MS: int = 0
-
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._machine = self.STATE_MACHINE()
@@ -215,7 +205,7 @@ class AvatarProcessor(FrameProcessor):
         """
         try:
             self._engine = build_viseme_engine(
-                self._push_cues, sample_rate=sample_rate, pad_ms=self.PAD_MS
+                self._push_cues, sample_rate=sample_rate
             )
         except Exception as exc:
             self._engine = None

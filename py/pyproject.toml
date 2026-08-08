@@ -1,6 +1,6 @@
 [project]
 name = "voqalize-avatar"
-version = "0.2.1"
+version = "0.2.2"
 description = "Drive a browser talking-head avatar from a pipecat pipeline"
 readme = "README.md"
 requires-python = ">=3.12"
