@@ -330,7 +330,7 @@ the packages are judged by test.
 node tools/sweep.mjs            # the rig conformance gate — run before committing src/
 npm test                        # client/: dispatcher logic + a jsdom package-boundary smoke
 npm run build                   # client/ -> client/dist; also runs on `npm install`
-cd py && uv run pytest          # the pipecat backend, 169 tests
+cd py && uv run pytest          # the pipecat backend
 ```
 
 `npm test` deliberately does **not** test the rig. A DOM emulator cannot tell
@@ -530,7 +530,7 @@ py/src/voqalize_avatar/visemes.py        the three-leg viseme engine + splice
 py/src/voqalize_avatar/avatarsync.py     resident subprocess pool for the aligner
 py/scripts/fit_durations.py  refits duration_table.json (the fast leg's phone
                        weights) from any {text, audio_ms} corpus
-py/tests/              169 tests; green at the declared pipecat floor and above
+py/tests/              green at the declared pipecat floor and above
 
 native/avatarsync/     the Rhubarb Lip Sync fork: patch, src, build.sh, binaries.
                        build.sh is the LOCAL loop; wheels.yml is what ships.
