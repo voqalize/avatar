@@ -8,11 +8,11 @@
  * incomplete.
  *
  * A server pushes these as RTVI `server-message`s under the envelope
- * `{ type: "avatar", v: 1, ...cmd-specific fields }`. {@link AvatarCommand}
- * describes the *payload*, not the envelope, because the payload is what
- * arrives however the host chose to carry it — `AvatarClient.dispatch()`
- * accepts anything with a string `cmd`, so an application that tunnels these
- * through its own message type can hand them straight over.
+ * `{ type: "avatar", ...cmd-specific fields }`. {@link AvatarCommand} describes
+ * what rides inside that envelope; {@link isAvatarMessage} is the envelope
+ * itself, and is the only definition of "this message is for the avatar" the
+ * client has. There is no protocol version field — see `docs/removed.md`
+ * § The `v` field.
  */
 
 /** A viseme cue: `t` is a ms offset into the utterance's clock, `v` is a Rhubarb A–H (or X) letter. */
@@ -20,16 +20,6 @@ export interface AvatarCue {
   t: number;
   v: string;
   i?: number;
-}
-
-/** `perform()` timeline action — see docs/contract-protocol.md § Composing behavior. */
-export interface AvatarPerformAction {
-  t: number;
-  do: "state" | "emotion" | "gaze" | "interject" | "gesture";
-  name?: string;
-  id?: string;
-  i?: number;
-  keepGaze?: boolean;
 }
 
 export interface AvatarStateCmd {
@@ -52,12 +42,6 @@ export interface AvatarInterjectCmd {
 export interface AvatarGestureCmd {
   cmd: "gesture";
   id: string;
-}
-
-export interface AvatarPerformCmd {
-  cmd: "perform";
-  actions: AvatarPerformAction[];
-  ctx?: string;
 }
 
 export interface AvatarCuesCmd {
@@ -93,46 +77,28 @@ export interface AvatarUserCmd {
   speaking: boolean;
 }
 
-export interface AvatarHintCmd {
-  cmd: "hint";
-  kind: "eager_eot" | (string & {});
-}
-
-/** A cmd this build doesn't recognize — dispatched to nothing, ignored for forward compat. */
-export interface AvatarUnknownCmd {
-  cmd: string;
-  [key: string]: unknown;
-}
-
 export type AvatarCommand =
   | AvatarStateCmd
   | AvatarInterjectCmd
   | AvatarGestureCmd
-  | AvatarPerformCmd
   | AvatarCuesCmd
   | AvatarSpeechCmd
-  | AvatarUserCmd
-  | AvatarHintCmd
-  | AvatarUnknownCmd;
+  | AvatarUserCmd;
 
-/** The full server-message payload: the avatar envelope plus its `cmd`. */
-export type AvatarServerMessage = AvatarCommand & {
-  type?: "avatar";
-  v?: number;
-};
+/** The full server-message payload: the envelope plus its command. */
+export type AvatarServerMessage = AvatarCommand & { type: "avatar" };
 
-/** Narrows an unknown server-message payload to an avatar command. */
+/**
+ * Is this server-message payload the avatar's? The envelope is the whole
+ * answer: `{type:"avatar"}` with a string `cmd`. It used to be a per-deployment
+ * `accept` predicate on the client, which meant the library could not state
+ * what an avatar message *is* — see `docs/removed.md` § The accept predicate.
+ */
 export function isAvatarMessage(msg: unknown): msg is AvatarServerMessage {
   if (typeof msg !== "object" || msg === null) return false;
   const m = msg as Record<string, unknown>;
-  return typeof m.cmd === "string";
+  return m.type === AVATAR_MESSAGE_TYPE && typeof m.cmd === "string";
 }
 
 /** The envelope `type` the protocol reserves for avatar traffic. */
 export const AVATAR_MESSAGE_TYPE = "avatar";
-
-/** The protocol version this client speaks — matches `AVATAR_PROTOCOL_VERSION`
- * in the Python package. Sent as `v` and, today, never checked: an unknown
- * `cmd` is ignored rather than version-gated, which is the forward-compat rule
- * the contract states. */
-export const AVATAR_PROTOCOL_VERSION = 1;

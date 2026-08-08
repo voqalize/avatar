@@ -35,10 +35,10 @@ from voqalize_avatar import (
     AvatarControlFrame,
     AvatarMessage,
     AvatarState,
-    AvatarStateMachine,
     Interjection,
 )
-from tests.helpers import sequence
+from voqalize_avatar.state_machine import AvatarStateMachine
+from tests.helpers import sentence, sequence, word
 
 
 def final(text: str) -> TranscriptionFrame:
@@ -155,19 +155,13 @@ def test_interim_transcripts_alone_change_nothing(machine) -> None:
     ]
 
 
-def test_eager_end_of_turn_is_a_hint_not_a_state(machine) -> None:
-    drive(machine, UserStartedSpeakingFrame())
-    assert sequence(machine.eager_end_of_turn()) == ["hint:eager_eot"]
-    assert machine.state is AvatarState.LISTENING
-
-
 # ─── The agent's turn ─────────────────────────────────────────────────────────
 
 
 def test_a_queued_sentence_claims_the_floor(machine) -> None:
     """The earliest honest evidence of imminent speech, and the only one with
     real lead time: the text is on the websocket and the audio is ~450 ms away."""
-    assert sequence(machine.sentence_queued("1.1")) == [
+    assert drive(machine, sentence("Take your time.", "1.1")) == [
         "state:TAKING_FLOOR",
         "interject:CLAIM_FLOOR",
     ]
@@ -177,22 +171,28 @@ def test_a_queued_sentence_claims_the_floor(machine) -> None:
 def test_the_audio_trigger_stays_as_the_fallback(machine) -> None:
     """Both hooks fire on a normal turn — the claim dedups, so having the slow
     path as well costs nothing and covers a TTS that never calls the fast one."""
-    machine.sentence_queued("1.1")
+    drive(machine, sentence("Take your time.", "1.1"))
     assert drive(machine, audio("1.1"), TTSStartedFrame(context_id="1.1")) == []
 
 
 def test_a_later_sentence_does_not_re_point_the_open_turn(machine) -> None:
     """`speech:start` announced a ctx and the client anchored its cue clock to
     it; sentence two of the same turn must not move the anchor."""
-    machine.sentence_queued("1.1")
+    drive(machine, sentence("Take your time.", "1.1"))
     drive(machine, BotStartedSpeakingFrame())
-    machine.sentence_queued("1.2")
+    drive(machine, sentence("Still here.", "1.2"))
     assert machine.ctx == "1.1"
 
 
 def test_a_queued_sentence_says_nothing_once_offline(machine) -> None:
     drive(machine, FatalErrorFrame(error="gone"))
-    assert sequence(machine.sentence_queued("1.1")) == []
+    assert drive(machine, sentence("Take your time.", "1.1")) == []
+
+
+def test_a_karaoke_word_is_not_a_sentence_announcement(machine) -> None:
+    """`TTSTextFrame` subclasses the announcement frame and sets the same flag.
+    Without the discriminator every word of every sentence would claim the floor."""
+    assert drive(machine, word("Take", "1.1")) == []
 
 
 def test_tts_start_claims_the_floor(machine) -> None:
@@ -259,7 +259,6 @@ def test_speech_carries_the_inference_context(machine) -> None:
     (start,) = machine.on_frame(BotStartedSpeakingFrame())
     assert start.to_wire() == {
         "type": "avatar",
-        "v": 1,
         "cmd": "speech",
         "event": "start",
         "ctx": "turn.1",
@@ -272,7 +271,7 @@ def test_ctx_is_overridable_for_a_runtime_with_real_ids() -> None:
     the recovery path for a consumer whose private frames carried them."""
 
     class Numbered(AvatarStateMachine):
-        def next_ctx(self) -> str:
+        def _next_ctx(self) -> str:
             return f"3.{self._inference}"
 
     machine = Numbered()
@@ -413,49 +412,6 @@ def test_tools_hand_the_floor_over_to_tts(machine) -> None:
     ]
 
 
-# ─── Tool states ──────────────────────────────────────────────────────────────
-
-
-def test_a_mapped_tool_shows_its_own_state() -> None:
-    machine = AvatarStateMachine(tool_states={"search_web": AvatarState.SEARCHING_SCREEN})
-    assert drive(machine, started("tc-1", function_name="search_web")) == [
-        "state:SEARCHING_SCREEN"
-    ]
-
-
-def test_an_unmapped_tool_falls_back_to_thinking() -> None:
-    machine = AvatarStateMachine(tool_states={"search_web": AvatarState.SEARCHING_SCREEN})
-    assert drive(machine, started("tc-1", function_name="lookup")) == ["state:THINKING"]
-
-
-def test_the_first_mapped_call_wins_and_does_not_flap() -> None:
-    """Two tools at once cannot both be depicted, and alternating between their
-    states would read as indecision rather than as work."""
-    machine = AvatarStateMachine(
-        tool_states={
-            "search_web": AvatarState.SEARCHING_SCREEN,
-            "write_notes": AvatarState.TYPING,
-        }
-    )
-    assert drive(
-        machine,
-        started("tc-1", function_name="search_web"),
-        started("tc-2", function_name="write_notes"),
-    ) == ["state:SEARCHING_SCREEN"]
-
-
-def test_a_finished_mapped_call_hands_back_to_its_survivor() -> None:
-    """The specific state the finished call was holding is over; the honest
-    answer is whatever the calls still running ask for."""
-    machine = AvatarStateMachine(tool_states={"search_web": AvatarState.SEARCHING_SCREEN})
-    drive(
-        machine,
-        started("tc-1", function_name="search_web"),
-        started("tc-2", function_name="lookup"),
-    )
-    assert drive(machine, result("tc-1", function_name="search_web")) == ["state:THINKING"]
-
-
 # ─── Explicit control ─────────────────────────────────────────────────────────
 
 
@@ -524,15 +480,6 @@ def test_a_fatal_flag_on_a_plain_error_frame_is_also_fatal(machine) -> None:
     assert drive(machine, ErrorFrame(error="gone", fatal=True)) == ["state:OFFLINE"]
 
 
-def test_an_out_of_band_error_takes_the_same_route(machine) -> None:
-    """Errors travel upstream, so the session watches for them with an observer
-    and calls in. Same transitions, or the avatar would show two different
-    faces for one failure depending on where it was seen."""
-    assert sequence(machine.error(fatal=False)) == ["state:DEGRADED"]
-    assert sequence(machine.error(fatal=True)) == ["state:OFFLINE"]
-    assert sequence(machine.error(fatal=True)) == []
-
-
 def test_pipeline_cancel_goes_offline(machine) -> None:
     assert drive(machine, CancelFrame()) == ["state:OFFLINE"]
 
@@ -576,7 +523,7 @@ def test_an_interjection_is_an_event_and_always_fires(machine) -> None:
 # ─── The envelope ─────────────────────────────────────────────────────────────
 
 
-def test_every_message_carries_the_versioned_avatar_envelope(machine) -> None:
+def test_every_message_carries_the_avatar_envelope(machine) -> None:
     frames = [
         UserStartedSpeakingFrame(),
         TTSStartedFrame(context_id="1.1"),
@@ -588,5 +535,4 @@ def test_every_message_carries_the_versioned_avatar_envelope(machine) -> None:
     for message in emitted:
         wire = message.to_wire()
         assert wire["type"] == "avatar"
-        assert wire["v"] == 1
-        assert wire["cmd"] in {"state", "interject", "speech", "user", "hint", "cues", "perform"}
+        assert wire["cmd"] in {"state", "interject", "speech", "user", "cues", "gesture"}

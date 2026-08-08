@@ -12,7 +12,6 @@ from __future__ import annotations
 from voqalize_avatar.sentence_audio import (
     KEEPALIVE_MAX_BYTES,
     SentenceAudioAccumulator,
-    SentenceBoundaryFrame,
 )
 
 
@@ -83,8 +82,3 @@ def test_the_ceiling_lifts_once_the_stream_is_cut() -> None:
     acc.take("1.1")
     acc.add("1.1", b"c" * 12)
     assert acc.take("1.1") == b"c" * 12
-
-
-def test_the_boundary_marker_carries_its_sentence() -> None:
-    frame = SentenceBoundaryFrame(context_id="1.1", word_timestamps=[("hi", 0.0)])
-    assert (frame.context_id, frame.word_timestamps) == ("1.1", [("hi", 0.0)])

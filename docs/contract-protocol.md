@@ -234,19 +234,18 @@ TTS produces them; the merged track is re-normalized each push.
 `speak()` auto-enters `SPEAKING` (keeping the current gaze) and kills any
 spoken interjection in flight. `speakEnd` fires when the track completes.
 
-## The user's voice — `setUserAudio(source?)`, `setUserSpeaking(bool)`
+## The user's voice — `setUserSpeaking(bool)`
 
 Backchannels only create rapport when they are *contingent* on the speaker —
 identical nods on a timer measurably read as distracting
-(docs/research-biomechanics.md §3.5). Give the widget the user's voice and the
-listening engine does the rest:
+(docs/research-biomechanics.md §3.5). Tell the widget when the user holds the
+floor and the listening engine does the rest.
 
-- `setUserAudio(streamOrElement)` — the widget runs its own coarse VAD on the
-  signal (RMS hysteresis: 80 ms on, 250 ms off). This audio never drives the
-  mouth; it is the *input* side.
-- `setUserSpeaking(bool)` — the host's (or server endpointer's) own turn
-  signal. Wins over the level VAD when both are driven; pass `null` to hand
-  back.
+`setUserSpeaking(bool)` is the whole input side: the turn signal from the
+server's endpointer, which is the one that already decides where a turn ends.
+Pass `null` to hand back. The widget used to be able to derive this itself from
+the user's `MediaStream` (`setUserAudio`), a second VAD racing the server's —
+`docs/removed.md` § Client-side VAD.
 
 While `LISTENING`/`WAITING_FOR_USER` with a signal supplied: an
 acknowledgement fires 250–600 ms after a user pause onset, on about half of
@@ -263,12 +262,12 @@ up.
 
 ### The mouth priority rule (invariant)
 
-**Server viseme track > clip mouth track > amplitude fallback.** While a
-server track plays, it owns the mouth outright: an interjection fired
-mid-utterance contributes head and brows only, and its mouth track is dropped.
-The amplitude fallback (`setAudioFallback(mediaElementOrStream)`) is the
-zero-server-work tier: an energy/spectral guesser that runs only when no cue
-track is live. Anything that degrades this ordering is a regression.
+**Server viseme track > clip mouth track.** While a server track plays, it
+owns the mouth outright: an interjection fired mid-utterance contributes head
+and brows only, and its mouth track is dropped. There used to be a third tier —
+an amplitude/spectral guesser off the bot's own audio element, for a server
+that sent no cues at all (`docs/removed.md` § Amplitude lipsync). Anything that
+degrades this ordering is a regression.
 
 ## Events, gains, introspection
 
@@ -293,7 +292,7 @@ track is live. Anything that degrades this ordering is a regression.
   "fidgety" starts moves with tile size and with the audience, so this is
   deliberately a host decision rather than a constant.
 - Getters: `state`, `emotion`, `gaze`, `speaking`, `performing`, `clip`,
-  `gesturing`, `params` (the live smoothed vector), `audioLevel`, `svg`.
+  `gesturing`, `params` (the live smoothed vector), `svg`.
 - `setOverrides({channel: value})` — direct parameter injection, post-clamp.
   For tuning UIs and tests, not production.
 - `blink(double?)`, `destroy()`.
@@ -387,23 +386,33 @@ package (`pip install voqalize-avatar`), a pipecat `FrameProcessor` that infers
 the base states from stock frames and emits the envelope below as RTVI
 server-messages. Design and rationale:
 [design-library-split.md](design-library-split.md). A host driving the widget
-through that stack never calls the API above directly; it mounts
-`@voqalize/avatar/pipecat`, whose `AvatarClient` dispatches those messages:
+through that stack never calls the API above directly; it renders
+`<Avatar client={pipecatClient} />` from `@voqalize/avatar`, and the dispatcher
+inside it turns these messages into the calls above:
 
 ```json
-{ "type": "avatar", "v": 1, "cmd": "state", "name": "THINKING" }
+{ "type": "avatar", "cmd": "state", "name": "THINKING" }
 ```
+
+`{"type": "avatar"}` is the whole membership test — an RTVI server-message in
+that envelope is the avatar's, and one outside it is not, whoever sent it.
+There is no protocol version field; forward compatibility is the ignore-unknown
+rule below, which a version number would not have improved
+(`docs/removed.md` § The `v` field).
 
 | `cmd` | payload → widget call |
 |---|---|
 | `state` | `name`, `emotion?`, `gaze?` → `setState` |
 | `interject` | `id` → `interject` |
 | `gesture` | `id` → `gesture` (a hand gesture id, not an interjection id) |
-| `perform` | `actions`, `ctx` → `perform` |
 | `cues` | `ctx`, `from_ms`, `cues`, `final?` → splice, then `speak`/`pushCues` |
 | `speech` | `event: start\|stop`, `ctx` → anchor / release the turn clock |
 | `user` | `speaking` → `setUserSpeaking` |
-| `hint` | `kind: eager_eot` → app hook (listening engine may ack now) |
+
+That is the whole wire vocabulary. `perform` (a timeline as one message) and
+`hint` (an advisory with no rendering) were both on it and are not any more —
+`docs/removed.md` § The `perform` command and § The `hint` command. `perform()`
+itself is untouched; what went away is a *server* being able to send one.
 
 Semantics the envelope adds on top of this contract:
 
@@ -419,9 +428,9 @@ Semantics the envelope adds on top of this contract:
   residual error lands video-first — the +125 ms side of the asymmetric
   tolerance window, not the −45 ms one.
 - **Explicit instructions override heuristics.** An application that knows
-  something the pipeline cannot infer pushes the same `{cmd, ...}` payload from
-  its own code; it dispatches into the same handler. The backend's state
-  heuristics are the default layer underneath, not a competing one.
+  something the pipeline cannot infer pushes the same envelope from its own
+  code; it dispatches into the same handler. The backend's state heuristics are
+  the default layer underneath, not a competing one.
 - Unknown `cmd`s are ignored — the server may grow vocabulary ahead of
   deployed clients.
 
@@ -433,8 +442,9 @@ Agreed direction, not yet landed; backend work can anticipate it:
   applications need them — same `setState` surface, one STATES entry each.
 - Backend heuristics for the states still unmapped server-side: `CANT_HEAR`
   from the STT's own confidence signal plus user volume; `DISTRACTED`,
-  `SEARCHING_SCREEN` and `TYPING` from tool-call names, which today only the
-  opt-in `tool_states` map reaches.
+  `SEARCHING_SCREEN` and `TYPING` from tool-call names. A tool call shows
+  `THINKING` today and only that — an application that wants to distinguish its
+  own tools subclasses `AvatarStateMachine` and says so.
 
 For servers written against a pre-2026-08 version of this contract, the
 renames were: `createKiran`→`createAvatar`, gaze `CANDIDATE`→`USER` and
@@ -445,3 +455,7 @@ gestures — landed 2026-08 and is current. `gesture` is the newest verb
 (2026-08-07); a widget older than it ignores the `cmd` and drops the
 `perform()` verb with a warning, which is the forward-compat rule working as
 intended, so a backend may send it unconditionally.
+
+The 0.2 release cut the wire down to the six commands in the table and the
+package down to one React component. Everything it removed, and how to get any
+of it back, is [removed.md](removed.md).

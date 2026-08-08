@@ -27,9 +27,7 @@ The browser half is [`@voqalize/avatar`](https://www.npmjs.com/package/@voqalize
 the seat where it can see the audio that is about to be spoken.
 
 ```python
-from voqalize_avatar import AvatarProcessor, AvatarStateMachine
-
-avatar = AvatarProcessor(AvatarStateMachine())
+from voqalize_avatar import AvatarProcessor
 
 pipeline = Pipeline([
     transport.input(),
@@ -37,13 +35,14 @@ pipeline = Pipeline([
     context_aggregator.user(),
     llm,
     tts,
-    avatar,                      # <-- here
+    AvatarProcessor(),           # <-- here
     transport.output(),
     context_aggregator.assistant(),
 ])
 ```
 
-That is the whole of tier 1, and it needs no application code at all. From
+No arguments, no binaries to install, no environment variables — that is the
+whole integration, and it needs no other application code. From
 stock pipecat frames the state machine delivers `IDLE`, `LISTENING`,
 `THINKING`, `SPEAKING`, `TAKING_FLOOR`, `WAITING_FOR_USER`, `YIELDED`,
 `DEGRADED` and `OFFLINE`, plus the turn-clock anchor the client splices cues
@@ -51,14 +50,10 @@ onto and the user-speaking truth the listening engine times backchannels off.
 
 ## Mouth shapes
 
-Lipsync is the headline feature, and there is nothing to configure:
-
-```python
-from voqalize_avatar.wiring import attach_tts_hooks, build_viseme_engine
-
-engine = build_viseme_engine(avatar, sample_rate=24000)
-attach_tts_hooks(tts, engine)
-```
+Lipsync is the headline feature, and there is nothing to wire up: the processor
+starts its viseme engine when `StartFrame` arrives, at the sample rate that
+frame declares, and drives it from the same karaoke frames pipecat already
+pushes for word-level captions.
 
 The wheel carries its own aligner — [`avatarsync`](https://github.com/voqalize/avatar/tree/main/native/avatarsync),
 our fork of [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync),
@@ -77,31 +72,17 @@ requires `onnxruntime`, which publishes no macOS x86-64 wheel, so nothing that
 depends on pipecat installs there at all.
 
 Anything else installs the sdist, which carries no binary. So does an explicit
-`--no-binary`. Both are fine: `build_viseme_engine` **never raises**. A missing
-aligner is an ordinary condition — it logs once, returns `None`, and the session
-runs state-channel only, with the widget falling back to its own WebAudio
-amplitude lipsync. Worse, not broken.
+`--no-binary`. Both are fine, and the two APIs differ here on purpose. The
+internal one, `build_viseme_engine()`, is a library call and **fails fast**: it
+raises `RhubarbUnavailableError` naming the paths it looked in. `AvatarProcessor`
+is the layer that decides a missing aligner is survivable — it catches, logs
+once, and runs the session state-channel only. The face still listens, thinks,
+claims the floor and yields it; its mouth does not move while it speaks. Worse,
+not broken.
 
-`enabled=False` turns it off on a node that should not run it.
-
-<details>
-<summary>Pointing it somewhere else</summary>
-
-The bundled aligner is the answer for approximately everyone. The `avatarsync`
-argument exists for the two cases it cannot cover, and it is an argument rather
-than an environment variable so that two engines in one interpreter cannot
-disagree and a test needs no global mutation:
-
-```python
-# a deploy that unpacks the artifact itself
-build_viseme_engine(avatar, sample_rate=24000, avatarsync="/opt/avatarsync")
-
-# a source checkout of this repo, where the binary is built rather than installed
-from voqalize_avatar.avatarsync import RhubarbPaths
-build_viseme_engine(avatar, sample_rate=24000, avatarsync=RhubarbPaths.discover())
-```
-
-</details>
+A source checkout of this repo is found by walking up to `native/avatarsync`, so
+the tests and the demo run against a locally built binary with no configuration
+either.
 
 The engine runs three legs and the client splices between them: a **fast** leg
 that predicts the timeline from text before the audio exists (~0.4 ms), an
@@ -111,8 +92,8 @@ that predicts the timeline from text before the audio exists (~0.4 ms), an
 ## Saying what the pipeline cannot infer
 
 Some states need to know what your application is doing — `TYPING`,
-`SEARCHING_SCREEN`, `CANT_HEAR`, a deliberate interjection, a composed
-`perform()` timeline. No amount of frame-watching infers those correctly, and a
+`SEARCHING_SCREEN`, `CANT_HEAR`, a deliberate interjection, a hand gesture. No
+amount of frame-watching infers those correctly, and a
 library that guessed would nod at the wrong moment. Two seams, in order of
 reach for:
 
@@ -133,27 +114,40 @@ from voqalize_avatar import HandGesture
 await self.push_frame(AvatarControlFrame(message=AvatarMessage.gesture(HandGesture.HI)))
 ```
 
-**Or subclass `AvatarStateMachine`** when your application's frames are simply
-its own spelling of something the library already models — an LLM that runs out
+**Or subclass `AvatarStateMachine`** (from `voqalize_avatar.state_machine`) when
+your application's frames are simply its own spelling of something the library already models — an LLM that runs out
 of process, say, whose tool calls never appear as pipecat function-call frames:
 
 ```python
+from voqalize_avatar import AvatarProcessor
+from voqalize_avatar.state_machine import AvatarStateMachine
+
 class MyStateMachine(AvatarStateMachine):
     def on_frame(self, frame):
         if isinstance(frame, MyToolStartedFrame):
-            return self.tool_started(frame.call_id, frame.name)
+            return self.tool_started(frame.call_id)
         if isinstance(frame, MyToolResultFrame):
             return self.tool_finished(frame.call_id)
         return super().on_frame(frame)
+
+class MyAvatarProcessor(AvatarProcessor):
+    STATE_MACHINE = MyStateMachine
 ```
 
-`tool_started` / `tool_finished` are public for exactly this: you inherit the
-dedup, the parallel-call hold and the `tool_states` lookup rather than
-re-implementing them approximately.
+`STATE_MACHINE` is a class attribute rather than a constructor argument
+deliberately: the front door takes no arguments and must keep taking none, and a
+second door that costs a `class` statement is not one you walk through by
+accident.
 
-One convenience covers the most common case with no code at all —
-`AvatarProcessor(AvatarStateMachine(tool_states={"search_web": AvatarState.SEARCHING_SCREEN}))`
-maps a function name straight to a state, driven by stock frames.
+`tool_started` / `tool_finished` are public for exactly this: you inherit the
+call-id dedup and the parallel-call hold — a turn with three tools settles on one
+`THINKING` instead of flickering — rather than re-implementing them
+approximately.
+
+A tool call shows `THINKING`, and only that. A `tool_states={"search_web": ...}`
+map existed and was removed in 0.2 — an application that knows its tool is
+searching says so in one `AvatarControlFrame`. See
+[docs/removed.md](https://github.com/voqalize/avatar/blob/main/docs/removed.md).
 
 ## What this package will not do
 

@@ -24,7 +24,7 @@ from voqalize_avatar import (
     HandGesture,
     Interjection,
 )
-from voqalize_avatar.messages import Hint, SpeechEvent
+from voqalize_avatar.messages import SpeechEvent
 
 STATE_NAMES = {
     "IDLE",
@@ -127,16 +127,13 @@ def test_every_builder_produces_the_same_envelope() -> None:
         AvatarMessage.state(AvatarState.LISTENING),
         AvatarMessage.interject(Interjection.CLAIM_FLOOR),
         AvatarMessage.gesture(HandGesture.HI),
-        AvatarMessage.perform([{"t": 0, "do": "gaze", "name": "NOTES"}], ctx="1.1"),
         AvatarMessage.cues(ctx="1.1", from_ms=0, cues=[], final=False),
         AvatarMessage.speech(SpeechEvent.START, ctx="1.1"),
         AvatarMessage.user(speaking=True),
-        AvatarMessage.hint(Hint.EAGER_EOT),
     ]
     for message in built:
         wire = message.to_wire()
         assert wire["type"] == "avatar"
-        assert wire["v"] == 1
         assert wire["cmd"] == message.cmd
 
 
@@ -146,7 +143,6 @@ def test_an_unadorned_state_omits_emotion_and_gaze() -> None:
     with nothing."""
     assert AvatarMessage.state(AvatarState.THINKING).to_wire() == {
         "type": "avatar",
-        "v": 1,
         "cmd": "state",
         "name": "THINKING",
     }
@@ -154,7 +150,6 @@ def test_an_unadorned_state_omits_emotion_and_gaze() -> None:
         AvatarState.THINKING, emotion=Emotion.THOUGHTFUL, gaze=Gaze.AWAY_THINKING
     ).to_wire() == {
         "type": "avatar",
-        "v": 1,
         "cmd": "state",
         "name": "THINKING",
         "emotion": "thoughtful",

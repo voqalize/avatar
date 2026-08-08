@@ -90,8 +90,15 @@ splice discarded it" and "its own audio arrived".
 
 Everything leaves through one injected callback, `emit(ctx, from_ms, cues,
 final)`, meaning *discard queued cues at or after `from_ms`, then append these*.
-`AvatarProcessor` supplies it through `wiring.py`; nothing here knows about
-pipecat frames, RTVI, or the transport.
+`AvatarProcessor` supplies it; nothing here knows about pipecat frames, RTVI, or
+the transport.
+
+## Fail fast
+
+This is the internal API and it behaves like a library: `build_viseme_engine`
+raises when the native aligner is not there, naming the path it looked at. The
+pipecat wrapper is the layer that decides a missing binary should cost the call
+its lipsync rather than its audio — see `AvatarProcessor._start_visemes`.
 
 ## The latency rule
 
@@ -122,7 +129,14 @@ from typing import Any
 from loguru import logger
 
 from .durations import estimate_duration_ms
-from .avatarsync import Cue, RhubarbError, VisemeRuntime, shift
+from .avatarsync import (
+    Cue,
+    RhubarbError,
+    RhubarbPaths,
+    VisemeRuntime,
+    shared_pool,
+    shift,
+)
 
 # Some TTS services append a fixed pad of silence to every sentence including the
 # last. It plays, so it belongs on the timeline as an `X` cue and must be
@@ -137,11 +151,6 @@ INTER_SENTENCE_PAD_MS = 250
 # connection. Counting those as audio would shift every later cue by a fraction
 # of a millisecond per idle gap, and the drift is cumulative over a turn.
 KEEPALIVE_MAX_BYTES = 2
-
-# How far the service's own word clock may sit from our byte-derived one before
-# it is worth a log line. Below the 40 ms cue lead, so anything this check lets
-# through is inside the perceptual tolerance the lead already spends.
-DRIFT_TOLERANCE_MS = 30
 
 SAMPLE_RATE = 24000
 BYTES_PER_SAMPLE = 2
@@ -234,8 +243,6 @@ class _Sentence:
     """One sentence, from "handed to TTS" to "its audio is fully here"."""
 
     text: str
-    voice: str | None
-    lang: str
     est_speech_ms: int
     # The engine's pad, carried per sentence rather than read off the module
     # constant. The estimated timeline and the measured one must subtract and add
@@ -267,13 +274,43 @@ class _Turn:
     early_done: bool = False
 
 
+def build_viseme_engine(emit: EmitCues, *, sample_rate: int) -> VisemeEngine:
+    """The engine, pre-warmed, leasing the worker's shared aligner pool.
+
+    **Raises** `RhubarbUnavailableError` when the native aligner is not on this
+    machine — the sdist, or a platform we publish no wheel for. This is the
+    internal API: it says what is missing and where it looked. `AvatarProcessor`
+    is the layer that decides that is survivable.
+
+    The native half needs no configuration. The platform wheel carries the
+    aligner and its model tree inside the package, so the common case is a
+    `pip install` and nothing else; a source checkout of this repo is found by
+    walking up to `native/avatarsync`.
+
+    The runtime is a **lease on a worker-wide pool**, not a process of this
+    session's own. `avatarsync` is ~86 MB of acoustic model answering requests
+    that take 15-31 ms; per-session processes made memory scale with concurrency
+    for no throughput gain at all.
+    """
+    paths = RhubarbPaths.locate()
+    paths.check()
+    engine = VisemeEngine(emit, shared_pool(paths).lease(), sample_rate=sample_rate)
+    # Spawn `avatarsync` now, in the background. Lazily started it starts on the
+    # call's first sentence — ~250 ms charged to exactly the window the fast leg
+    # exists to cover, so the one turn that genuinely needs predicted cues is the
+    # one that would not get them in time. Only the worker's first session pays
+    # it now that the pool is shared; every later one finds the model loaded.
+    engine.prewarm()
+    return engine
+
+
 class VisemeEngine:
     """Turns sentences and their audio into spliced cue chunks.
 
-    One instance per session. `emit` is the only way anything leaves. Both
-    dependencies are wired by `wiring.py`, never defaulted here — a silently
-    self-constructed runtime is how a session ends up talking to a binary nobody
-    chose.
+    One instance per session. `emit` is the only way anything leaves. The runtime
+    is injected rather than defaulted — a silently self-constructed one is how a
+    session ends up talking to a binary nobody chose; `build_viseme_engine` is
+    the one place that chooses.
 
     `pad_ms` is the trailing silence your TTS appends to every sentence (see
     `INTER_SENTENCE_PAD_MS`). It defaults to zero because most services append
@@ -326,45 +363,40 @@ class VisemeEngine:
 
     # ---- entry points (never block the caller) -----------------------------
 
-    async def on_sentence_queued(
-        self, ctx: str, text: str, voice: str | None = None, lang: str = "en"
-    ) -> None:
+    async def on_sentence_queued(self, ctx: str, text: str) -> None:
         """A sentence has been handed to TTS. Emit fast-leg cues for it."""
         turn = self._turn(ctx)
         sentence = _Sentence(
             text=text,
-            voice=voice,
-            lang=lang,
-            est_speech_ms=estimate_duration_ms(text, voice, lang),
+            est_speech_ms=estimate_duration_ms(text),
             pad_ms=self._pad_ms,
         )
         turn.queue.put_nowait(lambda: self._run_fast_leg(turn, sentence))
 
     async def on_sentence_audio(
-        self,
-        ctx: str,
-        pcm: bytes | Sequence[bytes],
-        word_timestamps: Sequence[tuple[str, float]] | None = None,
+        self, ctx: str, pcm: bytes | Sequence[bytes], *, sentences: int | None = 1
     ) -> None:
-        """A sentence's audio has fully arrived. Emit corrected cues for it.
+        """A chunk of the turn's audio has fully arrived. Emit corrected cues.
 
         `pcm` may be the raw wire chunks; keepalives are dropped here so the
         caller never has to remember to.
 
-        `word_timestamps` come from the TTS service, and they are **absolute on
-        the context's timeline** — offset by every second of audio already
-        streamed for this turn, pads included (`approximate_word_timestamps(...,
-        offset_s=cumulative_audio_s)`). Nothing downstream rebases them, because
-        pipecat's own karaoke path needs them exactly that way; this module
-        rebases its own copy, once, in `_check_word_timestamps`.
+        `sentences` is how many queued sentences this chunk covers, oldest first.
+        Normally one — the caller cuts at each sentence boundary — but a TTS
+        service with no word timestamps offers no boundary until the end of the
+        turn, and then one chunk retires everything predicted for it: `None`
+        means *all of them*. Getting this wrong does not misplace the chunk
+        (offsets are byte-derived); it strands the covered sentences in
+        `pending`, where they would be re-emitted at offsets that have already
+        been spoken.
 
-        No sentence is `final`: whether one is the turn's last is not knowable
-        here, and pretending otherwise is what made `final` a dead flag. That
-        answer arrives separately, as `on_context_closed`.
+        No chunk is `final`: whether one is the turn's last is not knowable here,
+        and pretending otherwise is what made `final` a dead flag. That answer
+        arrives separately, as `on_context_closed`.
         """
         audio = pcm if isinstance(pcm, bytes) else join_audio_chunks(pcm)
         turn = self._turn(ctx)
-        turn.queue.put_nowait(lambda: self._run_audio_leg(turn, audio, word_timestamps or ()))
+        turn.queue.put_nowait(lambda: self._run_audio_leg(turn, audio, sentences))
 
     async def on_sentence_partial(self, ctx: str, pcm: bytes | Sequence[bytes]) -> None:
         """A prefix of the turn's first sentence exists. Correct it early.
@@ -514,20 +546,16 @@ class VisemeEngine:
                 # A sentence wholly behind the splice leaves nothing here.
                 await self._emit(turn.ctx, at, normalize_cues(tail), False)
 
-    async def _run_audio_leg(
-        self,
-        turn: _Turn,
-        pcm: bytes,
-        word_timestamps: Sequence[tuple[str, float]],
-    ) -> None:
+    async def _run_audio_leg(self, turn: _Turn, pcm: bytes, sentences: int | None) -> None:
         total_ms = wire_ms(pcm, self._sample_rate)
         speech_ms = max(0.0, total_ms - self._pad_ms)
         start_ms = round(turn.resolved_wire_ms)
 
-        sentence = turn.pending.popleft() if turn.pending else None
+        # Every sentence this chunk covers is now resolved by measurement, so
+        # none of them may be re-emitted from its estimate.
+        n = len(turn.pending) if sentences is None else min(sentences, len(turn.pending))
+        covered = [turn.pending.popleft() for _ in range(n)]
         turn.resolved_wire_ms += total_ms
-
-        self._check_word_timestamps(word_timestamps, start_ms, total_ms)
 
         # Recognise the speech, not the pad. Rhubarb's VAD would skip the
         # silence anyway; trimming keeps the reported clip length honest and
@@ -539,7 +567,7 @@ class VisemeEngine:
 
         await self._emit_chunk(turn.ctx, start_ms, cues, round(speech_ms))
 
-        if sentence is not None:
+        for sentence in covered:
             sentence.emitted_start_ms = start_ms
         await self._reemit_pending(turn)
 
@@ -621,54 +649,3 @@ class VisemeEngine:
         # the last shape through it and the mouth sits open between sentences.
         track = [*shift(cues, start_ms), Cue(t=start_ms + speech_ms, v=SILENT)]
         await self._emit(ctx, start_ms, normalize_cues(track), False)
-
-    def _check_word_timestamps(
-        self, word_timestamps: Sequence[tuple[str, float]], start_ms: int, total_ms: float
-    ) -> None:
-        """Cross-check our byte-derived turn clock against the service's own.
-
-        These timestamps are **absolute on the context's timeline** — offset by
-        every second of audio already streamed for this turn, pads included. So
-        the batch's first word is the service saying where it thinks this
-        sentence starts, and `start_ms` is where our byte count says it starts.
-        Those two are derived completely independently (word spans from text
-        proportions, ours from wire bytes) and must agree; when they stop
-        agreeing every cue after the first sentence drifts, silently.
-
-        The second check is the old pad check, rebased. A service's pad is
-        measured, not contractual, and it is inside the span the service spreads
-        words across — so a word may legitimately start past the *speech* but
-        never past the *wire*.
-        """
-        if not word_timestamps:
-            return
-        starts_ms = [t * 1000 for _, t in word_timestamps]
-        origin_ms = min(starts_ms)
-
-        drift_ms = origin_ms - start_ms
-        # The pad is the natural slack where a service has one, but it is not the
-        # tolerance — with no pad the honest allowance is still a few frames of
-        # rounding, and warning on 1 ms would fill the log on every sentence.
-        if abs(drift_ms) > max(self._pad_ms, DRIFT_TOLERANCE_MS):
-            logger.warning(
-                "avatar: word timestamps disagree with the wire clock by {:.0f}ms "
-                "(service says this sentence starts at {:.0f}ms, bytes say {}ms) — "
-                "cue offsets for this turn are drifting",
-                drift_ms,
-                origin_ms,
-                start_ms,
-            )
-
-        # Rebased on the batch's own origin: the service guarantees contiguity
-        # within a sentence, so this is the sentence-relative view the rest of
-        # the module would have had before timestamps went cumulative.
-        last_word_ms = max(starts_ms) - origin_ms
-        if last_word_ms > total_ms:
-            logger.warning(
-                "avatar: word timestamps run past the sentence's wire "
-                "(last word {:.0f}ms into {:.0f}ms of audio) — "
-                "the {}ms inter-sentence pad assumption may be stale",
-                last_word_ms,
-                total_ms,
-                self._pad_ms,
-            )

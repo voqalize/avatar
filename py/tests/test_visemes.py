@@ -42,7 +42,7 @@ from voqalize_avatar.visemes import (
     wire_ms,
 )
 
-from .conftest import VOICE, load_clip
+from .conftest import load_clip
 
 CTX = "7.1"
 
@@ -134,7 +134,7 @@ async def test_fast_leg_emits_a_clean_track_before_any_audio(rhubarb: RhubarbRun
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     _, text, _ = load_clip("thank-you-for-your-time-today")
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.flush(CTX)
 
     assert len(recorder.calls) == 1
@@ -148,7 +148,7 @@ async def test_fast_leg_emits_a_clean_track_before_any_audio(rhubarb: RhubarbRun
     # Cue density: a track this sparse is a mouth that barely moves, this dense
     # is a flutter. Measured 4-11 /s across the fixtures; the band is loose
     # enough for that spread and tight enough to catch either failure.
-    est_ms = estimate_duration_ms(text, VOICE)
+    est_ms = estimate_duration_ms(text)
     rate = len(emission.cues) / (est_ms / 1000)
     assert 3 <= rate <= 16, f"{rate:.1f} cues/s"
     assert emission.cues[-1].t <= est_ms
@@ -159,15 +159,15 @@ async def test_fast_leg_lays_sentences_end_to_end_over_the_pad(rhubarb: RhubarbR
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     first, second = "Take your time.", "That is good to hear."
 
-    await engine.on_sentence_queued(CTX, first, VOICE)
-    await engine.on_sentence_queued(CTX, second, VOICE)
+    await engine.on_sentence_queued(CTX, first)
+    await engine.on_sentence_queued(CTX, second)
     await engine.flush(CTX)
 
     # Each sentence starts one pad past the last one's speech, less the lead —
     # except the turn's first, which cannot be shown before playout begins.
     assert [call.from_ms for call in recorder.calls] == [
         0,
-        estimate_duration_ms(first, VOICE) + INTER_SENTENCE_PAD_MS - FAST_LEAD_MS,
+        estimate_duration_ms(first) + INTER_SENTENCE_PAD_MS - FAST_LEAD_MS,
     ]
 
 
@@ -183,13 +183,13 @@ async def test_a_service_with_no_pad_lays_sentences_end_to_end(rhubarb: RhubarbR
     engine = VisemeEngine(recorder, rhubarb)
     first, second = "Take your time.", "That is good to hear."
 
-    await engine.on_sentence_queued(CTX, first, VOICE)
-    await engine.on_sentence_queued(CTX, second, VOICE)
+    await engine.on_sentence_queued(CTX, first)
+    await engine.on_sentence_queued(CTX, second)
     await engine.flush(CTX)
 
     assert [call.from_ms for call in recorder.calls] == [
         0,
-        estimate_duration_ms(first, VOICE) - FAST_LEAD_MS,
+        estimate_duration_ms(first) - FAST_LEAD_MS,
     ]
 
 
@@ -200,9 +200,9 @@ async def test_a_dead_runtime_costs_cues_not_the_turn(tmp_path: Path) -> None:
     recorder = Recorder()
     engine = VisemeEngine(recorder, RhubarbRuntime(missing), pad_ms=INTER_SENTENCE_PAD_MS)
 
-    await engine.on_sentence_queued(CTX, "Take your time.", VOICE)
+    await engine.on_sentence_queued(CTX, "Take your time.")
     await engine.flush(CTX)
-    await engine.on_sentence_queued(CTX, "Still here.", VOICE)
+    await engine.on_sentence_queued(CTX, "Still here.")
     await engine.flush(CTX)
 
     assert recorder.calls == []
@@ -232,9 +232,9 @@ async def test_predicted_cues_go_out_early(rhubarb: RhubarbRuntime) -> None:
     recorder = Recorder()
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     _, text, _ = load_clip("thank-you-for-your-time-today")
-    est_ms = estimate_duration_ms(text, VOICE)
+    est_ms = estimate_duration_ms(text)
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.flush(CTX)
 
     unled = await rhubarb.text_cues(text, est_ms)
@@ -258,8 +258,8 @@ async def test_recognised_cues_do_not_lead(rhubarb: RhubarbRuntime) -> None:
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     pcm, first, true_ms = load_clip("take-your-time")
 
-    await engine.on_sentence_queued(CTX, first, VOICE)
-    await engine.on_sentence_queued(CTX, "That is good to hear.", VOICE)
+    await engine.on_sentence_queued(CTX, first)
+    await engine.on_sentence_queued(CTX, "That is good to hear.")
     await engine.flush(CTX)
     await engine.on_sentence_audio(CTX, pcm + PAD_BYTES)
     await engine.on_sentence_audio(CTX, pcm + PAD_BYTES)
@@ -282,7 +282,7 @@ async def test_audio_leg_corrects_the_fast_leg_from_the_splice_point(
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     pcm, text, ms = load_clip("that-is-good-to-hear")
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.flush(CTX)
     fast = recorder.calls[0].cues
 
@@ -314,8 +314,8 @@ async def test_splice_reseats_the_sentences_behind_it(rhubarb: RhubarbRuntime) -
     pcm, first, true_ms = load_clip("take-your-time")
     second = "That is good to hear."
 
-    await engine.on_sentence_queued(CTX, first, VOICE)
-    await engine.on_sentence_queued(CTX, second, VOICE)
+    await engine.on_sentence_queued(CTX, first)
+    await engine.on_sentence_queued(CTX, second)
     await engine.flush(CTX)
     estimated_start = recorder.calls[1].from_ms
 
@@ -334,6 +334,27 @@ async def test_splice_reseats_the_sentences_behind_it(rhubarb: RhubarbRuntime) -
     assert reseated, f"second sentence not re-placed at {true_start}: {recorder.calls}"
     assert_wire_clean(reseated[-1].cues)
     assert reseated[-1].cues[0].t == true_start
+
+
+async def test_one_chunk_can_retire_every_sentence_it_covers(rhubarb: RhubarbRuntime) -> None:
+    """A TTS with no word timestamps offers no cut until the end of generation,
+    so the whole turn arrives as one chunk. Every sentence it covers is now
+    resolved by measurement — leaving any of them pending would re-emit its
+    predicted cues at an offset already spoken."""
+    recorder = Recorder()
+    engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
+    pcm, first, _ = load_clip("take-your-time")
+
+    await engine.on_sentence_queued(CTX, first)
+    await engine.on_sentence_queued(CTX, "That is good to hear.")
+    await engine.flush(CTX)
+    await engine.on_sentence_audio(CTX, pcm + PAD_BYTES, sentences=None)
+    await engine.flush(CTX)
+
+    # Nothing predicted is left to re-place: the last emission is the measured
+    # chunk itself, at the turn's start.
+    assert recorder.calls[-1].from_ms == 0
+    assert_wire_clean(recorder.calls[-1].cues)
 
 
 async def test_offsets_accumulate_over_wire_bytes_including_the_pad(
@@ -410,7 +431,7 @@ async def test_the_context_close_is_the_only_final_chunk(rhubarb: RhubarbRuntime
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     pcm, text, ms = load_clip("take-your-time")
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.on_sentence_audio(CTX, pcm + PAD_BYTES)
     await engine.on_context_closed(CTX)
     await engine.flush(CTX)
@@ -433,7 +454,7 @@ async def test_an_interrupted_turn_never_claims_to_have_completed(
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     pcm, text, _ = load_clip("take-your-time")
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.on_sentence_audio(CTX, pcm + PAD_BYTES)
     await engine.flush(CTX)
     await engine.end_turn(CTX)
@@ -449,13 +470,13 @@ async def test_end_turn_stops_the_worker(rhubarb: RhubarbRuntime) -> None:
     recorder = Recorder()
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
 
-    await engine.on_sentence_queued(CTX, "Take your time.", VOICE)
+    await engine.on_sentence_queued(CTX, "Take your time.")
     await engine.flush(CTX)
     await engine.end_turn(CTX)
 
     # A second turn on the same ctx starts from zero, not from where the last
     # one left off — a barge-in must not push the next turn's cues into the past.
-    await engine.on_sentence_queued(CTX, "That is good to hear.", VOICE)
+    await engine.on_sentence_queued(CTX, "That is good to hear.")
     await engine.flush(CTX)
     assert recorder.calls[-1].from_ms == 0
 
@@ -481,7 +502,7 @@ async def test_the_early_leg_replaces_predicted_cues_behind_the_playhead(
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     pcm, text, _ = load_clip("thank-you-for-your-time-today")
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.flush(CTX)
     fast = recorder.calls[0].cues
 
@@ -513,8 +534,8 @@ async def test_the_early_leg_puts_the_predicted_tail_back(rhubarb: RhubarbRuntim
     pcm, first, _ = load_clip("thank-you-for-your-time-today")
     second = "That is good to hear."
 
-    await engine.on_sentence_queued(CTX, first, VOICE)
-    await engine.on_sentence_queued(CTX, second, VOICE)
+    await engine.on_sentence_queued(CTX, first)
+    await engine.on_sentence_queued(CTX, second)
     await engine.flush(CTX)
     baseline = len(recorder.calls)
 
@@ -527,7 +548,7 @@ async def test_the_early_leg_puts_the_predicted_tail_back(rhubarb: RhubarbRuntim
     # itself, and then the second sentence at the offset it always had.
     assert resumed[0].from_ms == 1200 - 100
     assert resumed[0].cues[-1].v == "X"
-    second_start = estimate_duration_ms(first, VOICE) + INTER_SENTENCE_PAD_MS - FAST_LEAD_MS
+    second_start = estimate_duration_ms(first) + INTER_SENTENCE_PAD_MS - FAST_LEAD_MS
     assert [call.from_ms for call in resumed[1:]] == [second_start]
 
 
@@ -538,7 +559,7 @@ async def test_the_early_leg_resolves_nothing(rhubarb: RhubarbRuntime) -> None:
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     pcm, text, ms = load_clip("thank-you-for-your-time-today")
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.on_sentence_partial(CTX, prefix_of(pcm, 1200))
     await engine.on_sentence_audio(CTX, pcm + PAD_BYTES)
     await engine.on_context_closed(CTX)
@@ -560,7 +581,7 @@ async def test_the_early_leg_runs_once_per_turn_and_only_for_sentence_one(
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     pcm, text, _ = load_clip("thank-you-for-your-time-today")
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.on_sentence_partial(CTX, prefix_of(pcm, 1200))
     await engine.flush(CTX)
     after_first = len(recorder.calls)
@@ -574,7 +595,7 @@ async def test_the_early_leg_runs_once_per_turn_and_only_for_sentence_one(
     assert len(recorder.calls) == after_first
 
     await engine.on_sentence_audio(CTX, pcm + PAD_BYTES)
-    await engine.on_sentence_queued(CTX, "That is good to hear.", VOICE)
+    await engine.on_sentence_queued(CTX, "That is good to hear.")
     await engine.flush(CTX)
     settled = len(recorder.calls)
     await engine.on_sentence_partial(CTX, prefix_of(pcm, 1200))
@@ -591,7 +612,7 @@ async def test_a_prefix_too_short_to_survive_the_splice_changes_nothing(
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     pcm, text, _ = load_clip("thank-you-for-your-time-today")
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.flush(CTX)
     before = list(recorder.calls)
 
@@ -607,7 +628,7 @@ async def test_every_emission_is_wire_clean(rhubarb: RhubarbRuntime, name: str) 
     engine = VisemeEngine(recorder, rhubarb, pad_ms=INTER_SENTENCE_PAD_MS)
     pcm, text, _ = load_clip(name)
 
-    await engine.on_sentence_queued(CTX, text, VOICE)
+    await engine.on_sentence_queued(CTX, text)
     await engine.on_sentence_audio(CTX, pcm + PAD_BYTES)
     await engine.flush(CTX)
 

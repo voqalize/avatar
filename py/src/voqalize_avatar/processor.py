@@ -1,14 +1,17 @@
 """`AvatarProcessor` — the pipeline seat that drives the browser's talking head.
 
-Sits between `tts` and `transport.output()`. That seat is chosen, not
-convenient: it observes the whole conversation at *generation* speed (a
-post-output seat sees data frames delayed behind the audio queue), and it can
-push frames, which a pipecat observer cannot.
+Add it between `tts` and `transport.output()` and it works:
+
+    pipeline = Pipeline([transport.input(), stt, llm, tts, AvatarProcessor(), transport.output()])
+
+No arguments, no wiring, no environment. That seat is chosen, not convenient: it
+observes the whole conversation at *generation* speed (a post-output seat sees
+data frames delayed behind the audio queue), and it can push frames, which a
+pipecat observer cannot.
 
 It consumes nothing. Every frame is forwarded unchanged; the avatar traffic
 leaves as `RTVIServerMessageFrame`s, which the `RTVIObserver` turns into RTVI
-`server-message`s on the way past — protocol-version agnostic, so the widget's
-vocabulary can grow without touching RTVI.
+`server-message`s on the way past.
 
 **They are pushed DOWNSTREAM, and that is load-bearing.** It is tempting to
 send them upstream, because RTVI messages are "for the client" and other
@@ -21,23 +24,52 @@ twitch to the remote brain and blocked its frame task on an ack that was never
 coming, stalling the whole pipeline below. Downstream costs nothing: the output
 transport forwards it like any other system frame.
 
-What it does *not* do: decide anything about the call. It reports what the
-pipeline did. Backchannel timing lives in the widget's listening engine (it has
-the user's voice and the research behind the timing); anything that depends on
-what the application is *doing* — a deliberate performance, a tool-specific
-pose, user-idle behaviour — is signalled explicitly, either as an
-`AvatarControlFrame` from a processor of your own (see `frames.py`) or through
-`send()` from outside the pipeline entirely.
+## Everything it needs is in the frame stream
+
+There used to be a `wiring.py` that reached into the TTS service for per-sentence
+callbacks. There is nothing left to reach for — pipecat's karaoke path puts both
+halves of the viseme pipeline on the wire, and has since our declared floor:
+
+- **A sentence was handed to TTS** is `AggregatedTextFrame(will_be_spoken=True)`,
+  pushed immediately before the `TTSStartedFrame` of the audio context it
+  describes. That drives the floor claim *and* the fast (text-predicted) viseme
+  leg. (`TTSTextFrame` subclasses it and also sets the flag — those are the
+  per-word karaoke frames, and the `not isinstance` guard is what separates them.
+  It is the same discriminator pipecat's own sequencer uses.)
+- **That sentence's audio is complete** is `AggregatedTextProgressFrame` with an
+  empty `remaining_text` — the last word of the slot. It is derived from the word
+  stream, so it is appended to the same per-context audio queue as the samples and
+  arrives strictly *behind* them. That is what makes the cut exact, and it is why
+  the old self-queued `SentenceBoundaryFrame` is gone: the signal now travels the
+  pipeline in position instead of racing it.
+- **The sample rate** is `StartFrame.audio_out_sample_rate`.
+
+A TTS service with no word timestamps emits no progress frames; there the cut
+falls back to `TTSStoppedFrame`, so the turn is recognised as one chunk instead
+of sentence by sentence. That costs a little accuracy in the tail of a long turn
+and nothing at the head, which is where it is seen — the early leg still corrects
+the opening (`visemes.py` § Why there is an early leg).
+
+## What it does not do
+
+It does not decide anything about the call. It reports what the pipeline did.
+Backchannel timing lives in the widget's listening engine (it has the user's
+voice and the research behind the timing); anything that depends on what the
+application is *doing* — a deliberate performance, a tool-specific pose,
+user-idle behaviour — is signalled explicitly, as an `AvatarControlFrame` from a
+processor of your own (see `frames.py`).
 """
 
 from __future__ import annotations
 
 from collections import deque
 from collections.abc import Sequence
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 from loguru import logger
 from pipecat.frames.frames import (
+    AggregatedTextFrame,
+    AggregatedTextProgressFrame,
     BotStoppedSpeakingFrame,
     CancelFrame,
     EndFrame,
@@ -46,68 +78,53 @@ from pipecat.frames.frames import (
     StartFrame,
     TTSAudioRawFrame,
     TTSStoppedFrame,
+    TTSTextFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi.frames import RTVIServerMessageFrame
 
 from .messages import AvatarMessage
-from .sentence_audio import (
-    EARLY_PARTIAL_BYTES,
-    SentenceAudioAccumulator,
-    SentenceBoundaryFrame,
-)
+from .sentence_audio import EARLY_PARTIAL_BYTES, SentenceAudioAccumulator
 from .state_machine import AvatarStateMachine
+from .visemes import VisemeEngine, build_viseme_engine, cues_to_wire
 
-# Room for a resync and a hint or two. Nothing legitimate queues more than a
-# handful before the pipeline starts.
+# Room for a resync or two. Nothing legitimate queues more than a handful before
+# the pipeline starts.
 _PRESTART_BUFFER = 8
 
 
-@runtime_checkable
-class SentenceAudioSink(Protocol):
-    """Whoever turns a sentence's bytes into mouth shapes.
+def _is_sentence_announcement(frame: Frame) -> bool:
+    """The "this sentence is about to be spoken" frame, and not a karaoke word.
 
-    Structural on purpose. `VisemeEngine` satisfies this without knowing it
-    exists, which is what keeps the state channel and the viseme stack from
-    importing each other — they are wired together in `wiring.py` and meet
-    nowhere else. The native runtime stays out of this module's import graph.
+    `TTSTextFrame` subclasses `AggregatedTextFrame` and sets `will_be_spoken` too,
+    so the negative check is doing the real work here.
     """
-
-    async def on_sentence_audio(
-        self,
-        ctx: str,
-        pcm: bytes,
-        word_timestamps: Sequence[tuple[str, float]] | None = None,
-    ) -> None: ...
-
-    async def on_sentence_partial(self, ctx: str, pcm: bytes) -> None: ...
-
-    async def on_context_closed(self, ctx: str) -> None: ...
-
-    async def end_turn(self, ctx: str) -> None: ...
+    return (
+        isinstance(frame, AggregatedTextFrame)
+        and not isinstance(frame, TTSTextFrame)
+        and frame.will_be_spoken
+    )
 
 
 class AvatarProcessor(FrameProcessor):
-    """Observes the frame stream; emits avatar commands to the browser.
+    """Observes the frame stream; emits avatar commands to the browser."""
 
-    The state machine is passed in rather than defaulted, because it is the
-    thing an application configures (`tool_states`, and whatever grows next);
-    hiding it behind a default would make the one interesting knob invisible.
-    The audio sink is genuinely optional — attached later or not at all, since
-    whether visemes are possible on this node is only known after the processor
-    exists.
-    """
+    #: Which state machine to drive. The extension seam for an application whose
+    #: own frames are just its spelling of something the library already
+    #: models — subclass `AvatarStateMachine`, then name it here:
+    #:
+    #:     class MyAvatarProcessor(AvatarProcessor):
+    #:         STATE_MACHINE = MyStateMachine
+    #:
+    #: A class attribute rather than a constructor argument on purpose. The
+    #: front door takes no arguments and must keep taking none; a second door
+    #: that is a `class` statement is hard to reach for by accident.
+    STATE_MACHINE: type[AvatarStateMachine] = AvatarStateMachine
 
-    def __init__(
-        self,
-        state_machine: AvatarStateMachine,
-        *,
-        audio_sink: SentenceAudioSink | None = None,
-        **kwargs: Any,
-    ) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self._machine = state_machine
-        self._audio_sink = audio_sink
+        self._machine = self.STATE_MACHINE()
+        self._engine: VisemeEngine | None = None
         self._audio = SentenceAudioAccumulator()
         # Contexts with audio in flight. Usually one; more when a brain runs
         # several inferences inside a single stretch of bot speech.
@@ -127,28 +144,6 @@ class AvatarProcessor(FrameProcessor):
         self._before_start: deque[AvatarMessage] = deque(maxlen=_PRESTART_BUFFER)
         self._started = False
 
-    # ─── Introspection ──────────────────────────────────────────────────
-
-    @property
-    def machine(self) -> AvatarStateMachine:
-        return self._machine
-
-    @property
-    def audio_sink(self) -> SentenceAudioSink | None:
-        return self._audio_sink
-
-    def set_audio_sink(self, sink: SentenceAudioSink | None) -> None:
-        """Attach the viseme engine after construction (the session builds the
-        processor first and the engine only if the flag and the binary allow)."""
-        self._audio_sink = sink
-
-    @property
-    def ctx(self) -> str:
-        """The inference context now in flight — the key a cue chunk must carry
-        to be spliced into the right turn. Opaque to the widget; the state
-        machine mints it (see `AvatarStateMachine.next_ctx`)."""
-        return self._machine.ctx
-
     # ─── The pipeline ───────────────────────────────────────────────────
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
@@ -159,6 +154,7 @@ class AvatarProcessor(FrameProcessor):
             # everything until this processor has seen its own start.
             await self.push_frame(frame, direction)
             self._started = True
+            self._start_visemes(frame.audio_out_sample_rate)
             held, self._before_start = list(self._before_start), deque(maxlen=_PRESTART_BUFFER)
             # `start()` first: it is the pipeline's own beginning, and it dedups
             # against whatever a held resync already announced, so the state is
@@ -166,25 +162,27 @@ class AvatarProcessor(FrameProcessor):
             await self._emit([*self._machine.start(), *held])
             return
 
-        if isinstance(frame, SentenceBoundaryFrame):
-            # Ours, addressed to ourselves. It exists to occupy a position in
-            # this queue and must not travel any further.
-            await self._cut_sentence(frame)
-            return
-
-        if isinstance(frame, TTSAudioRawFrame):
+        if _is_sentence_announcement(frame):
+            await self._sentence_queued(frame)
+        elif isinstance(frame, TTSAudioRawFrame):
             await self._accumulate(frame)
+        elif isinstance(frame, AggregatedTextProgressFrame):
+            if not frame.remaining_text.strip():
+                # The slot's last word. Every sample of *this* sentence is
+                # already behind us in the queue — and only this one: later
+                # sentences may well have been announced already, since text runs
+                # ahead of audio.
+                await self._cut(frame.context_id, sentences=1)
         elif isinstance(frame, TTSStoppedFrame):
-            # Generation for this context is over — its last sentence has been
-            # cut. Playout has not finished (that is BotStoppedSpeaking, below),
-            # so this ends nothing; it only tells the viseme engine that the
-            # cue track it is building will not grow again.
+            # Generation for this context is over. Cut whatever is left — on a
+            # service with no word timestamps that is the whole turn — and tell
+            # the engine its cue track will not grow again. Playout has not
+            # finished (that is BotStoppedSpeaking, below), so this ends nothing.
+            await self._cut(frame.context_id, sentences=None)
             await self._close_context(frame)
-        elif isinstance(frame, InterruptionFrame | BotStoppedSpeakingFrame):
+        elif isinstance(frame, InterruptionFrame | BotStoppedSpeakingFrame | EndFrame | CancelFrame):
             # A turn ends at playout, cleanly or cut. Either way its remaining
             # cues describe audio that will never be heard.
-            await self._end_turns()
-        elif isinstance(frame, EndFrame | CancelFrame):
             await self._end_turns()
 
         # Decide before forwarding (the decision is pure and cheap), forward,
@@ -194,11 +192,53 @@ class AvatarProcessor(FrameProcessor):
         await self.push_frame(frame, direction)
         await self._emit(messages)
 
-    # ─── Sentence audio ─────────────────────────────────────────────────
+    # ─── Visemes ────────────────────────────────────────────────────────
+
+    def _start_visemes(self, sample_rate: int) -> None:
+        """Build the lipsync engine, or run the state channel alone.
+
+        `build_viseme_engine` raises — it is the internal API and it fails fast,
+        naming the path it could not find. This is the pipecat wrapper, and the
+        wrapper's job is that a missing binary costs the call its lipsync and not
+        its audio. That is the whole of the degraded experience: a face that holds
+        still while it talks, on a platform we publish no wheel for.
+        """
+        try:
+            self._engine = build_viseme_engine(self._push_cues, sample_rate=sample_rate)
+        except Exception as exc:
+            self._engine = None
+            logger.warning(
+                "avatar: server-side lipsync is off for this session — {}. The state "
+                "channel still runs; the widget's mouth will not move while it speaks.",
+                exc,
+            )
+
+    async def _push_cues(self, ctx: str, from_ms: int, cues: list[Any], final: bool) -> None:
+        """The engine's one way out.
+
+        Cue chunks are client-anchored: `t` is relative to the turn's first audio
+        sample, and the widget schedules them against its own clock from the
+        `speech start` anchor. `from_ms` is the splice point, which is what lets
+        the accurate (rhubarb) leg overwrite the fast (textsync) leg's
+        not-yet-played tail invisibly.
+        """
+        await self._emit(
+            [AvatarMessage.cues(ctx=ctx, from_ms=from_ms, cues=cues_to_wire(cues), final=final)]
+        )
+
+    async def _sentence_queued(self, frame: AggregatedTextFrame) -> None:
+        """A sentence's text reached the TTS. Predict its cues now.
+
+        The floor claim this frame also triggers is the state machine's half; it
+        happens in `on_frame` below, so the two halves cannot drift apart.
+        """
+        if self._engine is None:
+            return
+        ctx = frame.context_id or self._machine.ctx
+        await self._engine.on_sentence_queued(ctx, frame.text)
 
     async def _accumulate(self, frame: TTSAudioRawFrame) -> None:
-        sink = self._audio_sink
-        if sink is None:
+        if self._engine is None:
             return
         ctx = frame.context_id or self._machine.ctx
         if ctx not in self._open_ctxs:
@@ -212,131 +252,73 @@ class AvatarProcessor(FrameProcessor):
         # duration. So once enough of it exists, hand the prefix over and let the
         # engine splice real recognition in behind the playhead.
         #
-        # At most one partial per context, and only before its first boundary:
+        # At most one partial per context, and only before its first cut:
         # `take()` resets the buffer at each cut, so without the flag every later
         # sentence would trip the same threshold, and none of them needs it.
         if ctx not in self._partial_sent and self._audio.pending(ctx) >= EARLY_PARTIAL_BYTES:
             self._partial_sent.add(ctx)
-            await sink.on_sentence_partial(ctx, self._audio.peek(ctx))
+            await self._engine.on_sentence_partial(ctx, self._audio.peek(ctx))
 
-    async def _cut_sentence(self, frame: SentenceBoundaryFrame) -> None:
-        sink = self._audio_sink
-        if sink is None:
+    async def _cut(self, context_id: str | None, *, sentences: int | None) -> None:
+        """Hand everything accumulated since the last cut to the accurate leg.
+
+        `sentences` is how many predicted sentences these bytes retire — one for
+        a word-stream cut, all of them (`None`) for the end of generation, which
+        is the whole turn on a service with no word timestamps.
+        """
+        if self._engine is None:
             return
-        pcm = self._audio.take(frame.context_id)
+        ctx = context_id or self._machine.ctx
+        pcm = self._audio.take(ctx)
         if not pcm:
-            # The sentence's bytes were dropped by an interruption, or the TTS
-            # produced timestamps for audio we never saw. Nothing to recognise.
+            # Nothing new since the last cut: a progress frame for a sentence
+            # whose bytes an interruption already flushed, or a `TTSStoppedFrame`
+            # arriving behind a word stream that cut the last sentence itself.
             return
-        await sink.on_sentence_audio(frame.context_id, pcm, frame.word_timestamps)
+        await self._engine.on_sentence_audio(ctx, pcm, sentences=sentences)
 
     async def _close_context(self, frame: TTSStoppedFrame) -> None:
-        """No more sentences will be queued on this context.
-
-        This is a usable end-of-context signal only because of *where*
-        `TTSStoppedFrame` sits in the queue: services that carry a `context_id`
-        append it to the audio context rather than pushing it beside the audio,
-        so it drains in playback order — strictly behind the last sentence's
-        samples and behind the word timestamps that trigger that sentence's
-        boundary. Every cut for this turn is therefore already queued at the
-        engine when it arrives. A service that pushes it out of band closes the
-        context early; the cost is the tail of the last sentence falling back to
-        the fast leg's estimate, not a broken turn.
-        """
-        sink = self._audio_sink
-        if sink is None:
+        """No more sentences will be queued on this context — the track is final."""
+        if self._engine is None:
             return
-        await sink.on_context_closed(frame.context_id or self._machine.ctx)
+        await self._engine.on_context_closed(frame.context_id or self._machine.ctx)
 
     async def _end_turns(self) -> None:
         ctxs, self._open_ctxs = self._open_ctxs, []
         self._partial_sent.clear()
         self._audio.clear()
-        sink = self._audio_sink
-        if sink is None:
+        if self._engine is None:
             return
         for ctx in ctxs:
-            await sink.end_turn(ctx)
+            await self._engine.end_turn(ctx)
 
     # ─── Seams for the rest of the session ──────────────────────────────
 
     async def on_client_ready(self) -> None:
-        """The browser finished RTVI handshake. Re-announce the current state —
-        everything sent before the data channel existed went nowhere."""
+        """The browser finished the RTVI handshake. Re-announce the current state —
+        everything sent before the data channel existed went nowhere.
+
+        Wire this to your RTVI processor's `on_client_ready` event. Skipping it
+        costs the widget its opening pose, nothing more.
+        """
         await self._emit(self._machine.resync())
 
-    async def on_eager_end_of_turn(self) -> None:
-        """An endpointer predicted the user's turn is about to end.
-
-        Call this from whatever produces the prediction — on the STT services
-        that have it, it is an event handler rather than a frame. The widget's
-        listening engine may place a backchannel on that pause immediately
-        instead of waiting out its own window; a wrong prediction costs a nod,
-        which is why it travels as a hint.
-        """
-        await self._emit(self._machine.eager_end_of_turn())
-
-    async def on_sentence_queued(self, ctx: str) -> None:
-        """A sentence's text reached the TTS websocket. Claim the floor.
-
-        The anticipation moment — see `AvatarStateMachine.sentence_queued`. The
-        first-`TTSAudioRawFrame` trigger stays as the fallback for a TTS service
-        that never calls this; the claim dedups, so both firing is free.
-        """
-        await self._emit(self._machine.sentence_queued(ctx))
-
-    async def on_sentence_boundary(
-        self, ctx: str, word_timestamps: Sequence[tuple[str, float]]
-    ) -> None:
-        """That sentence's audio is complete — cut the accumulator here.
-
-        Deliberately *queues* rather than acts. The hook fires from the TTS
-        service's drain loop, which has only enqueued those audio frames at this
-        processor's input; slicing now would charge whatever has not been
-        handled yet to the next sentence, and the error compounds down the turn.
-        Queued, the cut lands in position behind its own audio.
-        """
-        if self._audio_sink is None:
-            return
-        await self.queue_frame(
-            SentenceBoundaryFrame(context_id=ctx, word_timestamps=list(word_timestamps)),
-            FrameDirection.DOWNSTREAM,
-        )
-
-    async def on_error(self, *, fatal: bool = False) -> None:
-        """A failure the session's observer saw. `ErrorFrame`s travel upstream,
-        so they never reach this seat as frames."""
-        await self._emit(self._machine.error(fatal=fatal))
-
-    async def push_cues(
-        self,
-        *,
-        ctx: str,
-        from_ms: int,
-        cues: list[dict[str, Any]],
-        final: bool = False,
-    ) -> None:
-        """The viseme seam — the engine calls this and nothing else.
-
-        Cue chunks are client-anchored: `t` is relative to the turn's first
-        audio sample, and the widget schedules them against its own clock from
-        the `speech start` anchor. `from_ms` is the splice point, which is what
-        lets the accurate (rhubarb) leg overwrite the fast (textsync) leg's
-        not-yet-played tail invisibly.
-        """
-        await self._emit([AvatarMessage.cues(ctx=ctx, from_ms=from_ms, cues=cues, final=final)])
-
     async def send(self, message: AvatarMessage) -> None:
-        """Emit one arbitrary avatar command.
+        """Emit one avatar command from *outside* the pipeline.
 
-        The escape hatch for callers *outside* the pipeline — an agent
-        supervisor, an HTTP handler, a future verb. Code that is already inside
-        the pipeline should push an `AvatarControlFrame` instead, so its
-        instruction stays ordered against the speech it belongs to; this method
-        emits immediately and jumps whatever is queued. Everything still goes
-        through `AvatarMessage`, so no caller invents an envelope.
+        The escape hatch for an agent supervisor or an HTTP handler — something
+        with no frame to push. Code that is already inside the pipeline should
+        push an `AvatarControlFrame` instead, so its instruction stays ordered
+        against the speech it belongs to; this method emits immediately and jumps
+        whatever is queued.
         """
         await self._emit([message])
+
+    async def cleanup(self) -> None:
+        engine, self._engine = self._engine, None
+        if engine is not None:
+            await engine.aclose()
+        await super().cleanup()
 
     # ─── Emission ───────────────────────────────────────────────────────
 

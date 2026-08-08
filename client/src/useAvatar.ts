@@ -2,25 +2,21 @@
  * useAvatar — mount the widget, wire it to a live session, dispatch its
  * server-messages, and clean up.
  *
- * Options are read through a ref so the effect doesn't re-subscribe on every
- * render. Split in two effects: mounting the widget happens once (an avatar or
- * theme swap remounts by design — see the note in the effect); attaching to
- * the pipecat client re-runs whenever the client identity changes (a session
- * reconnect mints a new one) or once the widget instance becomes available.
+ * Internal: `<Avatar>` is the only thing the package exports. It is a separate
+ * module anyway because the two lifecycles genuinely differ — mounting the
+ * widget happens once (an avatar swap remounts by design; see the note in the
+ * effect), while attaching to the pipecat client re-runs whenever the client
+ * identity changes, which a session reconnect makes it do.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PipecatClient } from "@pipecat-ai/client-js";
-import { createAvatar, type AvatarApi, type CreateAvatarOptions } from "../../src/avatar.js";
-import { AvatarClient, type AvatarClientOptions } from "./AvatarClient.js";
+import { createAvatar, type AvatarApi } from "../../src/avatar.js";
+import { AvatarClient } from "./AvatarClient.js";
 
-export interface UseAvatarOptions extends AvatarClientOptions {
-  /** Name from `AVATAR_NAMES`. Omit for the widget's own `DEFAULT_AVATAR`. */
+export interface UseAvatarOptions {
+  /** Which face. Omit for the widget's own default. */
   avatar?: string;
-  theme?: CreateAvatarOptions["theme"];
-  /** Articulation gains — see docs/contract-protocol.md § Events, gains, introspection. */
-  mouthGain?: number;
-  gestureGain?: number;
   /** The live `PipecatClient` to dispatch server-messages from, or `null`
    * before connect. `useAvatar` (dis)connects the subscription as this
    * changes; it does not create or own the client. */
@@ -45,12 +41,6 @@ export interface UseAvatarHandle {
   containerRef: AvatarMountRef;
   /** The live widget instance once mounted, else `null`. */
   avatar: AvatarApi | null;
-  /** The dispatcher wrapping `avatar` — `null` until mounted. Exposed for
-   * tests and telemetry (`turnCtx`, `turnCues`) and for manual dispatch. */
-  client: AvatarClient | null;
-  /** Dispatch one avatar command by hand — e.g. from a dev-tools console, or
-   * from a transport that isn't a `PipecatClient`. No-ops before mount. */
-  dispatch: (msg: unknown) => void;
 }
 
 export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
@@ -58,30 +48,16 @@ export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
   const [avatar, setAvatar] = useState<AvatarApi | null>(null);
   const avatarClientRef = useRef<AvatarClient | null>(null);
 
-  // Latest-options ref, so the mount effect (which runs once) still reads live
-  // callback props without re-subscribing.
+  // Latest-options ref, so the mount effect (which runs once) still reads the
+  // live props without re-subscribing.
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
   useEffect(() => {
     const mount = containerRef.current;
     if (!mount) return;
-    const instance = createAvatar({
-      mount,
-      avatar: optionsRef.current.avatar,
-      theme: optionsRef.current.theme,
-      mouthGain: optionsRef.current.mouthGain,
-      gestureGain: optionsRef.current.gestureGain,
-    });
-    const wrapper = new AvatarClient(instance, {
-      onHint: (kind, msg) => optionsRef.current.onHint?.(kind, msg),
-      onUnknownCmd: (msg) => optionsRef.current.onUnknownCmd?.(msg),
-      onError: (err, msg) => optionsRef.current.onError?.(err, msg),
-      onSpeakingDrift: (info) => optionsRef.current.onSpeakingDrift?.(info),
-      accept: optionsRef.current.accept,
-      now: optionsRef.current.now,
-    });
-    avatarClientRef.current = wrapper;
+    const instance = createAvatar({ mount, avatar: optionsRef.current.avatar });
+    avatarClientRef.current = new AvatarClient(instance);
     setAvatar(instance);
 
     return () => {
@@ -89,10 +65,10 @@ export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
       avatarClientRef.current = null;
       setAvatar(null);
     };
-    // Mount once. `avatar`/`theme`/the gains are read at mount time only — the
-    // widget has no hot-swap-avatar API (`createFace` runs once per mount), so
-    // changing them re-renders nothing here by design; a caller that needs a
-    // different avatar remounts with a `key` prop (see the component's doc).
+    // Mount once. `avatar` is read at mount time only — the widget has no
+    // hot-swap-avatar API (`createFace` runs once per mount), so changing it
+    // re-renders nothing here by design; a caller that needs a different face
+    // remounts with a `key` prop (see the component's doc).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -105,9 +81,5 @@ export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatar, options.client]);
 
-  const dispatch = useCallback((msg: unknown) => {
-    avatarClientRef.current?.dispatch(msg);
-  }, []);
-
-  return { containerRef, avatar, client: avatarClientRef.current, dispatch };
+  return { containerRef, avatar };
 }

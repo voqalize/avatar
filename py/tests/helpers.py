@@ -15,7 +15,14 @@ from types import SimpleNamespace
 from typing import Any
 
 from pipecat.clocks.system_clock import SystemClock
-from pipecat.frames.frames import DataFrame, Frame, StartFrame
+from pipecat.frames.frames import (
+    AggregatedTextFrame,
+    AggregatedTextProgressFrame,
+    DataFrame,
+    Frame,
+    StartFrame,
+    TTSTextFrame,
+)
 from pipecat.processors.frame_processor import (
     FrameDirection,
     FrameProcessor,
@@ -24,7 +31,7 @@ from pipecat.processors.frame_processor import (
 from pipecat.processors.frameworks.rtvi import RTVIServerMessageFrame
 from pipecat.utils.asyncio.task_manager import TaskManager, TaskManagerParams
 
-from voqalize_avatar import AvatarMessage, AvatarProcessor, AvatarStateMachine
+from voqalize_avatar import AvatarMessage, AvatarProcessor
 
 
 def _task_manager() -> TaskManager:
@@ -45,6 +52,42 @@ def _task_manager() -> TaskManager:
         return manager
 
 
+def sentence(text: str, ctx: str = "1.1") -> AggregatedTextFrame:
+    """"This sentence is about to be spoken" — what a TTS service pushes just
+    before the audio context it describes.
+
+    The real one is built by pipecat's `AggregatedFrameSequencer`; this is the
+    same frame with the two fields the avatar reads.
+    """
+    frame = AggregatedTextFrame(text=text, aggregated_by="sentence", context_id=ctx)
+    # Not a constructor field upstream: the sequencer stamps it after building
+    # the frame, and so does this.
+    frame.will_be_spoken = True
+    return frame
+
+
+def word(text: str, ctx: str = "1.1") -> TTSTextFrame:
+    """One karaoke word. Subclasses the announcement frame and carries the same
+    `will_be_spoken`, which is why the avatar's discriminator is a negative
+    isinstance check."""
+    frame = TTSTextFrame(text=text, aggregated_by="sentence", context_id=ctx)
+    frame.will_be_spoken = True
+    return frame
+
+
+def spoken(text: str, ctx: str = "1.1", *, remaining: str = "") -> AggregatedTextProgressFrame:
+    """A karaoke progress frame. `remaining=""` is the sentence's last word,
+    which is the cut signal — every sample of it is already behind it."""
+    return AggregatedTextProgressFrame(
+        segment_id=1,
+        context_id=ctx,
+        text=text,
+        aggregated_by="sentence",
+        accumulated_text=text,
+        remaining_text=remaining,
+    )
+
+
 def flatten(message: AvatarMessage | dict[str, Any]) -> str:
     """`"cmd:salient-argument"` — the one field that identifies the command."""
     wire = message.to_wire() if isinstance(message, AvatarMessage) else message
@@ -53,7 +96,6 @@ def flatten(message: AvatarMessage | dict[str, Any]) -> str:
         "state": "name",
         "interject": "id",
         "speech": "event",
-        "hint": "kind",
         "user": "speaking",
     }.get(cmd)
     if salient is None:
@@ -102,7 +144,7 @@ class AvatarPipe:
 
     The scenario tests next door drive a whole session; this drives the
     processor alone, for the cases a real pipeline cannot produce on demand —
-    a fatal error, an eager-end-of-turn event, a reconnecting client — and for
+    a reconnecting client, a frame arriving before `StartFrame` — and for
     proving the pass-through obligation frame by frame.
 
     Both neighbours capture. The downstream one stands where the output
@@ -112,10 +154,15 @@ class AvatarPipe:
     the LLM and block the pipeline on an ack that never comes.
     """
 
-    def __init__(self, *, autostart: bool = True, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *,
+        autostart: bool = True,
+        cls: type[AvatarProcessor] = AvatarProcessor,
+        **kwargs: Any,
+    ) -> None:
         self.upstream = _Capture()
-        kwargs.setdefault("state_machine", AvatarStateMachine())
-        self.avatar = AvatarProcessor(**kwargs)
+        self.avatar = cls(**kwargs)
         self.downstream = _Capture()
         # `autostart=False` leaves the processor un-started, which is the state
         # a real session is briefly in while StartFrame travels down the
@@ -150,10 +197,10 @@ class AvatarPipe:
     async def queue(self, *frames: Frame) -> None:
         """Feed through the processor's own input queue rather than inline.
 
-        The difference matters for exactly one thing: the sentence-boundary
-        marker is queued, and its whole reason to exist is that it lands
-        *behind* the audio already queued ahead of it. A test that pushed both
-        inline would be asserting on ordering it created itself.
+        The difference matters for the cut signals: they are meaningful only
+        because they arrive *behind* the audio already queued ahead of them. A
+        test that pushed both inline would be asserting on ordering it created
+        itself.
         """
         for frame in frames:
             await self.avatar.queue_frame(frame, FrameDirection.DOWNSTREAM)

@@ -33,24 +33,27 @@ application's, not the library's.
 
 | artifact | registry | contents | deps |
 |---|---|---|---|
-| `@voqalize/avatar` | npm | the widget (`src/`) + `./pipecat` + `./react` subpaths | none; optional peers |
+| `@voqalize/avatar` | npm | `<Avatar>`, the dispatcher and the widget behind it | optional peers: react, `@pipecat-ai/client-js` |
 | `voqalize-avatar` | pypi | processor, state machine, wire, viseme engine, `avatarsync` runtime | `pipecat-ai>=1.4,<2` |
 | `native/avatarsync` | *inside the pypi wheel* | the C++ fork, its build, the model tree | — |
 | — | — | `docs/` contracts, binding for all of them | — |
 
-**One npm package with subpath exports, not three packages.** The widget is
-zero-dependency and must stay that way; `@voqalize/avatar/pipecat` adds
-`@pipecat-ai/client-js` as an *optional peer* and `@voqalize/avatar/react` adds
-`react`. A consumer that wants only the widget pays for only the widget, and
-the vendored-copy problem disappears because there is nothing left to vendor.
+**One npm package, one entry point.** It shipped as three subpaths — the bare
+widget, the dispatcher, the React binding — and 0.2 collapsed them to
+`import { Avatar } from "@voqalize/avatar"`. Both consumers render a call tile
+in React; three entry points meant three public surfaces to keep stable across
+versions, two of them for a host that does not exist. The widget and the
+dispatcher are still *in* the tarball, just not exported —
+[removed.md](removed.md) § The `/pipecat` and `/react` subpaths says how to put
+them back if a third consumer argues for it.
 
-*Optional has to be true, not just declared.* One runtime `import` of a peer is
-enough to make an entire subpath fail to load without it installed — even for a
-host that never calls the function that needs it. `AvatarClient` imports its
-pipecat types type-only and spells the three event names it subscribes to as
-local literals for exactly this reason, with a test pinning them against the
-real enum. The check that catches the regression is packing the tarball and
-importing it from a clean project; CI does it on every push.
+*Optional peers have to be optional in fact, not just in the manifest.* One
+runtime `import` of a peer makes the whole entry point fail to load without it
+installed — even for a host that never calls the function that needs it.
+`AvatarClient` imports its pipecat types type-only and spells the one event name
+it subscribes to as a local literal for exactly this reason, with a test pinning
+it against the real enum. The check that catches the regression is packing the
+tarball and importing it from a clean project; CI does it on every push.
 
 **One pypi package, and the binary is inside it.** The whole lipsync stack is
 stdlib plus a subprocess, with *zero* avatar-specific Python dependencies, so a
@@ -98,15 +101,16 @@ process environment has skipped the API, which is the one place its meaning is
 documented and checked. Reading the environment is an *application's* job;
 `voqalize-avatar` does none of it.
 
-**The viseme leg stays optional at runtime, and that survived bundling.**
-`build_viseme_engine()` never raises — no binary is an ordinary condition, logged
-once, and the session runs state-channel-only. That path is no longer the common
-case, but it is not dead code either: it is what an sdist install gets, what a
-platform outside the matrix gets, and what `enabled=False` selects on a node that
-should not run an aligner. The degradation is bounded — the widget falls back to
-`src/audio-fallback.js`, the WebAudio amplitude path it has carried since day one
-for exactly this. Keeping the fallback is what makes a four-row platform matrix
-an acceptable answer instead of a wall.
+**The viseme leg stays optional at runtime, and that survived bundling — but
+the two APIs disagree about it on purpose.** `build_viseme_engine()` is the
+internal API and it behaves like a library: a missing binary raises, naming the
+path it looked at, because a caller who asked for a viseme engine and silently
+did not get one has been lied to. `AvatarProcessor` is the pipecat wrapper, and
+the wrapper catches: a missing aligner is logged loudly once and the session runs
+state-channel-only. That path is not dead code — it is what an sdist install
+gets, and what a platform outside the wheel matrix gets. The degradation is
+bounded and it is exactly one thing: the face still listens, thinks, claims the
+floor and yields it; its mouth does not move while it speaks.
 
 ### 3. Distribution: public registries, restrictive licence
 
@@ -126,7 +130,7 @@ no `--mount=type=ssh`, no build token and no private registry. Publishing
 removes the whole class.
 
 **Names.** npm has scopes, so the scope *is* the namespace: one package,
-`@voqalize/avatar`, with the three subpaths. PyPI has no scopes, so the
+`@voqalize/avatar`. PyPI has no scopes, so the
 conventional stand-in is a hyphenated prefix — `voqalize-avatar`, importing as
 `voqalize_avatar`, which is what the code already said. Both were free.
 Rejected: `pipecat-avatar` (reads as an official pipecat package, and pipecat
@@ -159,8 +163,9 @@ Drop `AvatarProcessor` into a pipeline between TTS and the output transport and
 this works — that is the promise, and it is what makes the library adoptable.
 
 The pin is `pipecat-ai >= 1.4, < 2`, and it is an honest one: every frame the
-state machine reads exists in 1.4.0, including `FunctionCallsStartedFrame`,
-`FunctionCallInProgressFrame`, `UserTurnInferenceCompletedFrame` and
+processor reads exists in 1.4.0, including the karaoke path
+(`AggregatedTextFrame.will_be_spoken`, `AggregatedTextProgressFrame`) that both
+viseme legs are driven from, `UserTurnInferenceCompletedFrame` and
 `RTVIServerMessageFrame`. CI runs the suite at the declared floor as well as at
 the resolved version, so "we support 1.4" is a claim a test checks.
 
@@ -193,15 +198,14 @@ and push `AvatarControlFrame` for the states you care about.**
 `AvatarProcessor`, which hands each one to `AvatarStateMachine.on_frame`. An
 application whose own frames are simply *its spelling* of something the library
 already models can subclass, intercept those frames, and call `super().on_frame`
-for everything else. That is one pipeline seat instead of two, and tool
-bookkeeping stays shared: `tool_started` / `tool_finished` are public on the
-base class precisely so an application whose LLM runs out of process gets the
-dedup, the parallel-call hold and the `tool_states` lookup rather than
-re-implementing them approximately. Overriding `next_ctx()` is the same story
-for the turn id, when the application has a real one rather than a counter.
+for everything else. That is one pipeline seat instead of two.
 
-The first application cut over to this library needed 90 lines of subclass and
-nothing else.
+The subclass is named on the processor as a class attribute
+(`STATE_MACHINE = MyStateMachine`), not passed in: the front door takes no
+arguments and must keep taking none. And the state machine is not exported from
+the package barrel — so this seam costs an import from
+`voqalize_avatar.state_machine` as well, which is the honest signal that it is
+the second-resort door and not the front one.
 
 Use whichever seam fits: a control frame when the signal originates somewhere
 else in the pipeline (or in application code that can push a frame), a subclass
@@ -211,36 +215,35 @@ already models.
 **Conflicts are deferred, deliberately.** An explicit control frame simply wins
 and is applied in arrival order alongside the heuristics; there is no priority
 lattice, no TTL, no ownership tracking. That is YAGNI until a third consumer
-produces a real collision, and the brief says so. What the library *does* owe
-is that the collision be observable — every message carries its origin
-(`heuristic` or `control`) in the emitted wire payload's debug field, so when
-the fight happens we can see it rather than reason about it.
+produces a real collision, and the brief says so.
 
-**One convenience that is not a third tier.** `FunctionCallInProgressFrame`
-carries `function_name`, so `AvatarProcessor(tool_states={"search_web":
-AvatarState.SEARCHING_SCREEN})` is a dict lookup, roughly ten lines, and it
-covers the single most common Tier 2 need without anyone writing a processor.
-It is stock-frame-driven, so it stays in Tier 1's implementation; it is opt-in,
-so it stays out of Tier 1's promise. An application whose LLM hides its tool
-calls cannot use it — a useful reminder that it is a convenience, not the seam.
+**Tool calls show `THINKING`, and only that.** A `tool_states` map that pointed
+`search_web` at `SEARCHING_SCREEN` was tried and removed ([removed.md](removed.md)
+§ `tool_states`): it is a constructor argument on the one class that is supposed
+to take none, it only works for an LLM that runs its tools in-process, and an
+application that knows its tool is searching can say so in one
+`AvatarControlFrame`. What stays is the bookkeeping
+nobody should write twice — call ids are deduped and parallel calls are held, so
+a turn with three tools shows one settled `THINKING` rather than a flicker.
 
 ### 5. The widget's public surface does not change
 
-`createAvatar`, `setState`, `interject`, `speak`/`pushCues`, `perform`,
-`setUserAudio`/`setUserSpeaking` are what both contracts describe and what
-consumers already drive. Nothing in this reorganization touches `src/params.js`
-or any face module. If it does, something has gone wrong — the reorganization
-is above the waist of the system, and the waist is exactly where it should not
-reach.
+The widget keeps the surface both contracts describe — `createAvatar`,
+`setState`, `interject`, `speak`/`pushCues`, `gesture`, `setUserSpeaking`.
+What changed in 0.2 is what the *npm package* exports, not what the widget can
+do: one React entry point, and the imperative surface behind it. Nothing in this
+reorganization touches `src/params.js` or any face module. If it does, something
+has gone wrong — the reorganization is above the waist of the system, and the
+waist is exactly where it should not reach.
 
 ### 6. React is a peer at `>=18`, not a dependency at 19
 
 The two consumers were on different major versions of React, and a binding
 pinned to one of them would have been vendored by the other — which is the
 problem this whole exercise exists to end. `react`, `react-dom` and
-`@pipecat-ai/client-js` are all declared **optional** peers. The root export
-needs none of them, and a host that only mounts the widget should not be told
-it is missing React.
+`@pipecat-ai/client-js` are all declared **optional** peers — `react-dom` and
+the pipecat client because nothing imports them at runtime, `react` because a
+host reaching past the export map for the raw widget genuinely does not need it.
 
 ## Layout
 
@@ -250,14 +253,15 @@ see, and the widget is this repo's primary artifact — it has earned the short
 path. The backend material arrived as siblings:
 
 ```
-src/                    the widget — npm root export
+src/                    the widget — published, not exported
   avatar.d.ts           its types, hand-maintained next to the code
 client/                 AvatarClient (splice, clock anchor) + React binding
-                        -> @voqalize/avatar/pipecat, @voqalize/avatar/react
+                        -> @voqalize/avatar, whose one export is <Avatar>
 py/                     voqalize-avatar: pyproject + src/voqalize_avatar/ + tests
 native/avatarsync/      the rhubarb fork: patch, src, build.sh, binaries
 docs/                   the contracts, binding for both packages
-package.json            @voqalize/avatar, three subpath exports
+  removed.md            what 0.2 cut from the public surface, and how to undo it
+package.json            @voqalize/avatar, one export
 demo/ tools/            the rig demos and the headless verification tooling
 ```
 

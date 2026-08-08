@@ -30,8 +30,6 @@ export interface FakeAvatarCalls {
   gesture: Array<{ id: string }>;
   perform: Array<{ actions: AvatarAction[]; o?: PerformOptions }>;
   setUserSpeaking: Array<boolean | null>;
-  setUserAudio: number;
-  setAudioFallback: number;
   destroy: number;
 }
 
@@ -53,8 +51,6 @@ export function createFakeAvatar(): FakeAvatar {
     gesture: [],
     perform: [],
     setUserSpeaking: [],
-    setUserAudio: 0,
-    setAudioFallback: 0,
     destroy: 0,
   };
 
@@ -109,14 +105,6 @@ export function createFakeAvatar(): FakeAvatar {
     perform(actions, o): PerformHandle {
       calls.perform.push({ actions, o });
       return { stop: () => {} };
-    },
-    setAudioFallback() {
-      calls.setAudioFallback += 1;
-      return api;
-    },
-    setUserAudio() {
-      calls.setUserAudio += 1;
-      return api;
     },
     setUserSpeaking(b) {
       calls.setUserSpeaking.push(b);
@@ -175,9 +163,6 @@ export function createFakeAvatar(): FakeAvatar {
     },
     get params() {
       return {};
-    },
-    get audioLevel() {
-      return 0;
     },
     get userSpeaking() {
       return false;

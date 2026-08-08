@@ -9,11 +9,15 @@ is worse: a typo there is invisible on screen.
 
 Everything travels as one RTVI `server-message` shape:
 
-    {"type": "avatar", "v": 1, "cmd": "state", "name": "LISTENING"}
+    {"type": "avatar", "cmd": "state", "name": "LISTENING"}
 
-`v` is the envelope version, not the widget's. The client ignores `cmd`s it does
-not know, so adding a verb is backward compatible; changing the meaning of one
-is not, and bumps `v`.
+`type` is the whole envelope. There is no version field: RTVI carries the payload
+opaquely, so a version would have been ours to invent and ours to check, and
+neither end ever checked it. The compatibility rule it stood for is real and
+survives it — the client ignores a `cmd` it does not know, so adding a verb is
+backward compatible and changing the meaning of one is not. The two packages
+version in lockstep from one git tag (`RELEASING.md`), which is the mechanism
+that actually keeps the ends together.
 """
 
 from __future__ import annotations
@@ -23,7 +27,6 @@ from enum import StrEnum
 from typing import Any
 
 AVATAR_MESSAGE_TYPE = "avatar"
-AVATAR_PROTOCOL_VERSION = 1
 
 
 class AvatarState(StrEnum):
@@ -146,18 +149,6 @@ class SpeechEvent(StrEnum):
     STOP = "stop"
 
 
-class Hint(StrEnum):
-    """Truth the client may act on, but is never obliged to.
-
-    `EAGER_EOT` is an endpointer's *predicted* end of turn: the listening engine
-    may place a backchannel on that pause immediately instead of waiting out its
-    own 250-600 ms window. A prediction that turns out wrong costs a nod, not a
-    turn — which is why it is a hint and not a state.
-    """
-
-    EAGER_EOT = "eager_eot"
-
-
 @dataclass(frozen=True)
 class AvatarMessage:
     """One command for the widget. `to_wire()` wraps it in the envelope.
@@ -173,7 +164,6 @@ class AvatarMessage:
     def to_wire(self) -> dict[str, Any]:
         return {
             "type": AVATAR_MESSAGE_TYPE,
-            "v": AVATAR_PROTOCOL_VERSION,
             "cmd": self.cmd,
             **self.payload,
         }
@@ -213,16 +203,6 @@ class AvatarMessage:
         return cls(cmd="gesture", payload={"id": str(hand)})
 
     @classmethod
-    def perform(cls, actions: list[dict[str, Any]], *, ctx: str) -> AvatarMessage:
-        """A timed action list run against the turn's audio clock.
-
-        The verbs are `state` / `emotion` / `gaze` / `interject` / `gesture` —
-        a backend sequences from that constrained vocabulary and cannot invent
-        motion.
-        """
-        return cls(cmd="perform", payload={"actions": actions, "ctx": ctx})
-
-    @classmethod
     def cues(
         cls,
         *,
@@ -248,7 +228,3 @@ class AvatarMessage:
         """The server endpointer's turn truth, which wins over the client's own
         level VAD — the input side of the listening engine, never the mouth."""
         return cls(cmd="user", payload={"speaking": speaking})
-
-    @classmethod
-    def hint(cls, kind: Hint) -> AvatarMessage:
-        return cls(cmd="hint", payload={"kind": str(kind)})

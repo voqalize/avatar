@@ -392,8 +392,10 @@ export class IdleLayer {
  * that acknowledges on a metronome reads as distracting
  * (docs/research-biomechanics.md §3.5). So this engine is contingent first:
  *
- *   · The host tells it about the user's voice — a coarse speaking flag
- *     (setUserSpeaking) or a measured level (observeLevel), flag wins.
+ *   · The server tells it about the user's voice — a coarse speaking flag
+ *     (setUserSpeaking), off its own endpointer. With no signal at all the
+ *     scheduler falls back to a timer, which is the weakest mode and is meant
+ *     to be: contingency is the whole point.
  *   · Acknowledgements fire at PAUSE ONSETS: when the user stops talking, a
  *     nod lands 250–600 ms later, about half the time, never more often than
  *     every 2.5 s. That timing is where a human listener's nod sits.
@@ -420,10 +422,7 @@ export class ListeningEngine {
     this._next = 0;
     // --- user-signal state
     this._hasSignal = false;
-    this._explicit = null;   // host-declared flag; null = not driven
-    this._derived = false;   // level-derived VAD
-    this._levelOn = false;   // raw hysteresis state behind _derived
-    this._flipT = 0;         // how long the level has disagreed with _levelOn
+    this._explicit = null;   // server-declared flag; null = not driven
     this._speaking = false;  // merged VAD, after hysteresis
     this._spokeAt = -1e9;    // start of the current speech stretch
     this._silentAt = 0;      // end of the last one
@@ -439,27 +438,11 @@ export class ListeningEngine {
     this._pending = -1;
   }
 
-  /** Host-declared user speech. Pass null to hand control back to the level VAD. */
+  /** Server-declared user speech, off the pipeline's own endpointer. Pass null
+   *  to hand back to the no-signal timer. */
   setUserSpeaking(b) {
     if (b !== null) this._hasSignal = true;
     this._explicit = b === null ? null : !!b;
-  }
-
-  /** Feed the smoothed user audio level (an AudioFallback.level). Same scale,
-   *  thresholds and asymmetry as the demo's RMS VAD: quick in (80 ms), slow
-   *  out (250 ms) — declaring the turn over early is the expensive mistake,
-   *  and the 250 ms quiet-hold IS the pause detector the contingent
-   *  scheduler keys off. */
-  observeLevel(level) {
-    this._hasSignal = true;
-    const on = !!this._levelOn;
-    const wants = level > (on ? 0.018 : 0.030);
-    if (wants === on) this._flipT = this.t;
-    else if (this.t - this._flipT >= (on ? 0.25 : 0.08)) {
-      this._levelOn = wants;
-      this._flipT = this.t;
-    }
-    this._derived = !!this._levelOn;
   }
 
   /** The one seam for choosing an acknowledgement. Context-aware: what the
@@ -486,7 +469,7 @@ export class ListeningEngine {
     return r < 0.55 ? 'NOD_SMALL' : r < 0.8 ? 'BROW_ACK' : 'NOD_SLOW';
   }
 
-  get speaking() { return this._explicit !== null ? this._explicit : this._derived; }
+  get speaking() { return this._explicit === true; }
 
   update(dt) {
     this.t += dt;

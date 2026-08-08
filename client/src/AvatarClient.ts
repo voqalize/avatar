@@ -32,10 +32,10 @@
  *      it would eat into the intentional video-first safety margin rather than
  *      improve it. Left as a documented option, not built.
  *
- * `attach()` still subscribes to both pipecat events, but only to report a
- * **diagnostic** drift (`onSpeakingDrift`) between our anchor and pipecat's —
- * useful for noticing in logs if the two ever separate by more than jitter,
- * never used to move `t0` itself.
+ * `attach()` therefore subscribes to exactly one pipecat event,
+ * `serverMessage`. It used to also subscribe to both speaking events to report
+ * a diagnostic drift between our anchor and pipecat's; that hook is gone with
+ * the rest of the observability surface (`docs/removed.md` § Client callbacks).
  *
  * ## Cue splice
  *
@@ -72,17 +72,14 @@
 import type { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
 import type { AvatarApi } from "../../src/avatar.js";
 import {
-  AVATAR_MESSAGE_TYPE,
   isAvatarMessage,
   type AvatarCommand,
   type AvatarCue,
   type AvatarCuesCmd,
-  type AvatarHintCmd,
-  type AvatarPerformCmd,
   type AvatarSpeechCmd,
   type AvatarStateCmd,
-  type AvatarUnknownCmd,
 } from "./types.js";
+
 
 interface Turn {
   ctx: string;
@@ -91,47 +88,30 @@ interface Turn {
   /** Whether `speech start` has anchored a clock and issued the first `speak()`. */
   started: boolean;
   clock: (() => number) | null;
-  t0: number | null;
 }
 
+/**
+ * Internal. Not exported from the package — see `index.ts` for the public
+ * surface, which is `<Avatar>` and nothing else.
+ *
+ * There is deliberately no `accept` predicate here any more. Avatar commands
+ * travel in one envelope, `{type:"avatar"}`, in both directions and from every
+ * source: a `AvatarProcessor` in the pipeline and a brain driving the face
+ * out of band emit the same shape. A per-deployment predicate meant the
+ * library could not state what an avatar message *is*, which is the one thing
+ * a wire format has to be able to say. See docs/removed.md § The accept
+ * predicate.
+ */
 export interface AvatarClientOptions {
-  /** `{cmd:"hint"}` is a no-op hook today — the widget's listening engine
-   * already handles acks; a host may still want to know a hint arrived. */
-  onHint?: (kind: string, msg: AvatarHintCmd) => void;
-  /** An unrecognized `cmd` (forward compat) — the protocol says ignore
-   * silently, so this is purely an observability hook, not required. */
-  onUnknownCmd?: (msg: AvatarUnknownCmd) => void;
   /** A dispatch threw (e.g. an unknown state or interjection id, which the
    * widget throws on). Defaults to `console.warn`. */
   onError?: (err: unknown, msg: AvatarCommand) => void;
-  /** Diagnostic only (see the class doc's "Turn clock anchoring" section) —
-   * never moves the anchor, just reports how far pipecat's own
-   * botStartedSpeaking/botStoppedSpeaking landed from it. */
-  onSpeakingDrift?: (info: { event: "start" | "stop"; ctx: string | null; driftMs: number }) => void;
-  /**
-   * Which server-messages `attach()` should look inside. Defaults to the
-   * protocol's own envelope, `type === "avatar"`.
-   *
-   * The escape hatch exists because an application may tunnel avatar commands
-   * inside a message type of its own — one deployment routes them through a
-   * generic `ui_command` envelope so an LLM tool call can drive the face — and
-   * teaching this library that envelope would be teaching it one consumer's
-   * private vocabulary. Widen it here instead:
-   *
-   *     accept: (m) => m.type === "avatar" ||
-   *                    (m.type === "ui_command" && m.action === "avatar")
-   *
-   * The predicate only decides *whether to look*; the payload still has to
-   * carry a string `cmd` to dispatch at all.
-   */
-  accept?: (message: Record<string, unknown>) => boolean;
   /** Override for tests. Defaults to `performance.now`. */
   now?: () => number;
 }
 
 /**
- * The three `RTVIEvent` members `attach()` subscribes to, spelled as their
- * values.
+ * The one `RTVIEvent` member `attach()` subscribes to, spelled as its value.
  *
  * Written out rather than imported because that enum was this module's *only*
  * runtime reference to `@pipecat-ai/client-js`, and one runtime reference makes
@@ -147,8 +127,6 @@ export interface AvatarClientOptions {
  */
 export const RTVI_EVENTS = {
   serverMessage: "serverMessage",
-  botStartedSpeaking: "botStartedSpeaking",
-  botStoppedSpeaking: "botStoppedSpeaking",
 } as const satisfies Record<string, string>;
 
 /** Defensive unwrap for the `RTVIEvent.ServerMessage` `{ data }` quirk: some
@@ -163,14 +141,12 @@ export class AvatarClient {
   private readonly avatar: AvatarApi;
   private readonly opts: AvatarClientOptions;
   private readonly now: () => number;
-  private readonly accept: (message: Record<string, unknown>) => boolean;
   private turn: Turn | null = null;
 
   constructor(avatar: AvatarApi, opts: AvatarClientOptions = {}) {
     this.avatar = avatar;
     this.opts = opts;
     this.now = opts.now ?? (() => performance.now());
-    this.accept = opts.accept ?? ((m) => m.type === AVATAR_MESSAGE_TYPE);
   }
 
   /** The active turn's ctx, or `null` between turns. For tests and telemetry. */
@@ -183,44 +159,36 @@ export class AvatarClient {
     return this.turn ? [...this.turn.cues] : [];
   }
 
-  /** Dispatch one avatar command. Accepts anything with a string `cmd` — an
-   * already-unwrapped `{type:"avatar", cmd, ...}` server message, or a bare
-   * `{cmd, ...}` payload from whatever else the host is carrying them in.
-   * Unknown `cmd`s are ignored, per the wire protocol's forward-compat rule. */
+  /** Dispatch one server message. Anything that isn't in the avatar envelope
+   * is not ours and is ignored; so is an envelope carrying a `cmd` this build
+   * has never heard of, per the wire protocol's forward-compat rule. */
   dispatch(raw: unknown): void {
     if (!isAvatarMessage(raw)) return;
-    const msg = raw;
+    const msg: AvatarCommand = raw;
     try {
       switch (msg.cmd) {
         case "state":
-          this.handleState(msg as AvatarStateCmd);
+          this.handleState(msg);
           break;
         case "interject":
-          this.avatar.interject((msg as { id: string }).id);
+          this.avatar.interject(msg.id);
           break;
         case "gesture":
-          this.avatar.gesture((msg as { id: string }).id);
-          break;
-        case "perform":
-          this.handlePerform(msg as AvatarPerformCmd);
+          this.avatar.gesture(msg.id);
           break;
         case "cues":
-          this.handleCues(msg as AvatarCuesCmd);
+          this.handleCues(msg);
           break;
         case "speech":
-          this.handleSpeech(msg as AvatarSpeechCmd);
+          this.handleSpeech(msg);
           break;
         case "user":
-          this.avatar.setUserSpeaking((msg as { speaking: boolean }).speaking);
+          this.avatar.setUserSpeaking(msg.speaking);
           break;
-        case "hint": {
-          const hint = msg as AvatarHintCmd;
-          this.opts.onHint?.(hint.kind, hint);
-          break;
-        }
-        default:
-          this.opts.onUnknownCmd?.(msg as AvatarUnknownCmd);
-          break;
+        // No default: an unknown `cmd` is a newer server talking to an older
+        // widget, and the protocol's forward-compat rule says ignore it. There
+        // is no callback for it — a hook nobody could act on is observability,
+        // not an interface (`docs/removed.md` § Client callbacks).
       }
     } catch (err) {
       if (this.opts.onError) this.opts.onError(err, msg);
@@ -238,30 +206,13 @@ export class AvatarClient {
     this.avatar.setState(msg.name, { emotion: msg.emotion, gaze: msg.gaze });
   }
 
-  private handlePerform(msg: AvatarPerformCmd) {
-    this.avatar.perform(msg.actions, { clock: this.resolveClock(msg.ctx) });
-  }
-
-  /** Ride the named turn's clock if it's the one we're currently anchored to;
-   * otherwise (no active turn, or `perform` names a ctx we never saw a
-   * `speech start` for) fall back to a fresh clock anchored at this call — the
-   * same "elapsed ms since this call" default `avatar.perform()` itself uses
-   * when given no clock and no audio. */
-  private resolveClock(ctx: string | undefined): () => number {
-    if (ctx && this.turn && this.turn.ctx === ctx && this.turn.clock) {
-      return this.turn.clock;
-    }
-    const start = this.now();
-    return () => this.now() - start;
-  }
-
   private ensureTurn(ctx: string): Turn {
     if (!this.turn || this.turn.ctx !== ctx) {
       // A different ctx supersedes whatever turn we had — a stale trailing
       // message for the old ctx will find `this.turn.ctx !== ctx` in
       // handleSpeech's stop-guard and be ignored, rather than cutting off the
       // new turn.
-      this.turn = { ctx, cues: [], started: false, clock: null, t0: null };
+      this.turn = { ctx, cues: [], started: false, clock: null };
     }
     return this.turn;
   }
@@ -289,7 +240,6 @@ export class AvatarClient {
       const turn = this.ensureTurn(msg.ctx);
       const t0 = this.now();
       const clock = () => this.now() - t0;
-      turn.t0 = t0;
       turn.clock = clock;
       turn.started = true;
       this.avatar.speak({ cues: turn.cues, clock });
@@ -303,44 +253,18 @@ export class AvatarClient {
     }
   }
 
-  private reportDrift(event: "start" | "stop") {
-    if (!this.opts.onSpeakingDrift) return;
-    const t0 = this.turn?.t0;
-    if (t0 == null) return;
-    this.opts.onSpeakingDrift({ event, ctx: this.turn?.ctx ?? null, driftMs: this.now() - t0 });
-  }
-
   /**
    * Subscribe to a live `PipecatClient`'s server messages and dispatch the
-   * avatar commands among them. Which messages count is the `accept` option;
-   * by default, the protocol's own `{type:"avatar"}` envelope.
-   *
-   * Also wires the diagnostic drift cross-check described in the class doc.
+   * avatar commands among them — the ones in the protocol's own
+   * `{type:"avatar"}` envelope, which `isAvatarMessage` is the definition of.
    * Never throws on a malformed or irrelevant message.
    *
    * @returns an unsubscribe function; call it on unmount or disconnect.
    */
   attach(client: PipecatClient): () => void {
-    const onServerMessage = (raw: unknown) => {
-      const message = unwrapServerMessage(raw);
-      if (!this.accept(message)) return;
-      this.dispatch(message);
-    };
-    const onBotStartedSpeaking = () => this.reportDrift("start");
-    const onBotStoppedSpeaking = () => this.reportDrift("stop");
-
+    const onServerMessage = (raw: unknown) => this.dispatch(unwrapServerMessage(raw));
     const serverMessage = RTVI_EVENTS.serverMessage as RTVIEvent;
-    const started = RTVI_EVENTS.botStartedSpeaking as RTVIEvent;
-    const stopped = RTVI_EVENTS.botStoppedSpeaking as RTVIEvent;
-
     client.on(serverMessage, onServerMessage);
-    client.on(started, onBotStartedSpeaking);
-    client.on(stopped, onBotStoppedSpeaking);
-
-    return () => {
-      client.off(serverMessage, onServerMessage);
-      client.off(started, onBotStartedSpeaking);
-      client.off(stopped, onBotStoppedSpeaking);
-    };
+    return () => client.off(serverMessage, onServerMessage);
   }
 }

@@ -36,9 +36,8 @@ transcript arriving.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 from pipecat.frames.frames import (
+    AggregatedTextFrame,
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     CancelFrame,
@@ -54,32 +53,26 @@ from pipecat.frames.frames import (
     TTSAudioRawFrame,
     TTSStartedFrame,
     TTSStoppedFrame,
+    TTSTextFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
     UserTurnInferenceCompletedFrame,
 )
 
 from .frames import AvatarControlFrame
-from .messages import AvatarMessage, AvatarState, Hint, Interjection, SpeechEvent
+from .messages import AvatarMessage, AvatarState, Interjection, SpeechEvent
 
 
 class AvatarStateMachine:
     """Translates one session's frame stream into avatar commands.
 
-    `tool_states` maps a function name to the state the avatar should hold while
-    that function runs — `{"search_web": AvatarState.SEARCHING_SCREEN}`. It is a
-    convenience, not the extension seam: it works only because stock pipecat
-    puts `function_name` on the frame, so a pipeline whose LLM executes tools
-    internally (Google ADK does) sees no such frame and must push an
-    `AvatarControlFrame` instead. Unmapped tools fall back to THINKING, which is
-    true of every tool call and wrong about none of them.
+    Constructed by `AvatarProcessor` and reachable no other way. Everything it
+    decides is inferred from stock pipecat frames; anything it cannot infer — a
+    tool-specific pose, a deliberate gesture — arrives as an `AvatarControlFrame`
+    from the application's own processor.
     """
 
-    def __init__(self, *, tool_states: Mapping[str, AvatarState] | None = None) -> None:
-        self._tool_states: dict[str, AvatarState] = dict(tool_states or {})
-        # Which in-flight call chose the current tool state, so a *parallel*
-        # call finishing does not drop the state its sibling is still holding.
-        self._tool_names: dict[str, str] = {}
+    def __init__(self) -> None:
         # Inferences are numbered rather than named when the pipeline gives us
         # no id of its own. The client only needs `ctx` to be stable within a
         # turn and different between turns — it keys the cue splice on it.
@@ -119,7 +112,7 @@ class AvatarStateMachine:
 
     @property
     def ctx(self) -> str:
-        """The turn id for the inference now in flight — see `next_ctx`."""
+        """The turn id for the inference now in flight — see `_next_ctx`."""
         return self._ctx
 
     @property
@@ -142,45 +135,6 @@ class AvatarStateMachine:
             return self._enter(AvatarState.IDLE)
         return [AvatarMessage.state(self._state)]
 
-    def eager_end_of_turn(self) -> list[AvatarMessage]:
-        """An endpointer predicted the user is done. A hint, never a state
-        change — the prediction may be withdrawn, and a state that flickered
-        back would read as the agent losing the thread."""
-        return [AvatarMessage.hint(Hint.EAGER_EOT)]
-
-    def sentence_queued(self, ctx: str = "") -> list[AvatarMessage]:
-        """A sentence's text just went to the TTS websocket; no audio exists yet.
-
-        Optional, and only some TTS services can tell you (see
-        `wiring.SentenceHookTTS`). Where it exists it is the earliest honest
-        evidence of imminent speech — roughly 450 ms of lead — and it matters
-        most on services that pre-create their audio contexts and so emit
-        `TTSStartedFrame` far too early or not at all, leaving the first
-        `TTSAudioRawFrame` as the trigger: an inbreath landing on top of the
-        first syllable, which is not an inbreath at all.
-
-        `ctx` is adopted only when this call is the one claiming the floor. A
-        later sentence in the same turn must not re-point the context the open
-        `speech:start` was announced under; the client's cue clock is anchored to
-        that one.
-        """
-        if self._offline:
-            return []
-        if ctx and not self._bot_speaking and not self._floor_claimed:
-            self._ctx = ctx
-        return self._claim_floor()
-
-    def error(self, *, fatal: bool = False) -> list[AvatarMessage]:
-        """A failure seen somewhere else in the pipeline.
-
-        `ErrorFrame`s travel upstream, so they pass behind this seat, not
-        through it; `AvatarErrorObserver` watches for them and calls in here.
-        Same transitions as an error that did arrive as a frame.
-        """
-        if self._offline:
-            return []
-        return self._fail(fatal=fatal)
-
     # ─── The frame stream ───────────────────────────────────────────────
 
     def on_frame(self, frame: Frame) -> list[AvatarMessage]:
@@ -196,6 +150,22 @@ class AvatarStateMachine:
 
         if isinstance(frame, AvatarControlFrame):
             return self._on_control(frame)
+
+        # The sentence announcement, pushed immediately before the
+        # `TTSStartedFrame` of the audio context it describes and so the earliest
+        # honest evidence of imminent speech — roughly 450 ms of lead. It matters
+        # most on services that pre-create their audio contexts and emit
+        # `TTSStartedFrame` far too early or not at all, leaving the first
+        # `TTSAudioRawFrame` as the trigger: an inbreath landing on top of the
+        # first syllable, which is not an inbreath at all. `TTSTextFrame`
+        # subclasses this and sets the same flag; those are the per-word karaoke
+        # frames, and one per word would be a stutter.
+        if (
+            isinstance(frame, AggregatedTextFrame)
+            and not isinstance(frame, TTSTextFrame)
+            and frame.will_be_spoken
+        ):
+            return self._on_sentence_queued(frame)
 
         if isinstance(frame, ErrorFrame):
             return self._on_error(frame)
@@ -220,7 +190,7 @@ class AvatarStateMachine:
             return self._maybe_think()
         if isinstance(frame, LLMFullResponseStartFrame):
             self._inference += 1
-            self._ctx = self.next_ctx()
+            self._ctx = self._next_ctx()
             return []
         if isinstance(frame, TTSStartedFrame):
             return self._on_tts_started(frame)
@@ -234,21 +204,35 @@ class AvatarStateMachine:
             # THINKING exactly once.
             out: list[AvatarMessage] = []
             for call in frame.function_calls:
-                out += self.tool_started(call.tool_call_id, call.function_name)
+                out += self.tool_started(call.tool_call_id)
             return out
         if isinstance(frame, FunctionCallInProgressFrame):
-            return self.tool_started(frame.tool_call_id, frame.function_name)
+            return self.tool_started(frame.tool_call_id)
         if isinstance(frame, FunctionCallResultFrame):
             return self.tool_finished(frame.tool_call_id)
         return []
 
-    def next_ctx(self) -> str:
+    def _next_ctx(self) -> str:
         """The turn id the client keys its cue splice on.
 
-        Overridable: a runtime with real interaction/inference ids should return
-        those instead, so avatar traffic correlates with the rest of its logs.
+        Opaque to the widget, which only needs it to be stable within a turn and
+        different between turns. A TTS context id replaces it as soon as one
+        exists (`_on_sentence_queued`, `_on_tts_started`); this is what a turn is
+        called before then.
         """
         return f"turn.{self._inference}"
+
+    def _on_sentence_queued(self, frame: AggregatedTextFrame) -> list[AvatarMessage]:
+        """A sentence's text just went to the TTS; no audio exists yet.
+
+        The context is adopted only when this sentence is the one claiming the
+        floor. A later sentence in the same turn must not re-point the context the
+        open `speech:start` was announced under; the client's cue clock is
+        anchored to that one.
+        """
+        if frame.context_id and not self._bot_speaking and not self._floor_claimed:
+            self._ctx = frame.context_id
+        return self._claim_floor()
 
     # ─── The user's turn ────────────────────────────────────────────────
 
@@ -399,51 +383,34 @@ class AvatarStateMachine:
 
     # ─── Tool calls ─────────────────────────────────────────────────────
 
-    def tool_started(self, tool_call_id: str, function_name: str) -> list[AvatarMessage]:
-        """Parallel calls enter their state once and hold it until the last result.
+    def tool_started(self, tool_call_id: str) -> list[AvatarMessage]:
+        """Parallel calls enter THINKING once and hold it until the last result.
 
         Keyed on `tool_call_id` rather than counted so a repeated announcement
         (pipecat sends both *Started* and *InProgress* for the same call) cannot
         inflate the count and strand the avatar in THINKING.
 
-        Public alongside the frame handlers because an application whose LLM
-        runs out of process never sees pipecat's function-call frames — it has
-        its own, carrying the same two facts. Subclass, translate in `on_frame`,
-        and the bookkeeping (dedup, parallel holds, `tool_states`) is shared
-        rather than re-implemented approximately.
+        THINKING for every tool, with no per-tool mapping: it is true of every
+        tool call and wrong about none of them. An application that wants
+        `SEARCHING_SCREEN` while its own search runs knows that from its own code
+        and says so with an `AvatarControlFrame` — which is also the only thing
+        that works when the LLM executes tools out of process and no function-call
+        frame is produced at all.
+
+        Public, with `tool_finished`, because they are the seam: a subclass
+        translating its own out-of-process tool frames inherits the dedup and
+        the hold rather than reimplementing them approximately.
         """
         if tool_call_id in self._tools_in_flight:
             return []
         self._tools_in_flight.add(tool_call_id)
-        self._tool_names[tool_call_id] = function_name
-        return self._enter(self._tool_state())
+        return self._enter(AvatarState.THINKING)
 
     def tool_finished(self, tool_call_id: str) -> list[AvatarMessage]:
-        """The counterpart to `tool_started`; see its note on why both are public."""
+        """Reaching zero is deliberately not a state change: the LLM is still
+        composing its reply, and THINKING holds until TTS claims the floor."""
         self._tools_in_flight.discard(tool_call_id)
-        self._tool_names.pop(tool_call_id, None)
-        # Reaching zero is not a state change: the LLM is still composing its
-        # reply. THINKING holds until TTS claims the floor. But if a *mapped*
-        # call finished while an unmapped sibling runs on, the specific state it
-        # was holding is over and the honest answer is the general one.
-        if not self._tools_in_flight:
-            return []
-        return self._enter(self._tool_state())
-
-    def _tool_state(self) -> AvatarState:
-        """The most specific state any in-flight call asks for.
-
-        First mapped call wins rather than last: two tools running at once
-        cannot both be depicted, and flipping between their states would read as
-        indecision rather than as work. Iterated over `_tool_names`, which is a
-        dict and therefore ordered — `_tools_in_flight` is a set and "first"
-        would mean nothing.
-        """
-        for name in self._tool_names.values():
-            mapped = self._tool_states.get(name)
-            if mapped is not None:
-                return mapped
-        return AvatarState.THINKING
+        return []
 
     # ─── Failure ────────────────────────────────────────────────────────
 

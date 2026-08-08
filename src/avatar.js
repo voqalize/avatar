@@ -10,9 +10,8 @@
  *   avatar.interject('OKAY')
  *   avatar.gesture('HI')                 // a hand at the frame edge + its face
  *   avatar.perform(beats, { audio })     // timed {t, do, ...} verbs, same clock
- *   avatar.setUserAudio(micStream)       // or setUserSpeaking(bool) — the
- *                                        // user's voice, so listening is
- *                                        // contingent instead of timed
+ *   avatar.setUserSpeaking(bool)         // the user has the floor, so listening
+ *                                        // is contingent instead of timed
  *
  * Per frame the mixer runs a fixed layer order. Earlier layers are overwritten
  * by later ones on the channels they touch; the gesture and idle layers are
@@ -37,7 +36,6 @@ import { ClipPlayer } from './clips.js';
 import { INTERJECTIONS } from './interjections.js';
 import { VisemeTrack, shapeFor, SILENT } from './visemes.js';
 import { PerformTrack } from './perform.js';
-import { AudioFallback } from './audio-fallback.js';
 import { createHand, HAND_GESTURES } from './hand.js';
 
 // Each state's `idle` is a profile for the liveness layer (see DEFAULT_PROFILE
@@ -284,11 +282,6 @@ export function createAvatar(opts = {}) {
   const gaze = new GazeLayer();
   const idle = new IdleLayer();
   const speech = new VisemeTrack();
-  const fallback = new AudioFallback();
-  // A second analyser for the USER's voice — same machinery, opposite
-  // direction: this one never touches the mouth, it feeds the listening engine.
-  const userAudio = new AudioFallback();
-  let userAudioOn = false;
 
   let gazeOverrideByClip = null;
   const clip = new ClipPlayer({
@@ -349,7 +342,6 @@ export function createAvatar(opts = {}) {
   let glanceUntil = 0;
   let speakClock = null;
   let speakStart = 0;
-  let useFallback = false;
 
   const cur = Object.assign({}, REST);
   const target = Object.assign({}, REST);
@@ -436,7 +428,6 @@ export function createAvatar(opts = {}) {
       }
     }
     backchannel.enabled = !!st.backchannel && !clip.playing;
-    if (userAudioOn) { userAudio.sample(dt); backchannel.observeLevel(userAudio.level); }
     backchannel.update(dt);
     // Engagement posture: forward lean while the user holds the floor, spent
     // only in the states that are *about* the user holding the floor. The
@@ -449,12 +440,14 @@ export function createAvatar(opts = {}) {
     // costs nothing; with no user signal the static pose carries the state.
     else if (stateName === 'CANT_HEAR') target.torsoLean += 0.10 * backchannel.engage;
 
-    // 4. mouth. Server track wins; then clip track; then a fallback analyser.
+    // 4. mouth. The server's viseme track wins; a clip's mouth track fills the
+    // gaps. There is deliberately no third leg: with no cues the mouth stays
+    // shut, and a still mouth under speech is the *visible* symptom of a
+    // backend that could not align — see docs/removed.md § Amplitude lipsync.
     const clipOut = clip.update(dtMs);
     let mouth = speech.sample();
     let mouthOwner = mouth ? 'speech' : null;
     if (!mouth && clipOut.ownsMouth && clipOut.mouth) { mouth = clipOut.mouth; mouthOwner = 'clip'; }
-    if (!mouth && useFallback) { mouth = fallback.sample(dt); mouthOwner = 'fallback'; }
     if (mouth) {
       const shape = mouth.letter !== SILENT
         ? shapeFor(mouth.letter, mouth.intensity)
@@ -638,28 +631,12 @@ export function createAvatar(opts = {}) {
     return api;
   }
 
-  function setAudioFallback(source) {
-    if (!source) { fallback.detach(); useFallback = false; return api; }
-    fallback.attach(source);
-    useFallback = true;
-    return api;
-  }
-
   /**
-   * Give the listening engine the USER's voice, so backchannels become
-   * contingent on their pauses instead of running on a timer. Either works,
-   * and the flag wins when both are driven:
-   *   setUserAudio(streamOrElement)  — the widget runs its own coarse VAD
-   *   setUserSpeaking(bool)          — the host (or server endpointer) decides;
-   *                                    pass null to hand back to the level VAD
+   * Tell the listening engine whether the USER holds the floor, so backchannels
+   * become contingent on their pauses instead of running on a timer. The server
+   * owns this — it has the endpointer — and sends it as the `user` command;
+   * `null` hands back to the no-signal timer fallback.
    */
-  function setUserAudio(source) {
-    if (!source) { userAudio.detach(); userAudioOn = false; return api; }
-    userAudio.attach(source);
-    userAudioOn = true;
-    return api;
-  }
-
   function setUserSpeaking(b) { backchannel.setUserSpeaking(b); return api; }
 
   // What one action does when its moment comes. Enum validity is checked here,
@@ -720,7 +697,7 @@ export function createAvatar(opts = {}) {
      *  left), -1 the other. Both are anatomically real — the thumb splays away
      *  from the body either way — so this is a character choice, not a fix. */
     setHandSide: (d) => { if (hand) hand.setDir(d); return api; },
-    setAudioFallback, setUserAudio, setUserSpeaking,
+    setUserSpeaking,
     /** Articulation gain: 1 is the VISEME_SHAPES table as authored. */
     setMouthGain: (g) => { mouthGain = g; return api; },
     get mouthGain() { return mouthGain; },
@@ -746,7 +723,6 @@ export function createAvatar(opts = {}) {
     /** The hand gesture in flight, or null. `null` forever if `hand: false`. */
     get gesturing() { return hand ? hand.id : null; },
     get params() { return cur; },
-    get audioLevel() { return fallback.level; },
     get userSpeaking() { return backchannel.speaking; },
     svg: face.svg,
     meta,
@@ -757,8 +733,6 @@ export function createAvatar(opts = {}) {
     theme: face.theme,
     destroy() {
       cancelAnimationFrame(raf);
-      fallback.detach();
-      userAudio.detach();
       if (hand) hand.destroy();
       face.destroy();
     },

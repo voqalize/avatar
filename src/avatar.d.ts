@@ -169,8 +169,6 @@ export interface AvatarApi {
   /** +1 the viewer's right (the character's own left hand), -1 the other. */
   setHandSide(dir: number): AvatarApi;
   perform(actions: AvatarAction[], o?: PerformOptions): PerformHandle;
-  setAudioFallback(source?: HTMLMediaElement | MediaStream | null): AvatarApi;
-  setUserAudio(source?: HTMLMediaElement | MediaStream | null): AvatarApi;
   setUserSpeaking(speaking: boolean | null): AvatarApi;
   setMouthGain(g: number): AvatarApi;
   readonly mouthGain: number;
@@ -195,7 +193,6 @@ export interface AvatarApi {
   /** The hand gesture in flight, or null — always null under `hand: false`. */
   readonly gesturing: AvatarHandGestureId | null;
   readonly params: Record<string, number>;
-  readonly audioLevel: number;
   readonly userSpeaking: boolean;
   readonly svg: SVGSVGElement;
   readonly meta: AvatarMeta;

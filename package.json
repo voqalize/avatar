@@ -1,6 +1,6 @@
 {
   "name": "@voqalize/avatar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A JavaScript-programmable 2-D talking head for AI voice calls: server-synced lipsync, state through motion, zero dependencies.",
   "license": "AGPL-3.0-only",
   "author": "Voqalize",
@@ -33,16 +33,8 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./src/avatar.d.ts",
-      "default": "./src/avatar.js"
-    },
-    "./pipecat": {
-      "types": "./client/dist/pipecat.d.ts",
-      "default": "./client/dist/pipecat.js"
-    },
-    "./react": {
-      "types": "./client/dist/react.d.ts",
-      "default": "./client/dist/react.js"
+      "types": "./client/dist/index.d.ts",
+      "default": "./client/dist/index.js"
     },
     "./package.json": "./package.json"
   },

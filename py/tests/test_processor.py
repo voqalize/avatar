@@ -2,17 +2,24 @@
 
 The state machine's rules are tested next door as a pure function. What is left
 here is everything the *processor* owes the pipeline: pass every frame through,
-emit in the RTVI shape and the safe direction, and stay reachable out of band (client ready,
-eager end of turn, the Sprint B cue seam). Also the two failure modes a real
-session cannot be asked to produce on demand.
+emit in the RTVI shape and the safe direction, stay reachable out of band (client
+ready, the `send` escape hatch), and cut the audio stream into the chunks the
+viseme engine is fed. Also the failure modes a real session cannot be asked to
+produce on demand — a client that connects before StartFrame, and a host with no
+native aligner.
 """
 
 from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
+    DataFrame,
     ErrorFrame,
     FatalErrorFrame,
     Frame,
@@ -27,9 +34,10 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frameworks.rtvi import RTVIServerMessageFrame
 
-from voqalize_avatar import AVATAR_MESSAGE_TYPE, AvatarMessage, AvatarState
+from voqalize_avatar import AVATAR_MESSAGE_TYPE, AvatarMessage, AvatarProcessor, AvatarState
+from voqalize_avatar.state_machine import AvatarStateMachine
 from voqalize_avatar.sentence_audio import EARLY_PARTIAL_BYTES
-from tests.helpers import AvatarPipe
+from tests.helpers import AvatarPipe, sentence, spoken, word
 
 pytestmark = pytest.mark.asyncio
 
@@ -76,7 +84,6 @@ async def test_messages_travel_downstream_in_the_rtvi_server_message_shape() -> 
         for frame in emitted:
             assert isinstance(frame.data, dict)
             assert frame.data["type"] == AVATAR_MESSAGE_TYPE
-            assert frame.data["v"] == 1
         # Not one travelled back toward the LLM.
         assert not [f for f in pipe.upstream.frames if isinstance(f, RTVIServerMessageFrame)]
 
@@ -112,73 +119,43 @@ async def test_client_ready_before_the_start_frame_is_held_not_lost() -> None:
         assert isinstance(pipe.downstream.frames[0], StartFrame)
 
 
-async def test_eager_end_of_turn_reaches_the_wire_as_a_hint() -> None:
-    async with AvatarPipe() as pipe:
-        pipe.drain()
-        await pipe.avatar.on_eager_end_of_turn()
-        assert pipe.sent == ["hint:eager_eot"]
-
-
-async def test_push_cues_is_the_sprint_b_seam() -> None:
-    """The viseme engine is not built yet; the socket it plugs into is, and it
-    speaks the widget's splice contract (`from_ms` + `final`)."""
-    async with AvatarPipe() as pipe:
-        pipe.drain()
-        await pipe.avatar.push_cues(
-            ctx="1.1",
-            from_ms=0,
-            cues=[{"t": 0, "v": "B"}, {"t": 80, "v": "X"}],
-            final=True,
-        )
-        assert pipe.wire == [
-            {
-                "type": "avatar",
-                "v": 1,
-                "cmd": "cues",
-                "ctx": "1.1",
-                "from_ms": 0,
-                "cues": [{"t": 0, "v": "B"}, {"t": 80, "v": "X"}],
-                "final": True,
-            }
-        ]
-
-
-async def test_a_queued_sentence_claims_the_floor_out_of_band() -> None:
-    """The claim used to wait for the first audio frame, which is the moment the
-    sound starts — an inbreath on top of the first syllable is not an inbreath."""
-    async with AvatarPipe() as pipe:
-        pipe.drain()
-        await pipe.avatar.on_sentence_queued("4.1")
-        assert pipe.drain() == ["state:TAKING_FLOOR", "interject:CLAIM_FLOOR"]
-        await pipe.push(TTSAudioRawFrame(audio=b"\x00" * 96, sample_rate=24000, num_channels=1))
-        assert pipe.drain() == []
-        assert pipe.avatar.ctx == "4.1"
-
-
-async def test_an_out_of_band_error_reaches_the_wire() -> None:
-    """The session's observer is the only thing that can see an ErrorFrame — it
-    travels upstream, behind this seat."""
-    async with AvatarPipe() as pipe:
-        pipe.drain()
-        await pipe.avatar.on_error(fatal=False)
-        assert pipe.drain() == ["state:DEGRADED"]
-        await pipe.avatar.on_error(fatal=True)
-        assert pipe.drain() == ["state:OFFLINE"]
-
-
-async def test_send_lets_a_brain_override_the_heuristics() -> None:
-    """`session.action("avatar", ...)` has to be able to say things the frame
-    stream never implies — a state the pipeline has no evidence for."""
+async def test_send_lets_a_supervisor_override_the_heuristics() -> None:
+    """Something outside the pipeline — an agent supervisor, an HTTP handler —
+    has to be able to say what the frame stream never implies."""
     async with AvatarPipe() as pipe:
         pipe.drain()
         await pipe.avatar.send(AvatarMessage.state(AvatarState.REVIEWING_SCREEN))
         assert pipe.sent == ["state:REVIEWING_SCREEN"]
 
 
-async def test_the_processor_exposes_the_turn_context() -> None:
-    async with AvatarPipe() as pipe:
-        await pipe.push(TTSStartedFrame(context_id="7.3"))
-        assert pipe.avatar.ctx == "7.3"
+@dataclass
+class _MyToolCall(DataFrame):
+    """An application's own tool frame — an LLM running out of process never
+    produces pipecat's `FunctionCallsStartedFrame`."""
+
+
+async def test_a_subclass_can_name_its_own_state_machine() -> None:
+    """The documented seam for an application whose frames are its own spelling
+    of something the library already models. It is a class attribute rather
+    than a constructor argument because the front door takes no arguments —
+    so what this actually pins is that `AvatarProcessor()` still has none."""
+
+    class Mine(AvatarStateMachine):
+        def on_frame(self, frame: Frame) -> Sequence[AvatarMessage]:
+            if isinstance(frame, _MyToolCall):
+                return self.tool_started("call-1")
+            return super().on_frame(frame)
+
+    class MyProcessor(AvatarProcessor):
+        STATE_MACHINE = Mine
+
+    async with AvatarPipe(cls=MyProcessor) as pipe:
+        pipe.drain()
+        await pipe.push(_MyToolCall())
+        assert pipe.drain() == ["state:THINKING"]
+        # ...and everything the base machine does still happens underneath.
+        await pipe.push(UserStartedSpeakingFrame())
+        assert pipe.drain() == ["state:LISTENING", "user:True"]
 
 
 # ─── Failure ──────────────────────────────────────────────────────────────────
@@ -207,28 +184,31 @@ async def test_a_fatal_error_goes_offline_and_stays_there() -> None:
 # ─── Sentence audio ───────────────────────────────────────────────────────────
 
 
-class RecordingSink:
+class RecordingEngine:
     """Stands where the viseme engine stands, and only records.
 
-    Structurally a `SentenceAudioSink`, which is the point: the processor was
-    given a Protocol precisely so the state channel and the viseme stack never
-    import each other, and a 10-line class here proves the seam is honest.
+    Every call the processor makes on the engine lands here, in order — the
+    ordering between a cut and the context close is the whole reason `final` is
+    trustworthy on the wire.
     """
 
     def __init__(self) -> None:
-        self.sentences: list[tuple[str, bytes, list[tuple[str, float]]]] = []
+        self.queued: list[tuple[str, str]] = []
+        self.sentences: list[tuple[str, bytes, int | None]] = []
         self.partials: list[tuple[str, bytes]] = []
         self.closed: list[str] = []
         self.ended: list[str] = []
-        # Everything, in order — the ordering between a cut and the close is the
-        # whole reason `final` is trustworthy.
         self.calls: list[tuple[str, str]] = []
 
-    async def on_sentence_audio(self, ctx, pcm, word_timestamps=None) -> None:
-        self.sentences.append((ctx, pcm, list(word_timestamps or ())))
+    async def on_sentence_queued(self, ctx: str, text: str) -> None:
+        self.queued.append((ctx, text))
+        self.calls.append(("queued", ctx))
+
+    async def on_sentence_audio(self, ctx: str, pcm: bytes, *, sentences: int | None = 1) -> None:
+        self.sentences.append((ctx, pcm, sentences))
         self.calls.append(("audio", ctx))
 
-    async def on_sentence_partial(self, ctx, pcm) -> None:
+    async def on_sentence_partial(self, ctx: str, pcm: bytes) -> None:
         self.partials.append((ctx, pcm))
         self.calls.append(("partial", ctx))
 
@@ -240,6 +220,28 @@ class RecordingSink:
         self.ended.append(ctx)
         self.calls.append(("end", ctx))
 
+    async def aclose(self) -> None:
+        self.calls.append(("aclose", ""))
+
+
+@pytest.fixture
+def engine(monkeypatch: pytest.MonkeyPatch) -> RecordingEngine:
+    """Swap the real engine out at its one construction site.
+
+    The processor takes no arguments, so there is no seam to inject through —
+    which is the point of the design and not an obstacle to testing it: the
+    builder is a module-level function, and patching it is how a test says "the
+    aligner is somebody else's problem today".
+    """
+    recorder = RecordingEngine()
+
+    def build(emit: Any, *, sample_rate: int) -> RecordingEngine:
+        recorder.sample_rate = sample_rate  # type: ignore[attr-defined]
+        return recorder
+
+    monkeypatch.setattr("voqalize_avatar.processor.build_viseme_engine", build)
+    return recorder
+
 
 def pcm(byte: bytes, ms: int, ctx: str = "1.1") -> TTSAudioRawFrame:
     """`ms` milliseconds of a recognisable filler at 24 kHz mono s16le."""
@@ -248,181 +250,241 @@ def pcm(byte: bytes, ms: int, ctx: str = "1.1") -> TTSAudioRawFrame:
     )
 
 
-async def test_a_boundary_hands_over_exactly_that_sentence() -> None:
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
-        await pipe.queue(pcm(b"a", 100), pcm(b"a", 100))
-        await pipe.avatar.on_sentence_boundary("1.1", [("hello", 0.0)])
+async def test_the_engine_is_built_at_the_sample_rate_the_pipeline_declared(
+    engine: RecordingEngine,
+) -> None:
+    """`StartFrame.audio_out_sample_rate` is the whole configuration story. A
+    hard-coded 24 kHz would mis-measure every cue offset on a 16 kHz service."""
+    async with AvatarPipe():
+        assert engine.sample_rate == 24000  # type: ignore[attr-defined]
+
+
+async def test_an_announced_sentence_reaches_the_fast_leg(engine: RecordingEngine) -> None:
+    """Text is on the wire ~450 ms before its audio. That head start is the fast
+    leg's entire reason to exist."""
+    async with AvatarPipe() as pipe:
+        await pipe.push(sentence("Take your time.", "1.1"))
+        assert engine.queued == [("1.1", "Take your time.")]
+
+
+async def test_a_karaoke_word_is_not_an_announcement(engine: RecordingEngine) -> None:
+    """`TTSTextFrame` subclasses the announcement frame and carries the same
+    `will_be_spoken`. Without the negative isinstance check the fast leg would
+    run once per *word* and the turn timeline would be nonsense."""
+    async with AvatarPipe() as pipe:
+        await pipe.push(word("Take", "1.1"), word("your", "1.1"))
+        assert engine.queued == []
+
+
+async def test_a_cut_hands_over_exactly_that_sentence(engine: RecordingEngine) -> None:
+    async with AvatarPipe() as pipe:
+        await pipe.queue(pcm(b"a", 100), pcm(b"a", 100), spoken("time.", "1.1"))
         await pipe.settle()
-        assert sink.sentences == [("1.1", b"a" * 9600, [("hello", 0.0)])]
+        assert engine.sentences == [("1.1", b"a" * 9600, 1)]
 
 
-async def test_sentence_two_gets_its_own_bytes_and_no_others() -> None:
+async def test_a_word_mid_sentence_cuts_nothing(engine: RecordingEngine) -> None:
+    """Every karaoke word is a progress frame; only the one with nothing left to
+    say is the end of the slot."""
+    async with AvatarPipe() as pipe:
+        await pipe.queue(pcm(b"a", 100), spoken("Take", "1.1", remaining=" your time."))
+        await pipe.settle()
+        assert engine.sentences == []
+
+
+async def test_sentence_two_gets_its_own_bytes_and_no_others(engine: RecordingEngine) -> None:
     """The slice is cumulative: whatever the first sentence took, the second
     must not be charged again, or every cue in it lands late by that much."""
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
-        await pipe.queue(pcm(b"a", 200))
-        await pipe.avatar.on_sentence_boundary("1.1", [("one", 0.0)])
-        await pipe.queue(pcm(b"b", 300))
-        await pipe.avatar.on_sentence_boundary("1.1", [("two", 0.0)])
+    async with AvatarPipe() as pipe:
+        await pipe.queue(pcm(b"a", 200), spoken("one.", "1.1"))
+        await pipe.queue(pcm(b"b", 300), spoken("two.", "1.1"))
         await pipe.settle()
-        assert [(c, len(p)) for c, p, _ in sink.sentences] == [("1.1", 9600), ("1.1", 14400)]
-        assert set(sink.sentences[1][1]) == {ord("b")}
+        assert [(c, len(p)) for c, p, _ in engine.sentences] == [("1.1", 9600), ("1.1", 14400)]
+        assert set(engine.sentences[1][1]) == {ord("b")}
 
 
-async def test_the_cut_lands_behind_the_audio_already_queued() -> None:
-    """The hook fires from the TTS drain loop, which has only *queued* those
-    frames here. Slicing at that instant would undercount by however far behind
-    this processor is; queueing the marker puts it in its own audio's place."""
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
+async def test_a_word_stream_cut_retires_one_sentence_however_many_are_announced(
+    engine: RecordingEngine,
+) -> None:
+    """Text runs ahead of audio, so sentences two and three are usually already
+    announced when sentence one's last word plays. Retiring them all here would
+    strand nothing — it would *un*-strand them, onto offsets already spoken."""
+    async with AvatarPipe() as pipe:
+        await pipe.push(sentence("One.", "1.1"), sentence("Two.", "1.1"), sentence("Three.", "1.1"))
+        await pipe.queue(pcm(b"a", 100), spoken("One.", "1.1"))
+        await pipe.settle()
+        assert [n for _, _, n in engine.sentences] == [1]
+
+
+async def test_the_end_of_generation_retires_everything_still_predicted(
+    engine: RecordingEngine,
+) -> None:
+    """A TTS with no word timestamps emits no progress frames at all, so the
+    turn arrives as one chunk covering every sentence in it. `None` is that:
+    all of them."""
+    async with AvatarPipe() as pipe:
+        await pipe.push(sentence("One.", "1.1"), sentence("Two.", "1.1"))
+        await pipe.queue(pcm(b"a", 300), TTSStoppedFrame(context_id="1.1"))
+        await pipe.settle()
+        assert [n for _, _, n in engine.sentences] == [None]
+
+
+async def test_the_cut_lands_behind_the_audio_already_queued(engine: RecordingEngine) -> None:
+    """Both cut signals ride the TTS service's own audio-context queue, so they
+    arrive behind the samples they describe. Reading the buffer any earlier
+    undercharges this sentence and overcharges the next."""
+    async with AvatarPipe() as pipe:
         # Queue a full turn's worth without letting the loop run in between.
         for _ in range(20):
             await pipe.avatar.queue_frame(pcm(b"a", 20))
-        await pipe.avatar.on_sentence_boundary("1.1", [("w", 0.0)])
+        await pipe.queue(spoken("w", "1.1"))
         await pipe.settle()
-        assert len(sink.sentences[0][1]) == 20 * 20 * 48
+        assert len(engine.sentences[0][1]) == 20 * 20 * 48
 
 
-async def test_a_long_first_sentence_is_handed_over_as_a_prefix() -> None:
+async def test_a_long_first_sentence_is_handed_over_as_a_prefix(engine: RecordingEngine) -> None:
     """The turn's first sentence is the only one played off an estimate, and its
-    boundary cannot arrive until its last byte does. So once enough of it exists,
+    cut cannot arrive until its last byte does. So once enough of it exists,
     it goes over early — without being consumed."""
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
+    async with AvatarPipe() as pipe:
         await pipe.queue(pcm(b"a", 600))
         await pipe.settle()
-        assert sink.partials == []  # below the threshold: nothing yet
+        assert engine.partials == []  # below the threshold: nothing yet
 
         await pipe.queue(pcm(b"a", 700))
         await pipe.settle()
-        assert [ctx for ctx, _ in sink.partials] == ["1.1"]
+        assert [ctx for ctx, _ in engine.partials] == ["1.1"]
         # Everything held when the threshold was crossed — the frame that
         # crosses it is included, so this is the threshold or a little past it,
         # never less.
-        assert len(sink.partials[0][1]) == 1300 * 48 >= EARLY_PARTIAL_BYTES
+        assert len(engine.partials[0][1]) == 1300 * 48 >= EARLY_PARTIAL_BYTES
 
-        # A peek, not a take: the boundary still gets the whole sentence, and
-        # the byte count that places every later sentence is untouched.
-        await pipe.queue(pcm(b"a", 200))
-        await pipe.avatar.on_sentence_boundary("1.1", [("w", 0.0)])
+        # A peek, not a take: the cut still gets the whole sentence, and the
+        # byte count that places every later sentence is untouched.
+        await pipe.queue(pcm(b"a", 200), spoken("w", "1.1"))
         await pipe.settle()
-        assert len(sink.sentences[0][1]) == 1500 * 48
+        assert len(engine.sentences[0][1]) == 1500 * 48
 
 
-async def test_only_the_first_sentence_of_a_turn_gets_a_prefix() -> None:
+async def test_only_the_first_sentence_of_a_turn_gets_a_prefix(engine: RecordingEngine) -> None:
     """Sentence two is recognised before it is played — generation outruns
     playout — so an early pass there is churn, not a correction."""
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
-        await pipe.queue(pcm(b"a", 1300))
-        await pipe.avatar.on_sentence_boundary("1.1", [("one", 0.0)])
-        await pipe.queue(pcm(b"b", 1300))
-        await pipe.avatar.on_sentence_boundary("1.1", [("two", 0.0)])
+    async with AvatarPipe() as pipe:
+        await pipe.queue(pcm(b"a", 1300), spoken("one.", "1.1"))
+        await pipe.queue(pcm(b"b", 1300), spoken("two.", "1.1"))
         await pipe.settle()
-        assert len(sink.partials) == 1
-        assert set(sink.partials[0][1]) == {ord("a")}
+        assert len(engine.partials) == 1
+        assert set(engine.partials[0][1]) == {ord("a")}
 
 
-async def test_the_next_turn_gets_its_own_prefix() -> None:
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
+async def test_the_next_turn_gets_its_own_prefix(engine: RecordingEngine) -> None:
+    async with AvatarPipe() as pipe:
         await pipe.queue(pcm(b"a", 1300))
         await pipe.settle()
         await pipe.queue(BotStoppedSpeakingFrame())
         await pipe.settle()
         await pipe.queue(pcm(b"b", 1300, ctx="1.2"))
         await pipe.settle()
-        assert [ctx for ctx, _ in sink.partials] == ["1.1", "1.2"]
+        assert [ctx for ctx, _ in engine.partials] == ["1.1", "1.2"]
 
 
-async def test_keepalives_never_reach_the_recogniser() -> None:
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
+async def test_keepalives_never_reach_the_recogniser(engine: RecordingEngine) -> None:
+    async with AvatarPipe() as pipe:
         await pipe.queue(
             TTSAudioRawFrame(audio=b"\x00\x00", sample_rate=24000, num_channels=1, context_id="1.1")
         )
-        await pipe.queue(pcm(b"a", 50))
-        await pipe.avatar.on_sentence_boundary("1.1", [])
+        await pipe.queue(pcm(b"a", 50), spoken("w", "1.1"))
         await pipe.settle()
-        assert len(sink.sentences[0][1]) == 2400
+        assert len(engine.sentences[0][1]) == 2400
 
 
-async def test_the_boundary_marker_never_travels() -> None:
-    """It is addressed to this processor. Anything downstream seeing it would
-    be seeing avatar bookkeeping in the audio path."""
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
-        await pipe.queue(pcm(b"a", 20))
-        await pipe.avatar.on_sentence_boundary("1.1", [])
-        await pipe.settle()
-        assert not [
-            f for f in pipe.downstream.frames if type(f).__name__ == "SentenceBoundaryFrame"
-        ]
-
-
-async def test_the_end_of_generation_closes_the_context_behind_its_last_sentence() -> None:
+async def test_the_end_of_generation_closes_the_context_behind_its_last_sentence(
+    engine: RecordingEngine,
+) -> None:
     """`TTSStoppedFrame` is appended to the *audio context*, so it drains behind
-    the last sentence's audio and behind the boundary that cuts it. That
-    ordering is what makes it a usable end-of-context signal: when it arrives,
-    every cut for this turn is already at the engine."""
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
-        await pipe.queue(pcm(b"a", 100))
-        await pipe.avatar.on_sentence_boundary("1.1", [("w", 0.0)])
+    the last sentence's audio and behind the word that cuts it. That ordering is
+    what makes it a usable end-of-context signal: when it arrives, every cut for
+    this turn is already at the engine."""
+    async with AvatarPipe() as pipe:
+        await pipe.queue(pcm(b"a", 100), spoken("w", "1.1"))
         await pipe.queue(TTSStoppedFrame(context_id="1.1"))
         await pipe.settle()
-        assert sink.calls == [("audio", "1.1"), ("closed", "1.1")]
+        assert engine.calls == [("audio", "1.1"), ("closed", "1.1")]
 
 
-async def test_the_context_close_is_not_the_end_of_the_turn() -> None:
+async def test_the_context_close_is_not_the_end_of_the_turn(engine: RecordingEngine) -> None:
     """Generation stopping is not playout stopping. Ending the turn here would
     drop the cues for audio still queued in the transport."""
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
+    async with AvatarPipe() as pipe:
         await pipe.queue(pcm(b"a", 100))
         await pipe.queue(TTSStoppedFrame(context_id="1.1"))
         await pipe.settle()
-        assert sink.ended == []
+        assert engine.ended == []
         await pipe.push(BotStoppedSpeakingFrame())
-        assert sink.ended == ["1.1"]
+        assert engine.ended == ["1.1"]
 
 
-async def test_barge_in_ends_the_turn_and_drops_its_bytes() -> None:
+async def test_barge_in_ends_the_turn_and_drops_its_bytes(engine: RecordingEngine) -> None:
     """Cues for audio that will never be heard are worse than no cues: they
     would splice into the next turn's timeline."""
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
+    async with AvatarPipe() as pipe:
         await pipe.queue(pcm(b"a", 200))
         await pipe.settle()
         await pipe.push(InterruptionFrame())
-        await pipe.avatar.on_sentence_boundary("1.1", [])
+        await pipe.queue(spoken("w", "1.1"))
         await pipe.settle()
-        assert sink.ended == ["1.1"]
-        assert sink.sentences == []
+        assert engine.ended == ["1.1"]
+        assert engine.sentences == []
 
 
-async def test_a_finished_turn_is_closed_out() -> None:
-    sink = RecordingSink()
-    async with AvatarPipe(audio_sink=sink) as pipe:
+async def test_a_finished_turn_is_closed_out(engine: RecordingEngine) -> None:
+    async with AvatarPipe() as pipe:
         await pipe.queue(pcm(b"a", 20))
         await pipe.settle()
         await pipe.push(BotStoppedSpeakingFrame())
-        assert sink.ended == ["1.1"]
+        assert engine.ended == ["1.1"]
 
 
-async def test_with_no_sink_nothing_is_accumulated_at_all() -> None:
+# ─── The degraded experience ──────────────────────────────────────────────────
+
+
+async def test_a_missing_aligner_costs_the_lipsync_and_nothing_else(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The internal API fails fast; this seat is the wrapper that catches it.
+
+    A platform we publish no wheel for must still get a working avatar — states,
+    interjections, the floor claim — with a mouth that does not move. Anything
+    that turned a missing binary into a dead call would be worse than no avatar
+    at all.
+    """
+
+    def explode(emit: Any, *, sample_rate: int) -> None:
+        raise FileNotFoundError("no avatarsync binary for sparc64")
+
+    monkeypatch.setattr("voqalize_avatar.processor.build_viseme_engine", explode)
+    async with AvatarPipe() as pipe:
+        assert pipe.drain() == ["state:IDLE"]
+        await pipe.queue(sentence("Take your time.", "1.1"), pcm(b"a", 200), spoken("time.", "1.1"))
+        await pipe.settle()
+        await pipe.push(TTSStartedFrame(context_id="1.1"), BotStartedSpeakingFrame())
+        assert pipe.drain() == ["state:TAKING_FLOOR", "interject:CLAIM_FLOOR", "speech:start"]
+
+
+async def test_with_no_engine_nothing_is_accumulated_at_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The overwhelming majority of frames on this seat are audio. With visemes
     off they must cost one isinstance check and a null test."""
+
+    def explode(emit: Any, *, sample_rate: int) -> None:
+        raise FileNotFoundError("no avatarsync binary for sparc64")
+
+    monkeypatch.setattr("voqalize_avatar.processor.build_viseme_engine", explode)
     async with AvatarPipe() as pipe:
-        await pipe.queue(pcm(b"a", 200))
-        await pipe.avatar.on_sentence_boundary("1.1", [("w", 0.0)])
+        await pipe.queue(pcm(b"a", 200), spoken("w", "1.1"))
         await pipe.settle()
-        assert pipe.avatar.audio_sink is None
-        assert not [
-            f for f in pipe.downstream.frames if type(f).__name__ == "SentenceBoundaryFrame"
-        ]
+        assert pipe.avatar._audio.pending("1.1") == 0
 
 
 # ─── Silence ──────────────────────────────────────────────────────────────────

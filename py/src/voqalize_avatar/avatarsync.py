@@ -130,22 +130,18 @@ _BUNDLE_DIR = Path(__file__).resolve().parent / "_native"
 class RhubarbPaths:
     """Where the binary and its 56 MB model tree live.
 
-    **Almost nobody should construct one of these.** The platform wheel carries
-    the binary and its model tree inside the package, so `build_viseme_engine`
-    finds them with no argument at all and the native half has no configuration
-    surface. That is the point: a client developer installs one package and gets
-    lipsync.
+    **Nobody outside this package constructs one of these.** The platform wheel
+    carries the binary and its model tree, so `locate()` finds them with no
+    argument at all and the native half has no configuration surface. That is the
+    point: a client developer installs one package and gets lipsync.
 
-    This class is the escape hatch for the two cases the bundle cannot cover — a
-    deploy that unpacks the artifact somewhere of its own (`from_home`), and a
-    source checkout of this repo, where the binary is built rather than installed
-    (`discover`). Both are explicit, because a library that goes looking on its
-    own has an input its caller can neither see nor override.
+    `from_home` and `discover` exist for the one case the bundle cannot cover —
+    a source checkout of this repo, where the binary is built rather than
+    installed.
 
-    **Nothing here reads the environment**, for the same reason. Two engines in
-    one interpreter could not disagree about where the binary is, and the failure
-    mode when a variable is absent is silence rather than an error at the call
-    site.
+    **Nothing here reads the environment.** Two engines in one interpreter could
+    not disagree about where the binary is, and the failure mode when a variable
+    is absent is silence rather than an error at the call site.
     """
 
     binary: Path
@@ -153,13 +149,34 @@ class RhubarbPaths:
     weights: Path | None = None
 
     @classmethod
+    def locate(cls) -> RhubarbPaths:
+        """Where the aligner is on this machine: the wheel's payload, or, failing
+        that, a source checkout of this repo.
+
+        The one entry point `build_viseme_engine` uses, and it takes no argument
+        on purpose — a client developer installs one package and gets lipsync.
+        The checkout fallback exists so this repo's own tests and demos need no
+        configuration either; from site-packages there is no `native/avatarsync`
+        above us to find, so it costs an installed application nothing but a
+        handful of `is_dir()` calls at pipeline start.
+
+        Returns paths that may not exist — `check()` is what says so, with the
+        actual missing path in the message.
+        """
+        return cls.bundled() or cls.discover() or cls._bundle_layout()
+
+    @classmethod
+    def _bundle_layout(cls) -> RhubarbPaths:
+        return cls(
+            binary=_BUNDLE_DIR / "avatarsync",
+            res_dir=_BUNDLE_DIR / "res",
+            weights=_BUNDLE_DIR / "phone_weights.json",
+        )
+
+    @classmethod
     def bundled(cls) -> RhubarbPaths | None:
         """The payload inside this wheel, or `None` on a platform we have no
-        wheel for (or an install from the sdist, which carries no binary).
-
-        `None` is not an error. It means this node runs the state channel and
-        the widget falls back to its own amplitude lipsync — worse, not broken.
-        """
+        wheel for (or an install from the sdist, which carries no binary)."""
         binary = _BUNDLE_DIR / "avatarsync"
         if not binary.is_file():
             return None
@@ -210,8 +227,8 @@ class RhubarbPaths:
         if not self.binary.is_file():
             raise RhubarbUnavailableError(
                 f"No avatarsync binary at {self.binary} (platform {platform_id()}). "
-                "Install the platform wheel for this machine, or point "
-                "build_viseme_engine at a directory that has one."
+                "Install the platform wheel for this machine — the sdist carries "
+                "no binary, and we publish no wheel for every platform."
             )
         # Some install paths lose the mode bits — a wheel unpacked by hand, a
         # `COPY` into an image, an artifact that went through a tar without
@@ -261,8 +278,9 @@ class RhubarbRuntime:
 
     `paths` is required and has no default. Any default would have to guess, and
     a guess that misses *fails at construction* — deep inside a session start,
-    which is exactly the wrong place: `wiring.py` checks the paths first so a
-    missing binary degrades the session instead of ending it.
+    which is exactly the wrong place. `RhubarbPaths.locate()` + `check()` is the
+    front door, and `visemes.build_viseme_engine` walks through it first so a
+    missing binary is a clean error before anything is constructed.
     """
 
     def __init__(
@@ -513,7 +531,7 @@ class RhubarbPool:
 
     @property
     def runtimes(self) -> list[RhubarbRuntime]:
-        """Introspection for wiring, tests and the log line. Not for dispatch."""
+        """Introspection for tests and the log line. Not for dispatch."""
         return list(self._runtimes)
 
     def _pick(self) -> RhubarbRuntime:

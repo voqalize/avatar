@@ -17,17 +17,29 @@ npm install @voqalize/avatar      # the browser half
 pip install voqalize-avatar       # the pipecat half
 ```
 
-```js
-import { createAvatar } from '@voqalize/avatar';
+```jsx
+import { Avatar } from '@voqalize/avatar';
 
-const avatar = createAvatar({ mount: '#avatar' });
-
-avatar.setState('LISTENING', { emotion: 'warm' });
-avatar.interject('MM_HMM');
-avatar.gesture('HI');                     // a hand at the frame edge, plus its face half
-avatar.setGaze('SCREEN_WORK');
-avatar.speak({ audio: audioEl, cues });   // cues: [{t: 0, v: 'D'}, ...]
+<Avatar client={pipecatClient} className="call-tile" />
 ```
+
+```python
+from voqalize_avatar import AvatarProcessor
+
+pipeline = Pipeline([..., tts, AvatarProcessor(), transport.output()])
+```
+
+That is the integration, both halves of it. The processor infers the agent's
+state from the frames already flowing past it and streams viseme letters synced
+to the audio; the component renders a face that listens, thinks, claims the
+floor, speaks and yields it. Nothing to configure, no binaries to install.
+
+Under that one component is a ~30-channel parameter mixer with a full driving
+API (`setState`, `interject`, `gesture`, `speak`, `perform`, …). It is not an
+npm entrypoint — one component is the whole public surface, deliberately, and
+[docs/removed.md](docs/removed.md) says what that cost and how to undo it. The
+rest of this README documents that machinery, because it is what you read when
+you are authoring a face or debugging a mouth.
 
 ## What's in the box
 
@@ -38,36 +50,36 @@ why this is a library rather than a product.
 
 | piece | where | what it is |
 |---|---|---|
-| the widget | `src/` → `@voqalize/avatar` | the face. Dependency-free ES modules, no build step, mounts anywhere |
-| the client | `client/` → `@voqalize/avatar/{pipecat,react}` | the dispatcher: turn clock, cue splice, React mount |
+| the widget | `src/` | the face. Dependency-free ES modules, no build step, mounts anywhere. Internal since 0.2 |
+| the client | `client/` → `@voqalize/avatar` | the dispatcher (turn clock, cue splice) and the `<Avatar>` component over it |
 | the backend | `py/` → `voqalize-avatar` (PyPI) | a pipecat `FrameProcessor` that infers state from stock frames and streams visemes |
 | the aligner | `native/avatarsync/` | the Rhubarb Lip Sync fork the backend drives — A–H letters from text *and* from audio |
 
-Browser side, three entry points:
-
-```js
-import { createAvatar, AVATAR_NAMES } from '@voqalize/avatar';         // no deps
-import { AvatarClient } from '@voqalize/avatar/pipecat';               // + pipecat client
-import { Avatar, useAvatar } from '@voqalize/avatar/react';            // + React >= 18
-```
-
-The root export is the widget itself and pulls in nothing. `/pipecat` adds
-`AvatarClient`, which anchors the turn clock and splices cue tracks; it needs
-`@pipecat-ai/client-js` only if you call `attach()`. `/react` adds a mount
-lifecycle and nothing else:
+Browser side, one entry point:
 
 ```jsx
-<Avatar client={pipecatClient} className="call-tile" />
+import { Avatar } from '@voqalize/avatar';    // peers: react >= 18, @pipecat-ai/client-js
+
+<Avatar client={pipecatClient} avatar="peep" className="call-tile" />
 ```
+
+`client` is the live `PipecatClient` (or `null` before connect); `avatar` picks
+a face and is read once, at mount. Everything else is forwarded to the mount
+`<div>`, so it sizes and styles like the tile it lives in. There is nothing to
+configure because the server already says all of it.
 
 Server side, the whole integration is one processor between your TTS and your
 output transport — see `py/` and `docs/contract-protocol.md`:
 
 ```python
-from voqalize_avatar import AvatarProcessor, AvatarStateMachine
+from voqalize_avatar import AvatarProcessor
 
-pipeline = Pipeline([..., tts, AvatarProcessor(state_machine=AvatarStateMachine()), transport.output()])
+pipeline = Pipeline([..., tts, AvatarProcessor(), transport.output()])
 ```
+
+It takes no arguments. `StartFrame` tells it the sample rate, the aligner rides
+inside the wheel, and an application that needs to say something the pipeline
+cannot infer subclasses `AvatarStateMachine` — see `py/README.md`.
 
 That much is inferred from stock pipecat frames, with no application code.
 States that depend on what your application is *doing* — a tool call that
@@ -282,21 +294,11 @@ Rough recipe if you're rolling your own:
 Latency note: alignment needs the whole audio, so for streaming TTS run it per
 sentence chunk and `pushCues()` each chunk as it completes.
 
-### Tier 3 — amplitude fallback (client-side, zero server work)
-
-Already implemented in `src/audio-fallback.js`. Attach any `MediaStream`,
-`HTMLMediaElement` or WebAudio node and it derives openness from RMS and a
-rough shape family from spectral tilt (sibilant → `B`, low-heavy → `F`/`E`,
-otherwise open vowels by level).
-
-```js
-avatar.setAudioFallback(audioElement);
-```
-
-It is not lip-sync — it's a mouth that moves plausibly with the voice. Use it
-when the viseme stream is unavailable or has fallen behind. The mixer engages it
-only when nothing better is playing, so you can leave it attached permanently as
-a safety net.
+There used to be a Tier 3: a client-side amplitude/spectral guesser
+(`setAudioFallback`) for a server that sends no cues at all. It was removed in
+0.2 — there is no such server any more, and a second, lower-fidelity mouth
+standing behind the real one mostly made a broken mouth harder to diagnose. See
+[docs/removed.md](docs/removed.md) § Amplitude lipsync.
 
 ---
 
@@ -355,12 +357,11 @@ speak. The head comes *up*, not down — a lowered head reads as yielding.
 
 Backchannels only create rapport when they are *contingent* — a nod coupled to
 the speaker's pauses reads as understanding; the same nod on a random timer
-reads as distracting (the research is unambiguous on this). Give the widget the
-user's voice and the listening engine does the rest:
+reads as distracting (the research is unambiguous on this). Tell the widget when
+the user holds the floor and the listening engine does the rest:
 
 ```js
-avatar.setUserAudio(micStreamOrElement);   // internal RMS VAD; null to detach
-avatar.setUserSpeaking(true / false);      // or run your own VAD; this wins
+avatar.setUserSpeaking(true / false);      // the server endpointer's own signal
 avatar.on('backchannel', (id) => log(id)); // every autonomous ack, announced
 ```
 
@@ -368,7 +369,9 @@ While the user holds the floor the avatar leans in a touch; at pause onsets it
 acknowledges within ~250–600ms (probability, refractory gap and nod choice all
 tuned from listening-corpus numbers — long user utterances earn the bigger
 nods). With no signal attached, the old plausible random cadence remains as the
-fallback. The server can always `interject()` explicitly; autonomous acks
+fallback. (The widget could once derive this itself with its own VAD over the
+mic stream; that raced the server's endpointer and went in 0.2 —
+[docs/removed.md](docs/removed.md) § Client-side VAD.) The server can always `interject()` explicitly; autonomous acks
 suppress themselves around it.
 
 ### Action timelines
@@ -609,11 +612,10 @@ avatar.blink(true);              // true = double blink
 avatar.setMouthGain(1.2);        // articulation: scales the viseme shapes as authored
 avatar.setGestureGain(0.8);      // scales every clip delta
 avatar.setMotionGain(0.8);       // scales the whole idle/body liveness layer
-avatar.setAudioFallback(el);     // null to detach
 avatar.setOverrides({ ... });    // direct param injection, for tuning UIs
 avatar.setOverrides(null);
 avatar.params;                   // live smoothed parameter vector (read-only)
-avatar.state / .emotion / .gaze / .speaking / .clip / .gesturing / .performing / .audioLevel
+avatar.state / .emotion / .gaze / .speaking / .clip / .gesturing / .performing
 avatar.mouthGain / .gestureGain / .motionGain / .svg / .meta
 avatar.destroy();
 ```
@@ -646,15 +648,16 @@ Events: `state` (new state name), `speakEnd`, `clipEnd` (clip id),
 | `src/interjections.js` | the 26 clips |
 | `src/hand.js` | the frame-edge hand: four gestures, placed from `META.viewBox` |
 | `src/perform.js` | the action-timeline player behind `perform()` |
-| `src/audio-fallback.js` | WebAudio amplitude/spectral lipsync |
-| `src/avatar.js` | public API, the per-frame mixer, and the `AVATARS` registry |
+| `src/avatar.js` | the driving API, the per-frame mixer, and the `AVATARS` registry |
 | `client/src/AvatarClient.ts` | the dispatcher: turn-clock anchoring and the cue splice, framework-free |
 | `client/src/useAvatar.ts` `client/src/Avatar.tsx` | the React binding — a mount lifecycle over `AvatarClient` |
+| `client/src/index.ts` | the one export: `<Avatar>` |
 | `client/src/types.ts` | the wire vocabulary in TypeScript. Kept in step with `contract-protocol.md` and `messages.py` |
 | `py/src/voqalize_avatar/` | the pipecat backend: state machine, processor, viseme engine, `avatarsync` pool |
 | `native/avatarsync/` | the Rhubarb Lip Sync fork — text leg and audio leg — plus its patch and build script |
 | `docs/contract-protocol.md` `docs/contract-avatar.md` | the two binding interface contracts |
 | `docs/design-library-split.md` | why this is a library, and what each published artifact owns |
+| `docs/removed.md` | what 0.2 deleted from the public surface, why, and how to get any of it back |
 | `docs/research-biomechanics.md` | the citations behind the motion constants |
 | `tools/` | headless render / sweep / pixel-diff CLI (dev-only dependencies) |
 | `serve.py` | the dev server — `Cache-Control: no-store`. Use this one |

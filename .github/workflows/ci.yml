@@ -59,8 +59,11 @@ jobs:
         # inside a files entry).
         run: |
           npm pack --dry-run
-          test -f client/dist/react.js
-          test -f client/dist/pipecat.js
+          test -f client/dist/index.js
+          # The one export re-exports the widget by relative path out of dist,
+          # so `src/` has to be in the tarball too or the entrypoint is a
+          # dangling import.
+          test -f src/avatar.js
 
   backend:
     name: backend (pipecat ${{ matrix.pipecat }})

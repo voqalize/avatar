@@ -140,8 +140,22 @@ These are not negotiable without a conversation.
    gesture renders exactly what it rendered before. Adding an *arm* still needs
    a conversation.
 
-## Current directives (updated 2026-08-07)
+## Current directives (updated 2026-08-08)
 
+- **The public surface is minimal on purpose, and stays that way.** 0.2 cut it
+  to **one React component** (`<Avatar client avatar>`), **one zero-argument
+  `AvatarProcessor()`**, and **six wire commands**, against this brief:
+  *"Optimize for easy integration in a pipecat application… Assume react, make
+  that your only entrypoint… We can expose more knobs and features IF we see
+  traction… Either delete or hide the features that don't meet this brief.
+  Don't pollute the public interface by adding switches / flags."* Everything
+  deleted is catalogued in [docs/removed.md](docs/removed.md) with the commands
+  to recover it from `v0.1.0` — **read that file before re-adding anything**,
+  because most entries also say what to do instead. A new option, prop or
+  constructor argument needs a real consumer asking for it, not a plausible
+  one. The two extension seams stay as they are: `AvatarControlFrame`, and
+  subclassing `AvatarStateMachine` (named on the processor as
+  `STATE_MACHINE = MyStateMachine`).
 - **New avatars follow the staged process** in contract-avatar.md § Adding a
   new avatar, grounded in `docs/research-perception.md`: a stakeholder-supplied
   reference image is the identity spec (stage 0) → distill silhouette +
@@ -184,7 +198,7 @@ face's sense of mass and gives viseme co-articulation for free. Above the
 mixer: each state carries an idle *profile* (blink rate, breath rate/amplitude,
 sway, holds, typing rhythm, glance patterns — `DEFAULT_PROFILE` in
 `src/idle.js`), a `ListeningEngine` times backchannels off the user's voice
-(`setUserAudio`/`setUserSpeaking`), and `perform()` runs server-assembled
+(`setUserSpeaking`), and `perform()` runs server-assembled
 action timelines against the audio clock. Beside the mixer rather than inside
 it: `src/hand.js`, which writes a transform on its own SVG group — no channel,
 no smoothing, timelines authored as *delivered* motion. See `README.md` for the
@@ -500,11 +514,10 @@ src/interjections.js   the 26 interjection clips
 src/hand.js            the frame-edge hand: four gestures, no rig channel, placed
                        from META.viewBox alone
 src/perform.js         action-timeline player: the composable vocabulary
-src/audio-fallback.js  WebAudio amplitude/spectral lipsync fallback
-src/avatar.js          public API + per-frame mixer + the AVATARS registry
-src/avatar.d.ts        hand-maintained types for the public surface. The widget
-                       has no compiler; written against contract-protocol.md
-package.json           @voqalize/avatar — subpaths . / ./pipecat / ./react
+src/avatar.js          the driving API + per-frame mixer + the AVATARS registry
+src/avatar.d.ts        hand-maintained types for that surface. The widget has no
+                       compiler; written against contract-protocol.md
+package.json           @voqalize/avatar — one export, client/dist/index.js
 serve.py               dev server with no-store; use this, not http.server
 LICENSE                AGPL-3.0-only; py/LICENSE is a copy, because a wheel
                        carries its own
@@ -518,7 +531,7 @@ client/src/types.ts        the wire vocabulary; twin of messages.py
 client/src/AvatarClient.ts turn-clock anchor + cue splice, framework-free
 client/src/useAvatar.ts    the React mount lifecycle
 client/src/Avatar.tsx      the call-tile component over useAvatar
-client/src/pipecat.ts client/src/react.ts   the two subpath barrels
+client/src/index.ts        the one export: <Avatar>
 client/test/           vitest: dispatcher logic + a jsdom package-boundary smoke
 client/dist/           built by `npm run build`; gitignored, published
 
@@ -539,6 +552,9 @@ native/avatarsync/     the Rhubarb Lip Sync fork: patch, src, build.sh, binaries
 py/scripts/stage_native.py  stages that payload and derives the wheel's platform
                        tag by reading the compiled binary
 
+docs/removed.md             what 0.2 cut from the public surface, and how to
+                            recover any of it from v0.1.0 (binding: read it
+                            before re-adding a knob)
 docs/contract-protocol.md   the server <-> widget contract (binding)
 docs/contract-avatar.md     the mixer <-> face contract + new-avatar recipe (binding)
 docs/design-library-split.md  why this is a library; what each artifact owns

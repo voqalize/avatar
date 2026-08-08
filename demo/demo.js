@@ -144,23 +144,6 @@ for (const v of VISEME_LETTERS) {
   $('#visemes').appendChild(b);
 }
 
-// --- mic fallback -----------------------------------------------------------
-let micOn = false;
-$('#mic').onclick = async () => {
-  if (micOn) {
-    avatar.setAudioFallback(null);
-    micOn = false; $('#mic').classList.remove('on'); $('#mic').textContent = 'Enable microphone';
-    return;
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    avatar.setAudioFallback(stream);
-    micOn = true; $('#mic').classList.add('on'); $('#mic').textContent = 'Disable microphone';
-  } catch (e) {
-    $('#mic').textContent = 'mic denied';
-  }
-};
-
 // --- user voice (hold-to-talk) ----------------------------------------------
 // Stands in for the user's mic: hold the button, release, and watch the
 // listening engine acknowledge the pause you just created.
@@ -219,11 +202,6 @@ setInterval(() => {
     }
   }
 }, 90);
-
-// mic meter
-setInterval(() => {
-  $('#micLevel').style.width = `${Math.min(100, (micOn ? avatar.audioLevel : 0) * 420)}%`;
-}, 80);
 
 // Sensible opening pose.
 avatar.setState('LISTENING', { emotion: 'warm', intensity: 0.6 });
