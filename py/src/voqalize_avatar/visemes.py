@@ -274,7 +274,7 @@ class _Turn:
     early_done: bool = False
 
 
-def build_viseme_engine(emit: EmitCues, *, sample_rate: int) -> VisemeEngine:
+def build_viseme_engine(emit: EmitCues, *, sample_rate: int, pad_ms: int = 0) -> VisemeEngine:
     """The engine, pre-warmed, leasing the worker's shared aligner pool.
 
     **Raises** `RhubarbUnavailableError` when the native aligner is not on this
@@ -287,6 +287,13 @@ def build_viseme_engine(emit: EmitCues, *, sample_rate: int) -> VisemeEngine:
     `pip install` and nothing else; a source checkout of this repo is found by
     walking up to `native/avatarsync`.
 
+    `pad_ms` is the one thing the frame stream cannot tell us: the trailing
+    silence the TTS service appends to every sentence (`INTER_SENTENCE_PAD_MS`).
+    It is a property of the service, not of the audio — the bytes are
+    indistinguishable from a speaker pausing — and getting it wrong costs a
+    turn's lipsync cumulatively, so it is `AvatarProcessor.PAD_MS` rather than
+    a guess.
+
     The runtime is a **lease on a worker-wide pool**, not a process of this
     session's own. `avatarsync` is ~86 MB of acoustic model answering requests
     that take 15-31 ms; per-session processes made memory scale with concurrency
@@ -294,7 +301,7 @@ def build_viseme_engine(emit: EmitCues, *, sample_rate: int) -> VisemeEngine:
     """
     paths = RhubarbPaths.locate()
     paths.check()
-    engine = VisemeEngine(emit, shared_pool(paths).lease(), sample_rate=sample_rate)
+    engine = VisemeEngine(emit, shared_pool(paths).lease(), sample_rate=sample_rate, pad_ms=pad_ms)
     # Spawn `avatarsync` now, in the background. Lazily started it starts on the
     # call's first sentence — ~250 ms charged to exactly the window the fast leg
     # exists to cover, so the one turn that genuinely needs predicted cues is the

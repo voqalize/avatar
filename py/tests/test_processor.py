@@ -235,8 +235,9 @@ def engine(monkeypatch: pytest.MonkeyPatch) -> RecordingEngine:
     """
     recorder = RecordingEngine()
 
-    def build(emit: Any, *, sample_rate: int) -> RecordingEngine:
+    def build(emit: Any, *, sample_rate: int, pad_ms: int = 0) -> RecordingEngine:
         recorder.sample_rate = sample_rate  # type: ignore[attr-defined]
+        recorder.pad_ms = pad_ms  # type: ignore[attr-defined]
         return recorder
 
     monkeypatch.setattr("voqalize_avatar.processor.build_viseme_engine", build)
@@ -257,6 +258,22 @@ async def test_the_engine_is_built_at_the_sample_rate_the_pipeline_declared(
     hard-coded 24 kHz would mis-measure every cue offset on a 16 kHz service."""
     async with AvatarPipe():
         assert engine.sample_rate == 24000  # type: ignore[attr-defined]
+        assert engine.pad_ms == 0  # type: ignore[attr-defined]
+
+
+async def test_a_subclass_can_declare_its_services_sentence_pad(
+    engine: RecordingEngine,
+) -> None:
+    """The other half of the configuration story, and the only number the frame
+    stream cannot supply: a sentence's trailing pad is bytes, and bytes of
+    silence look exactly like a speaker pausing. Set and then ignored it would
+    cost a turn's lipsync cumulatively, and nothing would say so."""
+
+    class Padded(AvatarProcessor):
+        PAD_MS = 250
+
+    async with AvatarPipe(cls=Padded):
+        assert engine.pad_ms == 250  # type: ignore[attr-defined]
 
 
 async def test_an_announced_sentence_reaches_the_fast_leg(engine: RecordingEngine) -> None:
