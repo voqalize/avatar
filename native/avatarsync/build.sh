@@ -40,6 +40,17 @@ for arg in "$@"; do
 	esac
 done
 
+# --- sha256, wherever we are running ------------------------------------------
+# macOS ships `shasum` and no `sha256sum`; the manylinux images ship
+# `sha256sum` and no perl, hence no `shasum`. Both print `<hash>  <name>`, but
+# this script's own output must not depend on which one is installed, so the
+# hash lines are re-spaced before they are hashed again.
+if command -v sha256sum >/dev/null 2>&1; then
+	SHA256SUM="sha256sum"
+else
+	SHA256SUM="shasum -a 256"
+fi
+
 # --- the compile-input hash ---------------------------------------------------
 # Everything that gets baked INTO the binary, and nothing else: the sources we
 # add, the patch we apply to upstream, and this script (which chooses the
@@ -56,11 +67,12 @@ done
 # Defined here rather than in build-rhubarb.sh so there is exactly one
 # definition: two copies of a hash that must agree would eventually disagree,
 # and the failure mode is a deploy that refuses to run for no real reason.
-# Relative to $HERE (shasum echoes the path it is handed) and shasum-only, so
-# the value depends on the bytes and nothing about the host.
+# Relative to $HERE (the tool echoes the path it is handed), sorted, and
+# re-spaced, so the value depends on the bytes and nothing about the host.
 recipe_hash() {
 	(cd "$HERE" && find src patches build.sh -type f -print0 \
-		| sort -z | xargs -0 shasum -a 256) | shasum -a 256 | cut -c1-12
+		| sort -z | xargs -0 $SHA256SUM | awk '{print $1, $2}') \
+		| $SHA256SUM | cut -c1-12
 }
 
 if [ "$recipe_id" = 1 ]; then
@@ -91,11 +103,7 @@ if [ ! -f "$TARBALL" ]; then
 	mv "$TARBALL.tmp" "$TARBALL"
 fi
 
-if command -v sha256sum >/dev/null 2>&1; then
-	actual="$(sha256sum "$TARBALL" | cut -d' ' -f1)"
-else
-	actual="$(shasum -a 256 "$TARBALL" | cut -d' ' -f1)"
-fi
+actual="$($SHA256SUM "$TARBALL" | cut -d' ' -f1)"
 if [ "$actual" != "$SHA256" ]; then
 	echo "ERROR: sha256 mismatch for $TARBALL" >&2
 	echo "  expected $SHA256" >&2
