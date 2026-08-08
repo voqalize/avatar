@@ -43,15 +43,16 @@ jobs:
           - id: darwin-arm64
             runner: macos-14
             container: ""
-          # macos-13 was the Intel image and was retired on 2025-12-04; a job
-          # asking for it now queues forever rather than failing. `macos-15-intel`
-          # is the replacement and is scheduled to go away in August 2027, after
-          # which GitHub hosts no x86-64 macOS at all. When it does, this row
-          # becomes a cross-compile from the arm64 runner (-DCMAKE_OSX_ARCHITECTURES)
-          # with no way to smoke-test the result, or it goes away with the runner.
-          - id: darwin-x64
-            runner: macos-15-intel
-            container: ""
+          # No darwin-x64 row, and the reason is upstream rather than ours. Our
+          # aligner builds and runs fine on Intel macOS — the row was here, on
+          # macos-15-intel, and got as far as a staged wheel. What fails is
+          # installing it: pipecat-ai requires onnxruntime, which publishes no
+          # macOS x86-64 wheel at all (its only mac tag is macosx_14_0_arm64). So
+          # `pip install voqalize-avatar` cannot resolve on an Intel mac whatever
+          # we upload, and a 44 MB wheel sitting there would only advertise
+          # support that does not exist. If onnxruntime ships Intel mac wheels
+          # again, add the row back with `runner: macos-15-intel` — that image is
+          # itself scheduled to go away in August 2027.
     steps:
       - uses: actions/checkout@v4
 

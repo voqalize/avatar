@@ -98,7 +98,7 @@ jobs:
           ls -la py/dist
           test -n "$(ls py/dist/*.tar.gz 2>/dev/null)" || { echo "::error::no sdist"; exit 1; }
           n=$(ls py/dist/*.whl | wc -l)
-          [ "$n" -ge 4 ] || { echo "::error::only $n wheels; expected one per platform"; exit 1; }
+          [ "$n" -ge 3 ] || { echo "::error::only $n wheels; expected one per platform"; exit 1; }
           ! ls py/dist/*py3-none-any.whl 2>/dev/null || { echo "::error::a pure wheel got in"; exit 1; }
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:

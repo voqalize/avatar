@@ -70,7 +70,11 @@ artifact to ship into your image.**
 | platform | wheel |
 |---|---|
 | Linux x86-64 / aarch64 | `manylinux_2_25` — RHEL 8+, Debian 10+, Ubuntu 18.04+ |
-| macOS arm64 / x86-64 | `macosx_11_0` |
+| macOS arm64 | `macosx_11_0_arm64` — macOS 11+ |
+
+Intel macOS is not on that list, and the reason is upstream: `pipecat-ai`
+requires `onnxruntime`, which publishes no macOS x86-64 wheel, so nothing that
+depends on pipecat installs there at all.
 
 Anything else installs the sdist, which carries no binary. So does an explicit
 `--no-binary`. Both are fine: `build_viseme_engine` **never raises**. A missing

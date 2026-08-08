@@ -134,8 +134,13 @@ reason the wheels are platform-specific.
 | Linux x86-64 | `py3-none-manylinux_2_25_x86_64` |
 | Linux aarch64 | `py3-none-manylinux_2_25_aarch64` |
 | macOS arm64 | `py3-none-macosx_11_0_arm64` |
-| macOS x86-64 | `py3-none-macosx_11_0_x86_64` |
 | sdist | source only; installs, runs, no visemes |
+
+There is deliberately **no Intel macOS wheel**. The aligner builds and runs there
+perfectly well; what does not work is installing the package at all, because
+`pipecat-ai` requires `onnxruntime` and onnxruntime publishes no macOS x86-64
+wheel. Uploading one would advertise a platform where `pip install` cannot
+resolve. The reasoning is in `wheels.yml` beside the row it replaced.
 
 The linux tags are *reported*, not chosen: the build runs in the
 `manylinux_2_28` image, but the binary's highest versioned glibc symbol is 2.25,
