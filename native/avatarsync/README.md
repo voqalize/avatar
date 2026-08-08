@@ -119,13 +119,12 @@ them out.
 **A dev clone needs `./build.sh --res-only` once.** The binary is committed; the
 models are not.
 
-### Rebuilding linux-x64
+### Rebuilding the linux binaries
 
-Both `bin/darwin-arm64/avatarsync` and `bin/linux-x64/avatarsync` are committed,
-so every deploy is package-only and nothing compiles in CI. `build.sh` is
+`bin/darwin-arm64`, `bin/linux-x64` and `bin/linux-arm64` are all committed, so a
+clone runs without a compiler and nothing compiles in CI. `build.sh` is
 platform-agnostic and nothing in the patch or in `avatarsync.cpp` is
-macOS-specific — a new linux binary needs a linux/amd64 *builder*, not a code
-change.
+macOS-specific — a new linux binary needs a linux *builder*, not a code change.
 
 The build deps are wider than they look, and every one of them was found the
 hard way when the mac build turned out to be leaning on Homebrew:
@@ -144,13 +143,18 @@ one workflow, so the binary a developer refreshes is the binary a user gets:
 
 ```sh
 gh workflow run wheels.yml
-gh run download <id> -n avatarsync-linux-x64 -D bin/linux-x64
+for p in linux-x64 linux-arm64 darwin-arm64; do
+  rm -f "bin/$p/avatarsync" "bin/$p/avatarsync.recipe"   # gh refuses to overwrite
+  gh run download <id> -n "avatarsync-$p" -D "bin/$p" && chmod 755 "bin/$p/avatarsync"
+done
 ```
 
 That workflow builds **inside the `manylinux_2_28` image**, not on the runner.
 The runner is Ubuntu 24.04 (glibc 2.39), and a binary built there cannot run on
 Ubuntu 22.04, Debian 12 or RHEL 9 — most of production. glibc 2.28 reaches back
-to RHEL 8 and Debian 10 and costs nothing. Boost is headers-only and ≥ 1.54, so
+to RHEL 8 and Debian 10 and costs nothing. What comes out needs *less* than
+that — the highest versioned symbol in the binary is `GLIBC_2.25`, which is the
+floor the wheel tag then reports. Boost is headers-only and ≥ 1.54, so
 AlmaLinux 8's 1.66 satisfies it; CMake comes from pip because the image's is
 older than the 3.30 that upstream's `CMP0167` policy requires.
 
