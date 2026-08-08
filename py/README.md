@@ -69,7 +69,7 @@ artifact to ship into your image.**
 
 | platform | wheel |
 |---|---|
-| Linux x86-64 / aarch64 | `manylinux_2_28` — RHEL 8+, Debian 10+, Ubuntu 18.10+ |
+| Linux x86-64 / aarch64 | `manylinux_2_25` — RHEL 8+, Debian 10+, Ubuntu 18.04+ |
 | macOS arm64 / x86-64 | `macosx_11_0` |
 
 Anything else installs the sdist, which carries no binary. So does an explicit

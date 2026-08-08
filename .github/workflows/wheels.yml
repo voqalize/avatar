@@ -43,8 +43,14 @@ jobs:
           - id: darwin-arm64
             runner: macos-14
             container: ""
+          # macos-13 was the Intel image and was retired on 2025-12-04; a job
+          # asking for it now queues forever rather than failing. `macos-15-intel`
+          # is the replacement and is scheduled to go away in August 2027, after
+          # which GitHub hosts no x86-64 macOS at all. When it does, this row
+          # becomes a cross-compile from the arm64 runner (-DCMAKE_OSX_ARCHITECTURES)
+          # with no way to smoke-test the result, or it goes away with the runner.
           - id: darwin-x64
-            runner: macos-13
+            runner: macos-15-intel
             container: ""
     steps:
       - uses: actions/checkout@v4
@@ -127,7 +133,12 @@ jobs:
       - name: install the wheel and run lipsync from it
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          uv venv /tmp/verify
+          # Pinned, because an unpinned `uv venv` takes whatever interpreter the
+          # image happens to lead with — which on the aarch64 image was 3.15, for
+          # which pipecat's onnxruntime has no wheel. Our own wheel is
+          # `py3-none-<plat>` and installs on any of them; this pin is about the
+          # dependency tree the verification drags in, not about the artifact.
+          uv venv --python 3.12 /tmp/verify
           uv pip install --python /tmp/verify/bin/python py/dist/*.whl
           cd /tmp && /tmp/verify/bin/python -c '
           import asyncio, os

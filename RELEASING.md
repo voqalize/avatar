@@ -129,13 +129,18 @@ source-only sdist. `pip install voqalize-avatar` gives a working aligner with no
 path, no environment variable and no second artifact to ship. That is the whole
 reason the wheels are platform-specific.
 
-| artifact | tag |
+| artifact | tag as of the last build |
 |---|---|
-| Linux x86-64 | `py3-none-manylinux_2_28_x86_64` |
-| Linux aarch64 | `py3-none-manylinux_2_28_aarch64` |
+| Linux x86-64 | `py3-none-manylinux_2_25_x86_64` |
+| Linux aarch64 | `py3-none-manylinux_2_25_aarch64` |
 | macOS arm64 | `py3-none-macosx_11_0_arm64` |
 | macOS x86-64 | `py3-none-macosx_11_0_x86_64` |
 | sdist | source only; installs, runs, no visemes |
+
+The linux tags are *reported*, not chosen: the build runs in the
+`manylinux_2_28` image, but the binary's highest versioned glibc symbol is 2.25,
+so that is the floor it actually earned and the tag it gets. Do not edit this
+table to declare something — read it off a build.
 
 `py3-none-<platform>`: the Python is pure and the payload is not, so one wheel
 serves every supported interpreter on that platform.
