@@ -294,7 +294,17 @@ export function createAvatar(opts = {}) {
     onGaze: (g) => { gazeOverrideByClip = g; applyGaze(); },
     onBlink: () => idle.blink(),
   });
-  const backchannel = new ListeningEngine((id) => { interject(id); emit('backchannel', id); });
+  // True only while the listening engine is playing one of its OWN
+  // acknowledgements. Its acks go out through `interject()` like any other, and
+  // without this flag the engine would read its own nod as the server driving
+  // the channel and cede to itself — going silent for a whole window after
+  // every autonomous nod.
+  let selfAck = false;
+  const backchannel = new ListeningEngine((id) => {
+    selfAck = true;
+    try { interject(id); } finally { selfAck = false; }
+    emit('backchannel', id);
+  });
   const performTrack = new PerformTrack();
   // The hand is a sibling of the mixer, not a layer inside it: it writes SVG
   // directly rather than parameter channels, because a hand at the frame edge is
@@ -646,11 +656,24 @@ export function createAvatar(opts = {}) {
 
   function stopSpeaking() { speech.stop(); return api; }
 
+  // The acknowledgement family: exactly what the listening engine's own
+  // `pickAck` can produce, plus the vocal continuer. A server sending one of
+  // these is doing the engine's job, so the engine stands down (see
+  // ListeningEngine.cede). Everything else — SORRY, ONE_MOMENT, OKAY — is the
+  // agent talking rather than listening and only gets the usual short reset.
+  const ACK_IDS = new Set(['NOD_SMALL', 'NOD_SLOW', 'NOD_UP', 'BROW_ACK', 'MM_HMM']);
+  // One window of standing down. Long enough that a server acknowledging inside
+  // the 6-12/min band (one per 5-10 s) keeps the floor uncontested; short enough
+  // that a server which stops hands the listener back rather than leaving the
+  // face still for the rest of the call.
+  const CEDE_S = 12;
+
   function interject(id) {
     const c = INTERJECTIONS[id];
     if (!c) throw new Error(`unknown interjection: ${id}`);
     clip.play(c, c.audioEl);
     backchannel.reset(3.5);
+    if (!selfAck && ACK_IDS.has(id)) backchannel.cede(CEDE_S);
     return api;
   }
 

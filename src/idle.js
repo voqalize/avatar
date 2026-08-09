@@ -428,7 +428,36 @@ export class ListeningEngine {
     this._silentAt = 0;      // end of the last one
     this._pending = -1;      // scheduled contingent fire time, <0 = none
     this._midNext = 0;
+    this._cededUntil = -1e9; // the server is driving; stay quiet until then
   }
+
+  /**
+   * Stand down: the server just sent a backchannel of its own, so it is driving
+   * this channel and we are not.
+   *
+   * This exists because a server *can* now time acknowledgements better than we
+   * can. Our engine reads a coarse speaking flag; a server that endpoints the
+   * audio knows the pause length and the terminal pitch contour, and low-flat
+   * terminal pitch is the measured invitation cue we have no way to see. Two
+   * engines both firing on the same pause is not twice as attentive — it is
+   * double the rate, straight out of the 6-12/min band that separates a good
+   * listener from an annoying one, and the extra nods are the *worse-informed*
+   * ones.
+   *
+   * Ceding is timed rather than latched, so it is self-healing in the direction
+   * that matters: a host that never sends backchannels is unaffected, and one
+   * that stops (a backend flag flipped, an upstream signal lost) gets its
+   * autonomous listener back after one window instead of going still for the
+   * rest of the call. Only the acknowledgement family cedes — a `SORRY` or a
+   * `ONE_MOMENT` is the agent talking, not the agent listening, and must not
+   * silence the listener for ten seconds.
+   */
+  cede(seconds) {
+    this._cededUntil = this.t + seconds;
+    this._pending = -1;
+  }
+
+  get ceded() { return this.t < this._cededUntil; }
 
   /** Push the next autonomous fire out — called on state changes and after any
    *  manual interjection, so scheduled nods never pile onto server-driven ones. */
@@ -485,7 +514,7 @@ export class ListeningEngine {
         this._silentAt = t;
         // Pause onset: the contingent backchannel moment. Half of pauses get
         // an acknowledgement; the other half, keeping still IS the answer.
-        if (this.enabled && this._hasSignal
+        if (this.enabled && this._hasSignal && !this.ceded
             && t - this.lastFireAt >= 2.5 && Math.random() < 0.5) {
           this._pending = t + 0.15 + Math.random() * 0.3;
         }
@@ -504,11 +533,12 @@ export class ListeningEngine {
         this.fire(this.pickAck('pause'));
       }
       // A long unbroken stretch of user speech earns a rare mid-speech nod.
-      if (speaking && t - this._spokeAt > 5.5 && t - this.lastFireAt > 3.5 && t >= this._midNext) {
+      if (!this.ceded
+          && speaking && t - this._spokeAt > 5.5 && t - this.lastFireAt > 3.5 && t >= this._midNext) {
         this._midNext = t + 2.6 + Math.random() * 1.8;
         if (Math.random() < 0.35) { this.lastFireAt = t; this.fire(this.pickAck('midspeech')); }
       }
-    } else if (t >= this._next) {
+    } else if (!this.ceded && t >= this._next) {
       // No user signal was ever supplied: the loose timer, exactly as before.
       this._next = t + this.minGap + Math.random() * (this.maxGap - this.minGap);
       this.lastFireAt = t;
