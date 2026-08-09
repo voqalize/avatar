@@ -59,6 +59,50 @@ const BLINK_THRESHOLD = 0.45; // shift magnitude that triggers a gaze-evoked bli
 const HEAD_ACCEL = 4.0; // units/s² — sets both launch and braking firmness
 const HEAD_SPEED = 0.9; // units/s — cruise cap; only long swings ever reach it
 
+/**
+ * Aversion profiles: a brief, deliberate break of eye contact that returns to
+ * whatever the gaze target already was.
+ *
+ * This exists because *holding* the user's eyes is not the attentive pose it
+ * looks like. Wang & Gratch (CHI 2010, n=133) ran the condition directly: a
+ * virtual listener that simply stares rated no better than one that visibly
+ * ignored the user (rapport 3.49 vs 3.34, n.s.), was rated the most *tense* of
+ * the three conditions, and raised the speaker's own disfluency rate to
+ * 36.75/min against 22.44 for a responsive listener. All three were rated
+ * equally natural, so it is not an animation-quality artefact. Rossano supplies
+ * the mechanism — sustained mutual gaze is a *demand for more talk*, not a
+ * signal of attention (95% of sequences expanded when both parties kept looking;
+ * 84% closed when both withdrew) — and Binetti (N=498) puts preferred mutual
+ * gaze at 3295 ± 706 ms, which is well short of forever.
+ *
+ * The other wall is just as hard: sustained *aversion* is an ostracism cue, and
+ * measured on an animated character (Chotpitayasunondh & Douglas, N=128) it
+ * costs η²ₚ = .52–.56 with post-hoc d of 1.09–2.69, with partial inattention
+ * costing most of what total inattention costs. So this is not "look away
+ * sometimes" — it is a narrow band, and the numbers below are Andrist's measured
+ * ones rather than a taste call (docs/research-biomechanics.md §4.2).
+ *
+ * `every`/`dur` are seconds. `dirs` are unit-ish directions weighted by how
+ * often each is taken; magnitude is scaled per-fire.
+ */
+export const AVERSION = {
+  // While listening: 1.14 s (SD 0.27) every 7.21 s (SD 1.88), 57.5% sideways.
+  // Sideways dominates because down reads as submission and up reads as
+  // exasperation on a face this schematic.
+  LISTEN: {
+    every: [5.3, 9.1],
+    dur: [0.85, 1.45],
+    mag: [0.30, 0.44],
+    dirs: [[-1, 0.06], [-1, 0.06], [1, 0.02], [1, 0.02], [-0.7, -0.5], [0.5, 0.35]],
+  },
+};
+// There is deliberately no THINK profile. The *cognitive* aversion — 3.54 s
+// (SD 1.26), splitting 39.3% down / 29.4% up / 31.3% side (§4.2) — is longer
+// and deeper than the listening kind, and THINKING already renders it through
+// `wander`, which moves the whole gaze target rather than nudging off it. Two
+// mechanisms producing the same look would fight; the state that thinks looks
+// away properly, and this profile is for the state that must not.
+
 export class GazeLayer {
   constructor() {
     this.target = GAZE_TARGETS.USER;
@@ -68,7 +112,66 @@ export class GazeLayer {
     this.onLargeShift = null;
     this.jitter = { x: 0, y: 0 };
     this._nextMicro = 0;
+    this._t = 0;
+    // --- aversion scheduler
+    this.aversion = null;      // one of AVERSION, or null for none
+    /** Set true when eye contact must be held: the floor is about to change
+     *  hands. Andrist prohibits intimacy-regulating aversions near utterance
+     *  end for exactly this reason — the floor is passed with mutual gaze, and
+     *  an avatar that looks away as the user finishes has just declined it. */
+    this.hold = false;
+    this._avNext = 0;
+    this._avUntil = 0;
+    this._avVec = { x: 0, y: 0 };
+    this._avAmt = 0;           // glided 0..1 so the return is a movement, not a cut
+    this._avProfileRef = undefined;
   }
+
+  /** Adopt an aversion profile (or null). Cheap to call every frame. */
+  setAversion(p) {
+    if (p === this._avProfileRef) return;
+    this._avProfileRef = p;
+    this.aversion = p || null;
+    // Re-arm rather than inherit: a state that averts must not fire the instant
+    // it is entered off a stale timestamp from one that didn't.
+    this._avNext = this._t + (p ? p.every[0] + Math.random() * (p.every[1] - p.every[0]) : 0);
+    this._avUntil = 0;
+  }
+
+  _avert(t, dt) {
+    const p = this.aversion;
+    if (!p) {
+      // Glide home even after the profile is gone, so a state change mid-look
+      // returns the eyes instead of snapping them.
+      this._avAmt = Math.max(0, this._avAmt - dt / 0.18);
+      return;
+    }
+    if (this._avUntil && t >= this._avUntil) {
+      this._avUntil = 0;
+      this._avNext = t + p.every[0] + Math.random() * (p.every[1] - p.every[0]);
+    } else if (!this._avUntil && t >= this._avNext && !this.hold) {
+      this._avUntil = t + p.dur[0] + Math.random() * (p.dur[1] - p.dur[0]);
+      const d = p.dirs[(Math.random() * p.dirs.length) | 0];
+      const m = p.mag[0] + Math.random() * (p.mag[1] - p.mag[0]);
+      this._avVec.x = d[0] * m;
+      this._avVec.y = d[1] * m;
+    }
+    // `hold` cancels an aversion already running, it does not merely postpone
+    // the next: the turn can end mid-look, and the eyes have to be back.
+    const want = this._avUntil && !this.hold ? 1 : 0;
+    // Out fast, back slightly slower. A saccade away is ballistic; the return
+    // to a face is a fraction more deliberate, and symmetric timing here is one
+    // of the things that makes a rig read as a metronome.
+    const rate = want ? dt / 0.055 : dt / 0.11;
+    this._avAmt = want
+      ? Math.min(1, this._avAmt + rate)
+      : Math.max(0, this._avAmt - rate);
+  }
+
+  /** How far off-target the eyes currently are, 0..1. The mixer reads this to
+   *  keep the trunk out of it — an aversion is eyes and a little head, never a
+   *  body turn. */
+  get averted() { return this._avAmt; }
 
   /**
    * @param {string} name  one of GAZE_NAMES
@@ -101,7 +204,11 @@ export class GazeLayer {
   }
 
   update(t, dt) {
+    this._t = t;
     this._micro(t, dt);
+    this._avert(t, dt);
+    const avx = this._avVec.x * this._avAmt;
+    const avy = this._avVec.y * this._avAmt;
 
     // Ballistic head follow: steer velocity toward "full speed at the target,
     // but never faster than can still brake to a stop within the distance
@@ -140,12 +247,18 @@ export class GazeLayer {
     const k = 1 - Math.exp(-dt / HEAD_FOLLOW_TAU);
     this.head.roll += ((this.target.roll || 0) - this.head.roll) * k;
 
-    const pupilY = this.target.py + this.jitter.y;
+    const pupilY = this.target.py + this.jitter.y + avy;
+    // The aversion rides *on top of* the ballistic follow rather than through
+    // it: it never touches `this.head`, so it cannot disturb the braking model
+    // and cannot trip the large-shift blink. The head takes only a fraction of
+    // what the eyes take — a brief look-away is an eye movement that the head
+    // barely joins, and a head that follows it fully reads as turning away.
+    const HEAD_SHARE = 0.22;
     return {
-      pupilX: this.target.px + this.jitter.x,
+      pupilX: this.target.px + this.jitter.x + avx,
       pupilY,
-      headYaw: this.head.x,
-      headPitch: this.head.y,
+      headYaw: this.head.x + avx * HEAD_SHARE,
+      headPitch: this.head.y + avy * HEAD_SHARE,
       headRoll: this.head.roll,
       // The upper lid tracks the eye vertically. Without this, looking down
       // exposes a band of sclera above the iris and the avatar looks startled.

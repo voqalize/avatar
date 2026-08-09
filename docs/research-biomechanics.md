@@ -375,18 +375,29 @@ listener."
   3. **Final lowering** — the last cycle is smaller than the trend predicts by a
      further **−0.509°**.
 
-- **Amplitude in degrees**: nods run over roughly **−3° (flexion) to +15°
-  (extension)** on the pitch axis during active listening; the motion is
-  "repeated sinusoidal oscillations along the pitch axis combined with little
-  movement along yaw and roll axes."
+- **Kinematic shape** — "repeated sinusoidal oscillations along the pitch axis
+  combined with little movement along yaw and roll axes" (attributed there to
+  Moore et al. 2005 and Kunin et al. 2007).
   ([Frontiers, *Head movement and its relation to hearing*](https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2023.1183303/full))
+
+- **Amplitude in degrees — do not treat as sourced.** The same review states
+  verbatim: "Nods naturally occur over a range of −3° (flexion) and +15°
+  (extension) on the pitch axis of rotation during active listening (Hendrikse
+  et al., 2019)." We quoted that as our amplitude bound. On checking, the full
+  text of Hendrikse et al. (2019) does not contain the claim — so the number is
+  a secondary-source assertion whose primary attribution we could not verify,
+  and it may be a citation slip in the review. Nothing in `src/` depends on it
+  (nod amplitude is authored in rig pixels via `headPitch`, which `face-core.js`
+  maps as `p.headPitch * spec.pitchPx` — pixels, not degrees, so a degree figure
+  was never directly convertible anyway). Keep it as a rough sanity range at
+  most; do not cite it as evidence for a constant.
 
 - **Nod frequency band and meaning**: "Slow nods, typically **below 1.5 Hz**,
   convey sustained attention and joint focus ... rapid nods, **exceeding 1.5 Hz**,
   signal heightened engagement or impatience."
   ([Nod (gesture) overview](https://grokipedia.com/page/Nod_(gesture)))
-  **1.5 Hz is the line between "I'm with you" and "hurry up."** Kiran should
-  almost never cross it.
+  **1.5 Hz is the line between "I'm with you" and "hurry up."** The avatar
+  should almost never cross it.
 
 - **Phase**: "Low-amplitude single nods were indeed found to happen **in phase
   with speakers' stressed syllables**."

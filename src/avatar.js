@@ -30,7 +30,7 @@ import { createFace as createPeepFace, META as peepMeta } from './face-peep.js';
 import { createFace as createWrenFace, META as wrenMeta } from './face-wren.js';
 import { createFace as createMynaFace, META as mynaMeta } from './face-myna.js';
 import { emotionPose } from './emotions.js';
-import { GazeLayer, GAZE_TARGETS } from './gaze.js';
+import { GazeLayer, GAZE_TARGETS, AVERSION } from './gaze.js';
 import { IdleLayer, ListeningEngine } from './idle.js';
 import { ClipPlayer } from './clips.js';
 import { INTERJECTIONS } from './interjections.js';
@@ -43,8 +43,14 @@ import { createHand, HAND_GESTURES } from './hand.js';
 // alone separates listening (~16/min) from thinking (~25/min) from visually
 // busy (~9/min), and it is the cheapest state signal the rig has.
 export const STATES = {
-  IDLE:               { gaze: 'USER',     emotion: 'neutral',    idle: { sway: 1.0 }, backchannel: false },
+  IDLE:               { gaze: 'USER',     emotion: 'neutral',    idle: { sway: 1.0 }, backchannel: false,
+                        aversion: 'LISTEN' },
+  // `aversion` is why this state does not stare. Continuous eye contact is not
+  // the attentive pose it looks like — it is a demand for more talk (Rossano)
+  // and it measures as *tense*, not attentive (Wang & Gratch). See AVERSION in
+  // gaze.js for the numbers; the mixer holds it off near a turn boundary.
   LISTENING:          { gaze: 'USER',     emotion: 'neutral',    backchannel: true,
+                        aversion: 'LISTEN',
                         idle: { sway: 1.0, blinkGap: [3.1, 4.2] },
                         pose: { browRaiseL: 0.06, browRaiseR: 0.06, lidL: -0.04, lidR: -0.04 } },
   // Faster, shallower breath is the measured cognitive-load signature, and the
@@ -340,6 +346,7 @@ export function createAvatar(opts = {}) {
   let slowBlinkAt = 0;
   let glanceAt = 0;
   let glanceUntil = 0;
+  let attendUntil = 0;
   let speakClock = null;
   let speakStart = 0;
 
@@ -427,6 +434,14 @@ export function createAvatar(opts = {}) {
         setGaze(gl.to);
       }
     }
+    // Aversion is a property of the state, but it is held off around a turn
+    // boundary: the floor is handed over under mutual gaze, and an avatar that
+    // looks away exactly as the user finishes has declined it. `attend` is the
+    // mixer's one-frame veto — anything that means "the user is checking
+    // whether I am with them" sets it (see api.attend).
+    gaze.setAversion(st.aversion ? AVERSION[st.aversion] : null);
+    gaze.hold = attendUntil > elapsed || clip.playing;
+
     backchannel.enabled = !!st.backchannel && !clip.playing;
     backchannel.update(dt);
     // Engagement posture: forward lean while the user holds the floor, spent
@@ -592,6 +607,41 @@ export function createAvatar(opts = {}) {
     return api;
   }
 
+  /**
+   * "The user may be checking whether I am with them — hold their eyes."
+   *
+   * This is the widget's half of the **gaze window**. In face-to-face talk a
+   * speaker periodically looks at the listener, mutual gaze is established, the
+   * listener responds inside that window, and the speaker looks away again
+   * (Bavelas, Coates & Johnson 2002) — listener responses cluster inside the
+   * window rather than being scattered across the turn. It is the single
+   * strongest predictor of *when* a backchannel is due.
+   *
+   * We cannot see the user, so we cannot observe the window opening. What a
+   * caller *can* do is name the moments that co-occur with it — a mid-turn
+   * pause, a tag question ("...right?", "you know?"), a completed clause with
+   * the turn analyzer's completion probability high, the user answering a
+   * question the bot asked. `attend(ms)` is how those arrive: for its duration
+   * the face stops averting and holds the user, which is the prerequisite for
+   * any response to be *seen*. Emitting the response itself stays a separate
+   * call — a window that opens and draws nothing is a real and common outcome
+   * (with every measured invitation cue present, humans respond to only ~30% of
+   * opportunities), and conflating the two would make the avatar answer
+   * everything.
+   *
+   * Deliberately **not on the wire yet**: there is no `attend` command in
+   * `client/src/types.ts`, so today this is reachable only from JS (the demo and
+   * the rig pages). Adding the command is a protocol change and waits for a
+   * server that has something real to key it off — see docs/contract-protocol.md.
+   *
+   * @param {number} [ms=1200] how long to hold. Binetti (N=498) puts preferred
+   *        mutual gaze at 3295 ± 706 ms, so this is a fraction of the ceiling.
+   */
+  function attend(ms = 1200) {
+    attendUntil = Math.max(attendUntil, elapsed + ms / 1000);
+    return api;
+  }
+
   function pushCues(cues) { speech.push(cues); return api; }
 
   function stopSpeaking() { speech.stop(); return api; }
@@ -691,7 +741,7 @@ export function createAvatar(opts = {}) {
   }
 
   const api = {
-    setState, setEmotion, setGaze, speak, pushCues, stopSpeaking, interject,
+    setState, setEmotion, setGaze, speak, pushCues, stopSpeaking, interject, attend,
     gesture, perform,
     /** Which hand the character gestures with: +1 the viewer's right (its own
      *  left), -1 the other. Both are anatomically real — the thumb splays away
