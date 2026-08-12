@@ -35,10 +35,7 @@ export const BEHAVIOR_STATE_IDS = Object.freeze(Object.keys(BEHAVIOR_STATES));
 
 /** Library action IDs. These are broader and more readable than the wire. */
 export const BEHAVIOR_ACTIONS = Object.freeze({
-  'ack.continue': { renderAction: 'ACK_CONTINUE' },
   'ack.receive': { renderAction: 'ACK_RECEIVE' },
-  'ack.realize': { renderAction: 'ACK_REALIZE' },
-  'ack.empathy': { renderAction: 'ACK_EMPATHIZE' },
   'ack.nod': { renderAction: 'ACK_NOD' },
   'turn.interrupted': { renderAction: 'RESPONSE_INTERRUPTED' },
   'gesture.greet': { renderAction: 'GESTURE_GREET' },
@@ -72,10 +69,7 @@ export const BEHAVIOR_ACTIVITIES = Object.freeze({
 
 /** Stable, promoted wire names map into the behavior catalog here and nowhere else. */
 export const WIRE_ACTION_TO_BEHAVIOR = Object.freeze({
-  ACK_CONTINUE: 'ack.continue',
   ACK_RECEIVE: 'ack.receive',
-  ACK_REALIZE: 'ack.realize',
-  ACK_EMPATHIZE: 'ack.empathy',
   ACK_NOD: 'ack.nod',
   RESPONSE_INTERRUPTED: 'turn.interrupted',
   GESTURE_GREET: 'gesture.greet',

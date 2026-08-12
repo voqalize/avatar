@@ -18,7 +18,7 @@ import json
 from voqalize_avatar import AvatarAction, AvatarClaim, AvatarMessage
 
 ACTION_IDS = {
-    "ACK_CONTINUE", "ACK_RECEIVE", "ACK_REALIZE", "ACK_EMPATHIZE", "ACK_NOD",
+    "ACK_RECEIVE", "ACK_NOD",
     "RESPONSE_INTERRUPTED",
     "GESTURE_GREET", "GESTURE_GOODBYE", "GESTURE_APPROVE", "GESTURE_WAIT",
 }

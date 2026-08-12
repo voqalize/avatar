@@ -4,7 +4,7 @@ import { BehaviorController, BEHAVIOR_ACTION_IDS, BEHAVIOR_STATE_IDS } from "../
 import { AvatarClient, RTVI_EVENTS } from "../../client/src/AvatarClient.js";
 import type { AvatarApi } from "../../src/avatar.js";
 
-type Route = "rig-review" | "rig-visemes" | "behavior" | "wire" | "fixtures" | "connection";
+type Route = "rig/review" | "rig/visemes" | "rig/gestures" | "behavior" | "wire" | "fixtures" | "connection";
 type EventName = (typeof RTVI_EVENTS)[keyof typeof RTVI_EVENTS];
 type Listener = (...args: unknown[]) => void;
 
@@ -38,8 +38,9 @@ interface StudioApi {
 
 const STORAGE_KEY = "voqalize.avatar-studio.connection.v1";
 const routes: Array<{ id: Route; label: string; description: string }> = [
-  { id: "rig-review", label: "Rig review", description: "Parameters + extremes" },
-  { id: "rig-visemes", label: "Rig visemes", description: "Shapes + transitions" },
+  { id: "rig/review", label: "Rig review", description: "Parameters + extremes" },
+  { id: "rig/visemes", label: "Rig visemes", description: "Shapes + transitions" },
+  { id: "rig/gestures", label: "Gesture review", description: "Hand-frame filmstrips" },
   { id: "behavior", label: "Behavior", description: "States + actions" },
   { id: "wire", label: "Wire Lab", description: "Protocol + lifecycle" },
   { id: "fixtures", label: "Fixtures", description: "Audio + visemes" },
@@ -53,6 +54,9 @@ const sampleCues: Cue[] = [
   { t: 460, v: "E", i: 0.85 }, { t: 690, v: "X" },
 ];
 
+// Kept beside the Studio instead of importing a second JS implementation into
+// TypeScript. This is intentionally the public, full-intensity shape table;
+// the live mixer continues to use `shapeFor()` for every actual utterance.
 const visemeShapes: Record<string, Record<string, number>> = {
   X: { mouthOpen: .02, mouthWidth: .42, mouthRound: .10, mouthPress: .15, mouthTuck: 0, teethUpper: 0, tongue: 0, jaw: .014 },
   A: { mouthOpen: 0, mouthWidth: .40, mouthRound: .18, mouthPress: .55, mouthTuck: 0, teethUpper: 0, tongue: 0, jaw: 0 },
@@ -78,8 +82,11 @@ class EventBus {
 }
 
 function routeFromHash(): Route {
-  const candidate = window.location.hash.replace(/^#\/?/, "") as Route;
-  return routes.some((route) => route.id === candidate) ? candidate : "rig-review";
+  const raw = window.location.hash.replace(/^#\/?/, "");
+  // Studio shipped briefly with hyphenated rig routes. Keep old bookmarks
+  // working, but make the route hierarchy visible in URLs and documentation.
+  const candidate = (raw === "rig-review" ? "rig/review" : raw === "rig-visemes" ? "rig/visemes" : raw === "rig-gestures" ? "rig/gestures" : raw) as Route;
+  return routes.some((route) => route.id === candidate) ? candidate : "rig/review";
 }
 
 function useRoute(): [Route, (route: Route) => void] {
@@ -205,8 +212,8 @@ export function App() {
 
   return <div className="studio-shell">
     <header className="topbar">
-      <div><strong>Avatar Studio</strong><span>SVG runtime workbench</span></div>
-      <label className="avatar-select">Avatar
+      <div><strong>Avatar Studio</strong><span>Avatar authoring and integration workbench</span></div>
+      <label className="avatar-select"><span>Avatar under review</span>
         <select value={avatarName} onChange={(event) => setAvatarName(event.target.value)}>
           {AVATAR_NAMES.map((name) => <option key={name}>{name}</option>)}
         </select>
@@ -219,8 +226,9 @@ export function App() {
       <div className="nav-foot">Production envelope<br /><code>{"{ type: 'avatar' }"}</code></div>
     </aside>
     <main className="workspace">
-      {route === "rig-review" && <RigReviewRoute {...api} />}
-      {route === "rig-visemes" && <RigVisemesRoute {...api} />}
+      {route === "rig/review" && <RigReviewRoute {...api} avatarName={avatarName} />}
+      {route === "rig/visemes" && <RigVisemesRoute {...api} avatarName={avatarName} />}
+      {route === "rig/gestures" && <RigGesturesRoute {...api} avatarName={avatarName} />}
       {route === "behavior" && <BehaviorRoute {...api} />}
       {route === "wire" && <WireRoute {...api} />}
       {route === "fixtures" && <FixturesRoute {...api} />}
@@ -244,10 +252,41 @@ function AvatarStage({ avatarName, bus, onReady }: { avatarName: string; bus: Ev
     onReady(api, client);
     return () => { detach(); client.destroy(); api.destroy(); onReady(null, null); };
   }, [avatarName, bus, onReady]);
-  return <section className="stage"><div ref={mount} className="avatar-mount" /><div className="stage-caption">Live rig · {avatarName}</div></section>;
+  return <section className="stage"><div ref={mount} className="avatar-mount" /><div className="stage-caption">Live runtime · {avatarName}</div></section>;
 }
 
-function RigReviewRoute({ avatar, log }: Pick<StudioApi, "avatar" | "log">) {
+function RigFrame({ avatarName, pose, label }: { avatarName: string; pose: Record<string, number>; label: string }) {
+  const mount = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const api = createAvatar({ mount: mount.current!, avatar: avatarName, hand: false, manual: true, motionGain: 0 });
+    api.setOverrides(Object.keys(pose).length ? pose : null);
+    // A fixed settle gives every card the same renderer result: no idle or
+    // live clock is involved in author review.
+    for (let t = 0; t < .42; t += 1 / 60) api.step(1 / 60);
+    return () => api.destroy();
+  }, [avatarName, pose]);
+  return <figure className="rig-frame"><div ref={mount} className="rig-frame-art" /><figcaption>{label}</figcaption></figure>;
+}
+
+const gestureReviews = [
+  { id: "GESTURE_GREET", label: "Greet", duration: 1250 },
+  { id: "GESTURE_GOODBYE", label: "Farewell", duration: 1550 },
+  { id: "GESTURE_APPROVE", label: "Approve", duration: 1300 },
+  { id: "GESTURE_WAIT", label: "Wait", duration: 1700 },
+] as const;
+
+function GestureFrame({ avatarName, id, at, label }: { avatarName: string; id: string; at: number; label: string }) {
+  const mount = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const api = createAvatar({ mount: mount.current!, avatar: avatarName, hand: true, manual: true, motionGain: 0 });
+    api.action(id);
+    for (let elapsed = 0; elapsed < at / 1000; elapsed += 1 / 60) api.step(1 / 60);
+    return () => api.destroy();
+  }, [avatarName, id, at]);
+  return <figure className="rig-frame"><div ref={mount} className="rig-frame-art gesture-frame-art" /><figcaption>{label}</figcaption></figure>;
+}
+
+function RigReviewRoute({ avatar, log, avatarName }: Pick<StudioApi, "avatar" | "log"> & { avatarName: string }) {
   const extremes: Array<[string, Record<string, number>]> = [
     ["Rest", {}], ["Lids closed", { lidL: 1, lidR: 1 }], ["Squint", { squintL: 1, squintR: 1 }],
     ["Brows up", { browRaiseL: 1, browRaiseR: 1 }], ["Brows down", { browRaiseL: -1, browRaiseR: -1 }],
@@ -256,14 +295,18 @@ function RigReviewRoute({ avatar, log }: Pick<StudioApi, "avatar" | "log">) {
     ["Teeth", { mouthOpen: .5, teethUpper: 1 }], ["Tongue", { mouthOpen: .6, tongue: 1 }],
     ["Stress composite", { headPitch: .9, squintL: .9, squintR: .9, browRaiseL: -1, browRaiseR: -1, mouthOpen: .85 }],
   ];
-  return <section className="route"><h1>Rig review</h1><p className="lede">Only raw renderer controls live here. This proves a rig accepts the shared pose vector; it does not test conversational behavior or wire protocol.</p>
-    <ControlGroup title="Extreme pose review"><div className="button-grid">{extremes.map(([name, pose]) => <button key={name} disabled={!avatar} onClick={() => { avatar?.setOverrides(Object.keys(pose).length ? { ...avatar.params, ...pose } : null); log("rig frame", name); }}>{name}</button>)}</div></ControlGroup>
-    <ControlGroup title="Channel bounds"><p className="hint">Inspect the declared control surface without imposing SVG-specific metadata.</p><div className="channel-list">{Object.entries(avatar?.params ?? {}).map(([name, value]) => <span key={name}><code>{name}</code> current {value.toFixed(2)}</span>)}</div></ControlGroup>
-    <ControlGroup title="Manual frame controls"><div className="inline-controls"><button disabled={!avatar} onClick={() => avatar?.setOverrides(null)}>Clear raw frame</button><button disabled={!avatar} onClick={() => avatar?.setState("IDLE")}>Restore idle mixer</button></div></ControlGroup>
+  const [selected, setSelected] = useState("Rest");
+  return <section className="route"><h1>Rig review</h1><p className="lede">The review sheet is the author’s first gate: compare every critical extreme at once, then send one frame to the live runtime for closer inspection. These are raw renderer controls, not conversational states.</p>
+    <ControlGroup title="Extreme review sheet"><p className="hint">Look for silhouette breaks, collisions, and controls that are too subtle to read at tile size.</p><div className="rig-frame-grid">{extremes.map(([name, pose]) => <button className={`rig-frame-button ${selected === name ? "active" : ""}`} key={name} onClick={() => { setSelected(name); avatar?.setOverrides(Object.keys(pose).length ? pose : null); log("rig frame", name); }}><RigFrame avatarName={avatarName} pose={pose} label={name} /></button>)}</div></ControlGroup>
+    <ControlGroup title="Selected frame"><div className="inline-controls"><strong>{selected}</strong><button disabled={!avatar} onClick={() => avatar?.setOverrides(null)}>Clear raw frame</button><button disabled={!avatar} onClick={() => avatar?.setState("IDLE")}>Return to live idle</button></div></ControlGroup>
+    <ControlGroup title="Hand framing"><p className="hint">Hands are a first-class rig surface. These exercise the semantic hand frame plus the matching face motion; judge whether the silhouette stays readable and the hand remains attached to the body.</p><div className="button-grid compact">{[
+      ["GESTURE_GREET", "Greet"], ["GESTURE_GOODBYE", "Farewell"], ["GESTURE_APPROVE", "Approve"], ["GESTURE_WAIT", "Wait"],
+    ].map(([id, label]) => <button key={id} disabled={!avatar} onClick={() => { avatar?.setOverrides(null); avatar?.action(id); log("rig hand", id); }}>{label}<small>{id}</small></button>)}</div></ControlGroup>
+    <ControlGroup title="Control surface"><p className="hint">Live values after smoothing. This is diagnostic evidence, not a primary authoring UI.</p><div className="channel-list">{Object.entries(avatar?.params ?? {}).map(([name, value]) => <span key={name}><code>{name}</code> {value.toFixed(2)}</span>)}</div></ControlGroup>
   </section>;
 }
 
-function RigVisemesRoute({ avatar, log }: Pick<StudioApi, "avatar" | "log">) {
+function RigVisemesRoute({ avatar, log, avatarName }: Pick<StudioApi, "avatar" | "log"> & { avatarName: string }) {
   const timer = useRef<number | null>(null);
   const play = (letters: string[], dwell = 220) => {
     if (!avatar) return;
@@ -279,10 +322,21 @@ function RigVisemesRoute({ avatar, log }: Pick<StudioApi, "avatar" | "log">) {
     next();
   };
   const transitions: Array<[string, string[]]> = [["Closure", ["X", "A", "X"]], ["Open vowel", ["A", "D", "A"]], ["Rounded", ["D", "F", "B"]], ["Contacts", ["B", "G", "H"]], ["Rapid closures", ["A", "B", "A", "D", "A", "G", "A", "X"]]];
-  return <section className="route"><h1>Rig visemes</h1><p className="lede">Inspect individual articulation shapes and the transitions most likely to expose visual collisions or poor co-articulation.</p>
-    <ControlGroup title="Individual visemes"><div className="button-grid compact">{VISEME_LETTERS.map((letter) => <button key={letter} disabled={!avatar} onClick={() => play([letter], 1_500)}>{letter}</button>)}</div></ControlGroup>
+  return <section className="route"><h1>Rig visemes</h1><p className="lede">First review the complete mouth alphabet at a glance. Then run the transitions that expose weak closures, shape bleed, or poor co-articulation through the live runtime.</p>
+    <ControlGroup title="Viseme review sheet"><div className="rig-frame-grid viseme-grid">{VISEME_LETTERS.map((letter) => <button className="rig-frame-button" key={letter} disabled={!avatar} onClick={() => play([letter], 1_500)}><RigFrame avatarName={avatarName} pose={visemeShape(letter)} label={letter} /></button>)}</div></ControlGroup>
     <ControlGroup title="Curated transitions"><div className="button-grid">{transitions.map(([name, letters]) => <button key={name} disabled={!avatar} onClick={() => play([...letters])}>{name}<small>{letters.join(" → ")}</small></button>)}</div></ControlGroup>
     <ControlGroup title="Reset"><button disabled={!avatar} onClick={() => { if (timer.current) window.clearTimeout(timer.current); avatar?.setOverrides(null); }}>Clear viseme frame</button></ControlGroup>
+  </section>;
+}
+
+function RigGesturesRoute({ avatar, log, avatarName }: Pick<StudioApi, "avatar" | "log"> & { avatarName: string }) {
+  const [selected, setSelected] = useState<string>(gestureReviews[0].id);
+  const current = gestureReviews.find((gesture) => gesture.id === selected) ?? gestureReviews[0];
+  const sampleTimes = [0, .18, .36, .54, .72, .88, 1].map((progress) => Math.round(current.duration * progress));
+  return <section className="route"><h1>Gesture review</h1><p className="lede">A gesture has to survive as a sequence, not just a flattering endpoint. Review its entry, readable hold, and exit side by side before allowing it into behavior or wire controls.</p>
+    <ControlGroup title="Choose a gesture"><div className="button-grid compact">{gestureReviews.map((gesture) => <button className={selected === gesture.id ? "active" : ""} key={gesture.id} onClick={() => setSelected(gesture.id)}>{gesture.label}<small>{gesture.id}</small></button>)}</div></ControlGroup>
+    <ControlGroup title={`${current.label} · frame filmstrip`}><p className="hint">Each image is a deterministic sample from the real hand and face timelines. Look first for an instantly readable silhouette, then for finger collisions, clipping, and mouth occlusion.</p><div className="rig-frame-grid gesture-grid">{sampleTimes.map((at) => <button className="rig-frame-button" key={at} disabled={!avatar} onClick={() => { avatar?.action(current.id); log("gesture preview", `${current.id} at ${at}ms`); }}><GestureFrame avatarName={avatarName} id={current.id} at={at} label={`${at} ms`} /></button>)}</div></ControlGroup>
+    <ControlGroup title="Live playback"><div className="inline-controls"><button disabled={!avatar} onClick={() => { avatar?.action(current.id); log("gesture", current.id); }}>Play {current.label}</button><span className="hint">The live stage remains visible while this page scrolls.</span></div></ControlGroup>
   </section>;
 }
 
@@ -320,13 +374,18 @@ function WireRoute({ dispatch, emit, log }: Pick<StudioApi, "dispatch" | "emit" 
 
 function FixturesRoute({ playFixture, stopFixture, log }: Pick<StudioApi, "playFixture" | "stopFixture" | "log">) {
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
+  const [selectedId, setSelectedId] = useState("");
   const [track, setTrack] = useState("phonetic");
   const [error, setError] = useState("");
-  useEffect(() => { void fetch("/eval-clips.json").then((response) => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.json() as Promise<Fixture[]>; }).then(setFixtures).catch((reason: unknown) => setError(String(reason))); }, []);
+  useEffect(() => { void fetch("/eval-clips.json").then((response) => { if (!response.ok) throw new Error(`${response.status} ${response.statusText}`); return response.json() as Promise<Fixture[]>; }).then((items) => { setFixtures(items); setSelectedId((current) => current || items[0]?.id || ""); }).catch((reason: unknown) => setError(String(reason))); }, []);
+  const index = Math.max(0, fixtures.findIndex((fixture) => fixture.id === selectedId));
+  const selected = fixtures[index];
+  const move = (by: number) => { if (!fixtures.length) return; setSelectedId(fixtures[(index + by + fixtures.length) % fixtures.length].id); };
   return <section className="route"><h1>Fixture playback</h1><p className="lede">Checked-in audio is played through the same cue/lifecycle path as a real response. Select either generated cue track for visual comparison.</p>
-    <div className="inline-controls"><label>Cue track <select value={track} onChange={(event) => setTrack(event.target.value)}><option value="phonetic">phonetic</option><option value="sphinx">sphinx</option></select></label><button onClick={stopFixture}>Stop playback</button></div>
     {error && <p className="error">Could not load fixtures: {error}</p>}
-    <div className="fixture-list">{fixtures.map((fixture) => <article className="fixture" key={fixture.id}><div><b>{fixture.text}</b><span>{fixture.id} · {fixture.voice} · {Math.round(fixture.ms)} ms</span></div><button disabled={!fixture.tracks[track]} onClick={() => { playFixture(fixture, track); log("fixture", `${fixture.id} / ${track}`); }}>Play</button></article>)}</div>
+    {selected && <>
+      <ControlGroup title={`Fixture ${index + 1} of ${fixtures.length}`}><div className="fixture-picker"><button onClick={() => move(-1)}>Previous</button><label>Choose fixture<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>{fixtures.map((fixture, fixtureIndex) => <option value={fixture.id} key={fixture.id}>{fixtureIndex + 1}. {fixture.id}</option>)}</select></label><button onClick={() => move(1)}>Next</button></div><p className="fixture-prompt">{selected.text}</p><div className="inline-controls"><label>Cue track <select value={track} onChange={(event) => setTrack(event.target.value)}><option value="phonetic">phonetic</option><option value="sphinx">sphinx</option></select></label><button disabled={!selected.tracks[track]} onClick={() => { playFixture(selected, track); log("fixture", `${selected.id} / ${track}`); }}>Play selected</button><button onClick={stopFixture}>Stop</button></div><details className="fixture-details"><summary>Fixture details</summary><p><code>{selected.id}</code> · {selected.voice} · {Math.round(selected.ms)} ms · {selected.tracks[track]?.length ?? 0} cues</p></details></ControlGroup>
+    </>}
   </section>;
 }
 

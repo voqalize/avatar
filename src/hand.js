@@ -85,7 +85,8 @@ const SIDE_MARGIN = 8;
 // becomes ground, and the tile reads as broken before it reads as a gesture.
 // Optically correct, perceptually wrong. 2.95 puts the palm at ~0.82
 // head-widths — still clearly nearer the lens, still clearly not the subject.
-const REACH_AT_576 = 2.95;
+// Compact avatar tiles need a hand that reads as a gesture, not as the subject.
+const REACH_AT_576 = 2.40;
 
 /** The four placement numbers, derived. A host never sees these. */
 function frameOf(viewBox) {
@@ -129,17 +130,10 @@ const PALM = [
   // bottom edge, which reads as a shape RESTING ON the edge (a bag, a sheet of
   // paper) rather than one continuing past it. Widest at ~a third down from the
   // fingertips, ~65% of that at the cut, and the eye infers the arm for free.
-  [26, 300], [28, 60], [31, 16],
-  [36, -20], [41, -54],                                  // the widest band
-  [40, -86], [38, -112],                                 // ring+little, splayed
-  [35, -138], [27, -150], [18, -147],                    // DOMED tip, never pointed
-  [13, -134],            // notch floor: ~15% of finger length, and a U not a V
-  [8, -146], [1, -164], [-8, -166],                      // middle, the longest
-  [-16, -156],
-  [-20, -136],           // notch floor
-  [-25, -148], [-33, -157], [-40, -150],                 // index, domed
-  [-44, -130], [-46, -110],
-  [-47, -92],            // the thumb web — shallow, so this is a hand not a fork
+  [24, 300], [26, 58], [30, 18], [38, -18], [42, -48],
+  [39, -72], [31, -86], [21, -84],
+  [17, -104], [8, -116], [-4, -114], [-13, -102], [-16, -84],
+  [-22, -102], [-34, -111], [-46, -104], [-53, -91], [-53, -76],
   // The thumb is a CONVEX WEDGE, and that is a deletion rather than an
   // addition. An earlier thumb had a re-entrant curl in its outer contour; at
   // 130 px the hook read as a detached ear sitting beside the jaw, which was the
@@ -147,11 +141,8 @@ const PALM = [
   // this contour: it leaves the palm's outer edge, swells to a rounded pad at
   // ~40 degrees off the palm axis, and comes back. A thumb is a wedge, and a
   // wedge has two edges.
-  [-56, -99], [-65, -96], [-71, -87],
-  [-72, -75], [-65, -67],                                // the pad: broad, round
-  [-56, -58], [-49, -46],
-  [-46, -26], [-42, 4],                                  // thenar, then the taper
-  [-36, 60], [-32, 300],
+  [-68, -73], [-80, -64], [-84, -52], [-80, -40],
+  [-68, -31], [-56, -22], [-47, -5], [-41, 28], [-34, 300],
 ];
 // Where the finger information moved to. An earlier cut put the interdigital
 // valleys 50-60% of the way down the fingers, which makes a SAW: at 130 px a
@@ -167,8 +158,8 @@ const PALM = [
 // size this ships at) and at full size it reads as a scratch. Economy is not a
 // style here, it is the difference between a mark and a blemish.
 const PALM_SEPS = [
-  [[13, -130], [14, -122], [15, -113]],      // little/ring from middle
-  [[-20, -132], [-21, -124], [-21, -115]],   // middle from index
+  [[10, -94], [10, -89], [11, -84]],
+  [[-20, -94], [-21, -89], [-21, -84]],
 ];
 // The one interior mark that says PALM rather than back-of-hand — and it is the
 // THENAR crease, the arc around the ball of the thumb, not a line across the
@@ -177,7 +168,7 @@ const PALM_SEPS = [
 // rounded white form, at tile size, beside a face, reads as a MOUTH. The arc
 // runs off the bottom edge instead of ending, so nothing about it says "this
 // mark stopped here".
-const PALM_CREASE = [[-46, -80], [-41, -54], [-30, -26], [-14, -2], [-8, 14]];
+const PALM_CREASE = [[-53, -65], [-46, -47], [-34, -27], [-18, -8]];
 
 // --- dorsal: the fist, for thumbs-up ----------------------------------------
 // The back of a closed hand: an undulating top edge of metacarpal heads, and a
@@ -199,13 +190,10 @@ const PALM_CREASE = [[-46, -80], [-41, -54], [-30, -26], [-14, -2], [-8, 14]];
 // that is true, but by 16 units across 60 rather than by 30; the mass is 82 wide
 // against 78 visible. The two undulations survive only as inflections in it.
 const FIST = [
-  [24, 300], [26, 60], [30, 12],            // the wrist really is ~60% of a fist
-  [36, -22], [40, -46],                     // the heel, and the widest band
-  [39, -66], [30, -74], [22, -70],          // TWO undulations, not four knuckles
-  [12, -80], [-2, -86], [-14, -82],         // the larger one, index side
-  [-26, -76], [-36, -64],
-  [-42, -42], [-41, -16],
-  [-37, 60], [-34, 300],
+  [24, 300], [26, 62], [30, 20], [39, -7], [45, -31],
+  [42, -51], [31, -64], [14, -70], [-4, -69],
+  [-21, -63], [-35, -51], [-42, -31], [-40, -6],
+  [-35, 62], [-31, 300],
 ];
 // Four small knuckle bumps were drawn at the same scale and rhythm as peep's
 // hair spikes, so at 130 px the row read as a lapel zigzag continuing the
@@ -223,7 +211,7 @@ const FIST = [
 // frame cut and left the knuckle half of the fist empty. An empty top and a
 // marked bottom is upside down: the eye goes to the crest first, and finds
 // nothing there.
-const FIST_CURL = [[24, -48], [8, -58], [-8, -60], [-24, -52]];
+const FIST_CURL = [[22, -43], [7, -50], [-10, -49], [-25, -41]];
 // The thumb is a SEPARATE CLOSED SHAPE crossing the fist, which is what keeps
 // the middle-finger read dead — the first thumbs-up drawn here was rejected on
 // sight for exactly that. A glyph has tolerances and these are them:
@@ -248,12 +236,9 @@ const FIST_CURL = [[24, -48], [8, -58], [-8, -60], [-24, -52]];
 // its tip and the entire radial column reads as ONE very long digit — the
 // middle-finger silhouette, rebuilt out of correct parts.
 const FIST_THUMB = [
-  [10, -48],                                   // base, deep inside the fist's mass
-  [2, -78], [-1, -100],                        // inner edge — SHORT, and that is the point
-  [-6, -118], [-18, -128], [-31, -122],        // domed tip, and a wide dome
-  [-38, -106], [-38, -88],
-  [-36, -70], [-32, -56], [-25, -44],          // outer edge, tucking back under the crest
-  [10, -48],
+  [17, -42], [8, -61], [2, -78], [-8, -90],
+  [-21, -90], [-31, -80], [-33, -66], [-27, -52],
+  [-16, -41], [17, -42],
 ];
 // There is no thumbnail, and that is the clearest single deletion in this
 // drawing. A short curved crease near the top of the thumb, at 130 px, on a
@@ -270,11 +255,9 @@ const FIST_THUMB = [
 // meaning lives in one unambiguous silhouette rather than in notches, and where
 // it crosses the hair, value does the separating.
 const POINT = [
-  [24, 300], [26, 60], [30, 12],
-  [36, -22], [40, -46],                      // the heel, and the widest band
-  [39, -66], [30, -74], [22, -70],           // two undulations, as on FIST
-  [12, -80], [-2, -84],
-  [-8, -90],                                 // the web — a rounded corner, barely a notch
+  [24, 300], [26, 62], [30, 20], [39, -7], [44, -29],
+  [37, -49], [17, -53], [8, -66], [6, -107],
+  [0, -128], [-11, -136], [-23, -130], [-29, -116], [-29, -72],
   // The index. It once cleared the knuckles by 75 units against a visible fist
   // of 90 — anatomically defensible, and at 0.79 of a head-width it was the
   // longest single mark in the tile. Nothing that is not the face gets to be
@@ -286,15 +269,9 @@ const POINT = [
   // It tapers toward the tip and carries no joint pinch. The pinch was drawn in
   // the OUTLINE, and a wobble that small in a contour does not read as a knuckle
   // at any size — it reads as an unsteady line.
-  [-12, -106], [-15, -122],                  // inner edge
-  [-18, -136], [-25, -146], [-32, -143],     // domed tip, never pointed
-  [-35, -129], [-34, -112],                  // outer edge
-  [-36, -94],
   // The thumb, clamped across the curled fingers and showing as a lobe on the
   // flank. An index-up fist with no thumb anywhere in it is quietly impossible.
-  [-44, -76], [-47, -62], [-44, -50],
-  [-42, -38], [-41, -16],
-  [-37, 60], [-34, 300],
+  [-39, -55], [-42, -31], [-40, -6], [-35, 62], [-31, 300],
 ];
 
 // Ink weights are in ART units, sampled off peep's own marks: the torso runs
@@ -318,22 +295,22 @@ const POINT = [
 // (compose so it doesn't cross; weight hierarchy; knockout) and it is the one
 // already native to these rigs, whose head contour outweighs the brow which
 // outweighs the ear whorl.
-const W_OUTLINE = [16, 15, 9, 6, 9, 15, 17];
+const W_OUTLINE = [12, 11, 8, 6, 8, 11, 12];
 // Device 3, the knockout: a white halo that breaks the shirt's seams where the
 // hand crosses them. It is deliberately NARROW across the middle of the mark:
 // the hand's upper half sits against the background, and a white rim there would
 // turn it into a cut-out sticker. Only the tails — the part over the shirt — get
 // the full gap. Where the halo width equals the ink width it is entirely covered
 // and costs nothing, so the profile is scaled with the ink above it.
-const W_HALO = [34, 29, 13, 6, 13, 29, 35];
+const W_HALO = [26, 22, 13, 6, 13, 22, 26];
 const W_CREASE = [2, 8, 2];
 // The palm's finger separators: thick where they leave the notch floor, gone by
 // the end. This is the ear-whorl mark language, applied to a hand.
-const W_SEP = [7, 3, 0.5];
+const W_SEP = [5, 2, 0.5];
 // The fist's one interior mark. Thick-to-thin across an S, so it reads as a form
 // turning rather than as a drawn line.
 const W_CURL = [3, 9, 7, 2];
-const W_THUMB = [12, 14, 11, 8, 11, 14, 12];
+const W_THUMB = [9, 11, 9, 7, 9, 11, 9];
 
 // The shapes, and the interior marks each one carries. Interior marks carry
 // their own width profile rather than sharing one: three of them exist, they do
@@ -354,7 +331,7 @@ const SHAPES = {
   // being an empty slab.
   POINT: {
     outline: POINT,
-    marks: [{ pts: [[22, -50], [6, -58], [-10, -58]], w: W_CURL }],
+    marks: [{ pts: [[20, -42], [5, -48], [-11, -47]], w: W_CURL }],
     rings: [],
   },
 };
@@ -462,7 +439,7 @@ export const HAND_GESTURES = {
   // sits on the floor), so the fist rides the bottom edge and only the thumb is
   // up near the face.
   GESTURE_APPROVE: {
-    id: 'GESTURE_APPROVE', label: 'approve', shape: 'FIST', face: 'GESTURE_APPROVE', dur: 1300,
+    id: 'GESTURE_APPROVE', label: 'approve', shape: 'FIST', face: 'GESTURE_APPROVE', dur: 1300, sc: 0.82,
     out: [[0, 0], [160, 54], [300, 84], [1050, 84], [1300, 32]],
     dy: [[0, HIDE], [160, 174], [300, 24], [390, 42], [700, 34], [1050, 40], [1160, 120], [1300, HIDE]],
     rot: [[0, -6], [160, -2], [300, 3], [400, 0], [700, 1.5], [1000, 0], [1050, 0], [1300, -8]],
@@ -473,7 +450,7 @@ export const HAND_GESTURES = {
   // stopped clock. Held longest of the four, because it is the one gesture
   // whose job is to buy time (research-perception.md §1, latency masking).
   GESTURE_WAIT: {
-    id: 'GESTURE_WAIT', label: 'wait', shape: 'POINT', face: 'GESTURE_WAIT', dur: 1700,
+    id: 'GESTURE_WAIT', label: 'wait', shape: 'POINT', face: 'GESTURE_WAIT', dur: 1700, sc: 0.78,
     out: [[0, 0], [170, 60], [320, 96], [1400, 96], [1700, 34]],
     dy: [[0, HIDE], [170, 244], [320, 32], [410, 54], [700, 46], [1100, 53], [1400, 48], [1520, 136], [1700, HIDE]],
     rot: [[0, -7], [170, -2], [320, 2], [420, 0], [800, 1], [1200, -0.5], [1400, 0], [1700, -9]],

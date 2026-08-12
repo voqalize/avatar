@@ -63,10 +63,7 @@ export type AvatarGazeName =
 /** The complete server-addressable action contract. Names are semantic, not
  * anatomical: a future rig may implement `ACK_NOD` without a literal nod. */
 export type AvatarActionId =
-  | "ACK_CONTINUE"
   | "ACK_RECEIVE"
-  | "ACK_REALIZE"
-  | "ACK_EMPATHIZE"
   | "ACK_NOD"
   | "RESPONSE_INTERRUPTED"
   | "GESTURE_GREET"

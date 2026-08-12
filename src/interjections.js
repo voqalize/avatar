@@ -670,7 +670,7 @@ export const INTERNAL_CLIPS = CLIPS;
  * vocabulary — `ACK_NOD` is one implementation, not a promise about anatomy.
  */
 export const ACTION_IDS = Object.freeze([
-  'ACK_CONTINUE', 'ACK_RECEIVE', 'ACK_REALIZE', 'ACK_EMPATHIZE', 'ACK_NOD',
+  'ACK_RECEIVE', 'ACK_NOD',
   'RESPONSE_INTERRUPTED',
   'GESTURE_GREET', 'GESTURE_GOODBYE', 'GESTURE_APPROVE', 'GESTURE_WAIT',
 ]);

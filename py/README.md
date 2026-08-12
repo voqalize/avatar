@@ -100,7 +100,7 @@ that guessed would nod at the wrong moment.
 ```python
 from voqalize_avatar import AvatarAction, AvatarControlFrame, AvatarMessage
 
-await self.push_frame(AvatarControlFrame(message=AvatarMessage.action(AvatarAction.ACK_CONTINUE)))
+await self.push_frame(AvatarControlFrame(message=AvatarMessage.action(AvatarAction.ACK_RECEIVE)))
 ```
 
 Hand gestures ride the same seam and are never inferred — a hand in frame is an

@@ -126,7 +126,7 @@ The vocabulary contains three commands:
 
 | Family | IDs |
 |---|---|
-| Acknowledgement | `ACK_CONTINUE`, `ACK_RECEIVE`, `ACK_REALIZE`, `ACK_EMPATHIZE`, `ACK_NOD` |
+| Acknowledgement | `ACK_RECEIVE`, `ACK_NOD` |
 | System transition | `RESPONSE_INTERRUPTED` |
 | Visible gesture | `GESTURE_GREET`, `GESTURE_GOODBYE`, `GESTURE_APPROVE`, `GESTURE_WAIT` |
 

@@ -22,7 +22,7 @@ deliberate semantic actions, and TTS-context-correlated Rhubarb cues.
 The promoted action IDs stay uppercase for compatibility:
 
 ```text
-ACK_CONTINUE, ACK_RECEIVE, ACK_REALIZE, ACK_EMPATHIZE, ACK_NOD
+ACK_RECEIVE, ACK_NOD
 RESPONSE_INTERRUPTED
 GESTURE_GREET, GESTURE_GOODBYE, GESTURE_APPROVE, GESTURE_WAIT
 ```

@@ -78,10 +78,6 @@ import {
 import { taper, taperRing, region, polyD, rng } from './line-art.js';
 
 export const THEME = {
-  // Paper, not white: a pure #fff field makes the ink look printed on glass,
-  // and every Open Peeps mock sits the figure on a warm off-white.
-  bg0: '#f6f3ee',
-  bg1: '#e8e2d8',
   ink: '#1b1b1b',
   paper: '#ffffff',
   accent: '#f97415',
@@ -394,7 +390,7 @@ const POSE = {
   // widening 4 either side, against a hem that stays where it is. The
   // predecessor (a 4.2-unit rigid slide of the whole shirt) moved more pixels
   // and read as less alive, which is the entire argument for the swell.
-  breathSwell: 0.012, swellPivot: { x: CX, y: 950 },
+  breathSwell: 0.008, swellPivot: { x: CX, y: 950 },
   // Lateral trunk travel. 16 units is ~2% of the frame width — the trunk
   // re-settling is meant to be noticed peripherally and never watched.
   turnPx: 16,
@@ -621,14 +617,7 @@ function markup(id, t) {
   return `
 <svg id="${id}" viewBox="${VB.x} ${VB.y} ${VB.w} ${VB.h}" xmlns="http://www.w3.org/2000/svg"
      preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%">
-  <defs>
-    <radialGradient id="${id}-gBg" cx="50%" cy="36%" r="76%">
-      <stop offset="0%" stop-color="${t.bg0}"/><stop offset="100%" stop-color="${t.bg1}"/>
-    </radialGradient>
-    <clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath>
-  </defs>
-
-  <rect x="${VB.x}" y="${VB.y}" width="${VB.w}" height="${VB.h}" fill="url(#${id}-gBg)"/>
+  <defs><clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath></defs>
 
   <!-- The neck stays behind the skull. This explicit split is the pitch-rig
        contract: a nod can now shorten the neck and pivot the head surface

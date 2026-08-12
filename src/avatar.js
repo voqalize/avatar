@@ -44,8 +44,12 @@ import { avatarFrame, createSvgRig } from './rig.js';
 // alone separates listening (~16/min) from thinking (~25/min) from visually
 // busy (~9/min), and it is the cheapest state signal the rig has.
 export const STATES = {
-  IDLE:               { gaze: 'USER',     emotion: 'neutral',    idle: { sway: 1.0 }, engagement: false,
-                        aversion: 'LISTEN' },
+  // Idle means present but occupied with one's own quiet business. It must not
+  // compete with LISTENING's sustained user attention: the default target is
+  // away from the user and the wander only visits other non-task targets.
+  IDLE:               { gaze: 'AWAY_THINKING', emotion: 'neutral', engagement: false,
+                        idle: { sway: 0.72, blinkGap: [4.6, 6.6] },
+                        wander: { targets: ['AWAY_THINKING', 'AWAY_RIGHT', 'NOTES'], every: [3.6, 6.8] } },
   // `aversion` is why this state does not stare. Continuous eye contact is not
   // the attentive pose it looks like — it is a demand for more talk (Rossano)
   // and it measures as *tense*, not attentive (Wang & Gratch). See AVERSION in

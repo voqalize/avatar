@@ -59,10 +59,8 @@ The director composes shared rig primitives into eye-first understanding beats:
 | Host moment | Existing visual material |
 |---|---|
 | User starts speaking | `LISTENING` plus the existing engagement layer |
-| Ongoing clause | `ACK_CONTINUE`: brow/lid acknowledgement, no floor claim |
 | Meaningful completed point | `ACK_RECEIVE`: eye-softening, small mouth receipt, lean and settle |
-| New understanding | `ACK_REALIZE`: brow/lid discovery beat |
-| Emotional disclosure | `ACK_EMPATHIZE`: inner brows and soft attention, no false agreement |
+| Explicit affirmative | `ACK_NOD`: two-stroke, slight-tilt nod |
 | Tool is active | Loop: `TYPING` → `REVIEWING_SCREEN` → `TYPING` → `SEARCHING_SCREEN` |
 | Agent is about to speak | Pipecat `SPEAKING` when playout begins |
 | Agent has finished | `WAITING_FOR_USER` |

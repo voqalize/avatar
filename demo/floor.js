@@ -118,7 +118,7 @@ export class Floor {
 
   /** Fire a short acknowledgement — the "I'm still with you" beat. */
   _ack() {
-    const id = Math.random() < 0.5 ? 'ACK_CONTINUE' : 'ACK_NOD';
+    const id = Math.random() < 0.5 ? 'ACK_RECEIVE' : 'ACK_NOD';
     this.emit({ kind: 'ack', text: id, note: 'semantic action' });
     this.k.action(id);
   }

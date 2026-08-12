@@ -32,8 +32,6 @@ import {
 import { taper, taperRing, region } from './line-art.js';
 
 export const THEME = {
-  bg0: '#f6f3ee',
-  bg1: '#e8e2d8',
   ink: '#1b1b1b',
   paper: '#ffffff',
   accent: '#f97415',
@@ -224,7 +222,7 @@ const POSE = {
   // peep's breath and trunk numbers; same construction, same art units, and
   // the two characters should breathe alike. See face-peep.js for the
   // derivation.
-  breathSwell: 0.012, swellPivot: { x: CX, y: 950 },
+  breathSwell: 0.008, swellPivot: { x: CX, y: 950 },
   turnPx: 16,
   layers: LAYERS, parallax: PARALLAX,
   torsoLayers: ['body'],
@@ -348,14 +346,7 @@ function markup(id, t) {
   return `
 <svg id="${id}" viewBox="${VB.x} ${VB.y} ${VB.w} ${VB.h}" xmlns="http://www.w3.org/2000/svg"
      preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%">
-  <defs>
-    <radialGradient id="${id}-gBg" cx="50%" cy="36%" r="76%">
-      <stop offset="0%" stop-color="${t.bg0}"/><stop offset="100%" stop-color="${t.bg1}"/>
-    </radialGradient>
-    <clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath>
-  </defs>
-
-  <rect x="${VB.x}" y="${VB.y}" width="${VB.w}" height="${VB.h}" fill="url(#${id}-gBg)"/>
+  <defs><clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath></defs>
 
   <!-- head and neck. No ears: the hair band covers them (see the hair note).
        Hair underlay at head parallax, same insurance as peep's — the cloud

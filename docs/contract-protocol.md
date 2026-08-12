@@ -112,7 +112,7 @@ action set. The frontend never autonomously emits one.
 | `NOD_UP` | 1750 | realization — internal authoring study |
 | `ACK_NOD` | 1120 | two-stroke nod with a slight listening tilt; public action |
 | `BROW_ACK` | 720 | eyebrow acknowledgement, no head commitment; explicit only |
-| `ACK_CONTINUE` / `ACK_RECEIVE` / `ACK_REALIZE` / `ACK_EMPATHIZE` | 620–1180 | eye-first acknowledgement clips; public actions |
+| `ACK_RECEIVE` | 1120 | quiet eye-first receipt; public action |
 | `HEAD_SHAKE` | 1350 | firm "no" — two decaying yaw cycles (~1.5 Hz), lowered brows, mouth firmed flat. **Server-sent only**: disagreement is never autonomous |
 | `HEAD_SHAKE_SOFT` | 1700 | polite "hmm, not quite" — slower cycle-and-a-half at smaller amplitude, sympathetic head tilt, knit brows: sorry to be disagreeing. **Server-sent only**, same rule |
 | `BLINK_LONG` | 850 | deliberate ~600 ms blink + barely-there nod: "that's noted — move on". **Server-sent only, never autonomous** — it measurably shortens what the user says next, so send it as a policy decision, not a reflex |
@@ -387,7 +387,7 @@ The public `action.id` vocabulary is intentionally small and semantic:
 
 | Family | IDs |
 |---|---|
-| Acknowledgement | `ACK_CONTINUE`, `ACK_RECEIVE`, `ACK_REALIZE`, `ACK_EMPATHIZE`, `ACK_NOD` |
+| Acknowledgement | `ACK_RECEIVE`, `ACK_NOD` |
 | System transition | `RESPONSE_INTERRUPTED` |
 | Visible gesture | `GESTURE_GREET`, `GESTURE_GOODBYE`, `GESTURE_APPROVE`, `GESTURE_WAIT` |
 

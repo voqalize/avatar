@@ -241,17 +241,8 @@ function build(name) {
   // rather than from a constant, so a differently-shaped avatar is handled
   // without editing this file.
   //
-  // 1. The backdrop. peep paints a radial wash inside its viewBox; the tile
-  //    paints the same wash across the full 16:9 box, from the rig's own theme
-  //    keys. Stretching it horizontally rather than matching the drawing's
-  //    geometry exactly is deliberate: an exact match leaves a hard seam where
-  //    the svg's rect ends (the colours there are a few levels apart), while a
-  //    stretched copy diverges by the same few levels but *smoothly*, and a
-  //    smooth divergence of that size is not visible at all. No edge beats a
-  //    small edge.
-  const t = k.theme;
-  $('agentTile').style.background =
-    `radial-gradient(ellipse 76% 76% at 50% 36%, ${t.bg0}, ${t.bg1})`;
+  // 1. The host owns its visual surface. Rigs are transparent outside their
+  //    artwork, so product CSS may supply any tile colour or texture.
   // 2. The feather. `frac` is how much of the tile's width the drawing gets
   //    once it has been scaled to the tile's height — the pillarbox arithmetic,
   //    from the declared viewBox and the tile's own ratio. The fade is placed

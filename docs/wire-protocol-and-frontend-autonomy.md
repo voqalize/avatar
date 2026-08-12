@@ -20,8 +20,7 @@ command no longer exists.
 `action.id` has one compact vocabulary shared by frontend and backend:
 
 ```text
-ACK_CONTINUE       ACK_RECEIVE       ACK_REALIZE
-ACK_EMPATHIZE      ACK_NOD           RESPONSE_INTERRUPTED
+ACK_RECEIVE        ACK_NOD           RESPONSE_INTERRUPTED
 GESTURE_GREET      GESTURE_GOODBYE   GESTURE_APPROVE   GESTURE_WAIT
 ```
 

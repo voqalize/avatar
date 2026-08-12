@@ -46,9 +46,6 @@ import {
 import { taper, taperRing, region } from './line-art.js';
 
 export const THEME = {
-  // Sampled from the reference card: a warmer, creamier ground than peep's.
-  bg0: '#f2ead9',
-  bg1: '#e6d9c2',
   ink: '#191919',
   paper: '#ffffff',
   // The overshirt orange — one key, hoops use it too. ~9% duskier than the
@@ -373,7 +370,7 @@ const POSE = {
   // parallax slides like a wig.
   yawPx: 26, pitchPx: 16,
   pivot: PIVOT,
-  breathSwell: 0.012, swellPivot: { x: CX, y: 950 },
+  breathSwell: 0.008, swellPivot: { x: CX, y: 950 },
   turnPx: 16,
   layers: LAYERS, parallax: PARALLAX,
   torsoLayers: ['body'],
@@ -578,14 +575,7 @@ function markup(id, t) {
   return `
 <svg id="${id}" viewBox="${VB.x} ${VB.y} ${VB.w} ${VB.h}" xmlns="http://www.w3.org/2000/svg"
      preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%">
-  <defs>
-    <radialGradient id="${id}-gBg" cx="50%" cy="36%" r="76%">
-      <stop offset="0%" stop-color="${t.bg0}"/><stop offset="100%" stop-color="${t.bg1}"/>
-    </radialGradient>
-    <clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath>
-  </defs>
-
-  <rect x="${VB.x}" y="${VB.y}" width="${VB.w}" height="${VB.h}" fill="url(#${id}-gBg)"/>
+  <defs><clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath></defs>
 
   <!-- head and neck; hair underlay at head parallax is the anti-sliver
        insurance AND the backfill behind the hair-layer ears (see header). -->

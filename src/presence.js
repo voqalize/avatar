@@ -15,18 +15,14 @@ export const PRESENCE_MODES = Object.freeze([
 ]);
 
 export const ACKNOWLEDGEMENT_KINDS = Object.freeze([
-  'CONTINUER', 'RECEIPT', 'REALIZATION', 'EMPATHY',
+  'RECEIPT', 'NOD',
 ]);
 
 const ACKS = Object.freeze({
   // These are eye-first understanding beats, not VAD-driven head bobs. The
   // host chooses the semantic moment; the director gives it a readable body.
-  CONTINUER: { id: 'ACK_CONTINUE', cooldown: 2800, attendMs: 850 },
   RECEIPT: { id: 'ACK_RECEIVE', cooldown: 4200, attendMs: 1400 },
-  // Realisation is rare: spending it on every sentence destroys its meaning.
-  REALIZATION: { id: 'ACK_REALIZE', cooldown: 6500, attendMs: 1250 },
-  // Empathy holds contact and acknowledges without pretending to agree.
-  EMPATHY: { id: 'ACK_EMPATHIZE', cooldown: 4800, attendMs: 1450 },
+  NOD: { id: 'ACK_NOD', cooldown: 4200, attendMs: 1400 },
 });
 
 const MODE_STATE = Object.freeze({
@@ -110,7 +106,7 @@ export class PresenceDirector {
    * from `setUserSpeaking(false)`: not every VAD pause deserves a visible
    * reaction, whereas a clause/intent boundary often does.
    */
-  acknowledge(kind = 'CONTINUER', opts = {}) {
+  acknowledge(kind = 'RECEIPT', opts = {}) {
     const key = String(kind).toUpperCase();
     const def = ACKS[key];
     if (!def) throw new Error(`unknown acknowledgement kind: ${kind}`);

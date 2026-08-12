@@ -32,10 +32,7 @@ class AvatarClaim(StrEnum):
 class AvatarAction(StrEnum):
     """The compact, semantic server action vocabulary."""
 
-    ACK_CONTINUE = "ACK_CONTINUE"
     ACK_RECEIVE = "ACK_RECEIVE"
-    ACK_REALIZE = "ACK_REALIZE"
-    ACK_EMPATHIZE = "ACK_EMPATHIZE"
     ACK_NOD = "ACK_NOD"
     RESPONSE_INTERRUPTED = "RESPONSE_INTERRUPTED"
     GESTURE_GREET = "GESTURE_GREET"

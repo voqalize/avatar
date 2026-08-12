@@ -196,10 +196,9 @@ avatars always carry the full META.
 Palettes: there is no barrel `THEME` export — each face module owns its
 palette, and `api.theme` returns the mounted avatar's. A host needs it
 whenever it paints anything *around* the widget: every rig is drawn portrait,
-so a 16:9 call tile leaves a margin either side of the drawing, and the margin
-has to be filled with the rig's own backdrop or the tile reads as a portrait
-picture hung in a landscape frame. `demo/call.html` does exactly that — tile
-background from `theme.bg0/bg1`, plus a mask feathering the drawing's two
+so a 16:9 call tile leaves a margin either side of the drawing, and the host
+chooses that surrounding surface. `demo/call.html` does exactly that — tile
+transparent around its artwork, plus a mask feathering the drawing's two
 vertical edges, because peep's white shirt is drawn to run off its own frame
 and otherwise stops in mid-air. Reshaping the art to fit a host's box is the
 wrong fix; the widget does not control the box. peep has
