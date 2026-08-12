@@ -35,7 +35,7 @@ to the audio; the component renders a face that listens, thinks, claims the
 floor, speaks and yields it. Nothing to configure, no binaries to install.
 
 Under that one component is a ~30-channel parameter mixer with a full driving
-API (`setState`, `interject`, `gesture`, `speak`, `perform`, …). It is not an
+API (`setState`, `action`, `speak`, `perform`, …). It is not an
 npm entrypoint — one component is the whole public surface, deliberately, and
 [docs/removed.md](docs/removed.md) says what that cost and how to undo it. The
 rest of this README documents that machinery, because it is what you read when
@@ -311,7 +311,7 @@ standing behind the real one mostly made a broken mouth harder to diagnose. See
 | state | behaviour |
 |---|---|
 | `IDLE` | neutral, full idle motion |
-| `LISTENING` | slightly widened eyes, brows up a touch, ~16 blinks/min, **backchannel nods fire automatically** — timed off the user's voice when one is supplied |
+| `LISTENING` | slightly widened eyes, brows up a touch, ~16 blinks/min, engagement lean while Pipecat VAD reports user speech |
 | `THINKING` | gaze breaks away — mostly *down*, sometimes up-left — faster shallow breath, ~25 blinks/min, occasional dead-still holds |
 | `SPEAKING` | eye contact, damped idle so it doesn't fight the mouth |
 | `REVIEWING_SCREEN` | gaze wanders across screen regions on its own, leisurely |
@@ -320,7 +320,7 @@ standing behind the real one mostly made a broken mouth harder to diagnose. See
 | `CANT_HEAR` | leans right in, ear cheated toward the speaker, eyes holding contact, concentration squint. Send it when the user's audio is soft |
 | `TYPING` | gaze down into the work, task-rate blinks (~9/min), burst-pause shoulder rhythm, a brief glance up every few seconds — busy, not absent |
 | `TYPING_CHAT` | `TYPING` turned communicative: longer expectant glance-holds, a touch of apology. For when the audio channel is broken and chat is the workaround |
-| `DISTRACTED` | attention visibly elsewhere — lateral away-gaze wander, loosened sway, no backchannels |
+| `DISTRACTED` | attention visibly elsewhere — lateral away-gaze wander and loosened sway |
 | `TAKING_FLOOR` | shoulders up, lips parting, head coming up — about to speak |
 | `WANTS_IN` | the same inbreath, held and very still — "I'd like to come in" |
 | `YIELDED` | shoulders and lean dropped — interrupted, and giving way |
@@ -355,24 +355,17 @@ speak. The head comes *up*, not down — a lowered head reads as yielding.
 
 ### The user's voice
 
-Backchannels only create rapport when they are *contingent* — a nod coupled to
-the speaker's pauses reads as understanding; the same nod on a random timer
-reads as distracting (the research is unambiguous on this). Tell the widget when
-the user holds the floor and the listening engine does the rest:
+The Pipecat-aware client adapter calls `setUserSpeaking()` from the SDK's VAD
+events. It controls only a sustained engagement lean; it never creates a nod,
+brow acknowledgement or other conversational clip.
 
 ```js
-avatar.setUserSpeaking(true / false);      // the server endpointer's own signal
-avatar.on('backchannel', (id) => log(id)); // every autonomous ack, announced
+avatar.setUserSpeaking(true / false);      // Pipecat VAD truth
 ```
 
-While the user holds the floor the avatar leans in a touch; at pause onsets it
-acknowledges within ~250–600ms (probability, refractory gap and nod choice all
-tuned from listening-corpus numbers — long user utterances earn the bigger
-nods). With no signal attached, the old plausible random cadence remains as the
-fallback. (The widget could once derive this itself with its own VAD over the
-mic stream; that raced the server's endpointer and went in 0.2 —
-[docs/removed.md](docs/removed.md) § Client-side VAD.) The server can always `interject()` explicitly; autonomous acks
-suppress themselves around it.
+Every acknowledgement and nod remains an explicit backend/application
+`action()` decision. The full lifecycle mapping for LLM, function calls, TTS,
+speech and failure is [documented here](docs/pipecat-lifecycle-protocol.md).
 
 ### Action timelines
 
@@ -383,12 +376,12 @@ timed against the utterance's own audio clock —
 avatar.perform([
   { t: 0,    do: 'state',     name: 'SPEAKING' },
   { t: 900,  do: 'gaze',      name: 'SCREEN_WORK' },
-  { t: 2100, do: 'interject', id: 'NOD_SMALL' },
+  { t: 2100, do: 'action', id: 'ACK_NOD' },
   { t: 3000, do: 'emotion',   name: 'warm', i: 0.7 },
 ], { audio: audioEl });                    // clock: explicit fn > audio > elapsed
 ```
 
-Verbs: `state`, `emotion`, `gaze`, `interject`. `normalizeActions()` applies
+Verbs: `state`, `emotion`, `gaze`, `action`. `normalizeActions()` applies
 the same hygiene philosophy as `normalizeCues()` — sort, warn-and-drop
 malformed entries, never throw mid-performance. A new `perform()` replaces the
 running one; `stop()` on the returned handle cancels; `performEnd` fires when
@@ -517,70 +510,30 @@ avatar.stopSpeaking();
 avatar.on('speakEnd', () => avatar.setState('LISTENING'));
 ```
 
-`speak()` switches to `SPEAKING` and kills any in-flight spoken interjection
-first — barge-in is the normal case, not an error.
+`speak()` switches to `SPEAKING`; speech owns the mouth while audio plays.
 
 For previewing without a TTS round-trip there's `textToCues(text, { wpm })`, a
 crude grapheme guesser. It exists for the demo. Do not ship it.
 
-### Interjections
+### Semantic actions
 
-`interject(id)`. These are the real-time feedback channel — they're what makes
-the avatar feel like a listener rather than a player, so they're the part most
-worth getting right.
+`action(id)` is the complete client and wire vocabulary for one-shot motion.
+Actions are deliberately named by communication intent, rather than by an
+implementation detail such as a particular nod or hand shape:
 
-Each clip is a gesture timeline (head, brows, lids, smile) plus, where spoken, a
-hand-tuned viseme track and a **baked plausible duration**, so every clip plays
-convincingly with no audio at all.
+| family | ids |
+|---|---|
+| Acknowledgement | `ACK_CONTINUE`, `ACK_RECEIVE`, `ACK_REALIZE`, `ACK_EMPATHIZE`, `ACK_NOD` |
+| Response transition | `RESPONSE_INTERRUPTED` |
+| Visible gesture | `GESTURE_GREET`, `GESTURE_GOODBYE`, `GESTURE_APPROVE`, `GESTURE_WAIT` |
 
-**Spoken:** `MM_HMM`, `OKAY`, `YES`, `SURE`, `RIGHT`, `GOT_IT`, `I_SEE`,
-`GO_ON`, `ONE_MOMENT`, `TAKE_YOUR_TIME`, `SORRY`, `HMM`
-**Wordless:** `NOD_SMALL`, `NOD_SLOW`, `NOD_UP`, `BROW_ACK`, `HEAD_SHAKE`,
-`HEAD_SHAKE_SOFT`, `BLINK_LONG`, `WAVE`, `THUMBS_UP`, `SHRUG`, `GO_ON_ARM`
-**Floor management:** `CLAIM_FLOOR`, `YIELD_FLOOR`, `RAISE_HAND`
+Actions have no end frame: they naturally land while the factual Pipecat state
+continues beneath them. Speech owns the mouth while audio plays.
 
-The nod family follows the measured taxonomy of human listening: `NOD_SMALL`
-is the single-cycle continuer, `NOD_SLOW` the two-beat assessment (first beat
-biggest — long nods start big and decay), `NOD_UP` the realization nod with the
-upward swing, for "ah, *I see*" moments. `HEAD_SHAKE` is the firm no,
-`HEAD_SHAKE_SOFT` the sympathetic "not quite" with a head tilt — neither ever
-fires autonomously, and nor does `BLINK_LONG`, the deliberate ~600ms blink that
-tells a speaker "that's noted, move on" (it measurably shortens answers, which
-is exactly why only the server may send it).
+### Visible gestures
 
-Notes on a few, because the detail is the point:
-
-- `MM_HMM` — lips stay shut the whole way; the meaning is entirely in the nod.
-- `ONE_MOMENT` — breaks eye contact to `AWAY_RIGHT`. That break, not the words,
-  is what communicates "hold on".
-- `SORRY` — driven by `browInner` (AU1, the inner-brow lift). That single
-  channel is the whole apology.
-- `WAVE`, `THUMBS_UP`, `SHRUG`, `GO_ON_ARM`, `RAISE_HAND` — these were arm and
-  hand gestures. The rig has neither any more, and the IDs stayed because they
-  are a wire contract the server targets; each was re-authored to say the same
-  thing from the face, shoulders and torso. `WAVE` is now the eyebrow flash,
-  which is the greeting display a face makes when an arm is unavailable;
-  `THUMBS_UP` is a slow deep approving nod; `SHRUG` runs the shoulders to the
-  top of their range with the mouth corners pulled *down*, because raised
-  shoulders over a neutral mouth is a flinch rather than an "I don't know".
-
-To use your own TTS clips, attach audio and the baked track re-schedules against
-the real file's clock:
-
-```js
-import { attachAudio } from './src/avatar.js';
-attachAudio('OKAY', '/audio/agent-okay.mp3');
-```
-
-Clips ramp in over 70ms and out over 150ms, are interruptible, and a repeat of
-the clip already playing collapses rather than stacking.
-
-### Hand gestures
-
-`gesture(id)` — `HI`, `BYE`, `THUMBS_UP`, `ONE_MOMENT`. A hand rises into the
-bottom of the frame, and the matching interjection above plays with it, because
-a hand that arrives while the head sits perfectly still is not attached to
-anybody.
+The four `GESTURE_*` actions raise a hand into the bottom of the frame and pair
+it with the matching face motion.
 
 There is still no arm. The hand enters the way a webcam sees one — only fingers
 and palm ever clear the edge, the wrist never does — which is what makes it a
@@ -596,14 +549,10 @@ leaves the frame sideways. `checkHandFraming(meta)` asserts both against the
 real timelines for every registered avatar, in `sweep()`.
 
 ```js
-avatar.gesture('HI');
+avatar.action('GESTURE_GREET');
 avatar.setHandSide(-1);          // which side it enters from; +1 is the default
-avatar.gesturing;                // the id in flight, or null
-createAvatar({ mount, hand: false });   // no hand; gesture() plays the face half alone
+createAvatar({ mount, hand: false });   // no hand; action still plays its face half
 ```
-
-`gesture` is a separate verb from `interject` on the wire too — `interject('WAVE')`
-is still the face alone, so a server that upgrades gets no hand until it asks.
 
 ### Misc
 
@@ -625,7 +574,7 @@ are properties, not methods. (`meta` is the mounted avatar's descriptor — the
 call demo sizes its tile from `meta.viewBox`.)
 
 Events: `state` (new state name), `speakEnd`, `clipEnd` (clip id),
-`backchannel` (autonomous ack id), `gestureEnd` (hand gesture id), `performEnd`.
+`gestureEnd` (hand gesture id), `performEnd`.
 
 ---
 
@@ -643,10 +592,10 @@ Events: `state` (new state name), `speakEnd`, `clipEnd` (clip id),
 | `src/visemes.js` | A–H protocol, cue hygiene, audio-clock scheduling, server mapping tables |
 | `src/emotions.js` | six affect poses |
 | `src/gaze.js` | named targets, saccade + head-follow model, micro-saccades |
-| `src/idle.js` | per-state liveness profiles, the `ListeningEngine`, autonomous backchannel |
+| `src/idle.js` | per-state liveness profiles and the posture-only `ListeningEngine` |
 | `src/clips.js` | keyframe player for gesture timelines |
-| `src/interjections.js` | the 26 clips |
-| `src/hand.js` | the frame-edge hand: four gestures, placed from `META.viewBox` |
+| `src/interjections.js` | the ten semantic public actions plus private clip studies |
+| `src/hand.js` | internal frame-edge hand mechanics for the four `GESTURE_*` actions |
 | `src/perform.js` | the action-timeline player behind `perform()` |
 | `src/avatar.js` | the driving API, the per-frame mixer, and the `AVATARS` registry |
 | `client/src/AvatarClient.ts` | the dispatcher: turn-clock anchoring and the cue splice, framework-free |
@@ -656,6 +605,7 @@ Events: `state` (new state name), `speakEnd`, `clipEnd` (clip id),
 | `py/src/voqalize_avatar/` | the pipecat backend: state machine, processor, viseme engine, `avatarsync` pool |
 | `native/avatarsync/` | the Rhubarb Lip Sync fork — text leg and audio leg — plus its patch and build script |
 | `docs/contract-protocol.md` `docs/contract-avatar.md` | the two binding interface contracts |
+| `docs/pipecat-lifecycle-protocol.md` | Pipecat event ownership and default lifecycle projection |
 | `docs/design-library-split.md` | why this is a library, and what each published artifact owns |
 | `docs/removed.md` | what 0.2 deleted from the public surface, why, and how to get any of it back |
 | `docs/research-biomechanics.md` | the citations behind the motion constants |
@@ -663,7 +613,7 @@ Events: `state` (new state name), `speakEnd`, `clipEnd` (clip id),
 | `serve.py` | the dev server — `Cache-Control: no-store`. Use this one |
 | `index.html` | the full harness, driving one avatar as a host would |
 | `demo/call.html` | the Meet-style call: VAD, turn-taking, token log. The page to show people |
-| `demo/floor.js` | turn-taking — barge-in, backchannel acks, floor claim. A stand-in for the server |
+| `demo/floor.js` | turn-taking and floor claim demo controls |
 | `demo/vad.js` | mic voice activity — silero via CDN, RMS fallback |
 | `demo/perf-clips.json` `demo/perf-audio/` | 16 scripted turns the call demo plays: audio, cue tracks, gesture beats |
 | `demo/eval-clips.json` `demo/eval-audio/` | 24 clips the lipsync eval scores against |

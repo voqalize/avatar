@@ -28,7 +28,7 @@
 <script type="module">
 import { makeParams, REST, CHANNELS, TAU, RANGE, clamp, approach } from '../../src/params.js';
 import { ClipPlayer } from '../../src/clips.js';
-import { INTERJECTIONS } from '../../src/interjections.js';
+import { INTERNAL_CLIPS } from '../../src/interjections.js';
 import { AVATARS, DEFAULT_AVATAR } from '../../src/avatar.js';
 
 const q = new URLSearchParams(location.search);
@@ -36,7 +36,7 @@ const which = q.get('face') || DEFAULT_AVATAR;
 const entry = AVATARS[which];
 if (!entry) throw new Error(`no avatar "${which}" — have ${Object.keys(AVATARS)}`);
 const createFace = entry.create;
-const clip = INTERJECTIONS[q.get('clip') || 'SHRUG'];
+const clip = INTERNAL_CLIPS[q.get('clip') || 'SHRUG'];
 const N = Number(q.get('n') || 16);
 const crop = q.get('crop') ? q.get('crop').split(/[ ,]+/).map(Number) : null;
 document.title = `Avatar — ${clip.id} filmstrip`;

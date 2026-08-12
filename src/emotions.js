@@ -8,9 +8,10 @@
  */
 
 export const EMOTIONS = {
-  neutral: {
-    mouthCornerL: 0.10, mouthCornerR: 0.10,
-  },
+  // Deliberately empty: REST is genuine availability, rather than a social
+  // smile baked into every state. Positive affect belongs to a response,
+  // greeting, success beat, or explicit warm/encouraging emotion.
+  neutral: {},
   warm: {
     mouthCornerL: 0.48, mouthCornerR: 0.48,
     // A real smile squints. Without this it reads as a mask.

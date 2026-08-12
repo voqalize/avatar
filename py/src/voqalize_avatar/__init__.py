@@ -27,25 +27,17 @@ of your own to say something the pipeline cannot infer — `TYPING`,
 from .frames import AvatarControlFrame
 from .messages import (
     AVATAR_MESSAGE_TYPE,
+    AvatarAction,
+    AvatarClaim,
     AvatarMessage,
-    AvatarState,
-    Emotion,
-    Gaze,
-    HandGesture,
-    Interjection,
-    SpeechEvent,
 )
 from .processor import AvatarProcessor
 
 __all__ = [
     "AVATAR_MESSAGE_TYPE",
+    "AvatarAction",
+    "AvatarClaim",
     "AvatarControlFrame",
     "AvatarMessage",
     "AvatarProcessor",
-    "AvatarState",
-    "Emotion",
-    "Gaze",
-    "HandGesture",
-    "Interjection",
-    "SpeechEvent",
 ]

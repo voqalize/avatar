@@ -43,7 +43,7 @@
 <script type="module">
 import {
   createAvatar, AVATAR_NAMES, STATE_NAMES, EMOTION_NAMES, GAZE_NAMES,
-  INTERJECTION_IDS, HAND_GESTURE_IDS, checkHandFraming, textToCues,
+  ACTION_IDS, checkHandFraming, textToCues,
 } from '../../src/avatar.js';
 
 const stage = document.getElementById('stage');
@@ -95,8 +95,7 @@ function group(title, items, fn) {
 group('state', STATE_NAMES, (k, v) => k.setState(v));
 group('emotion', EMOTION_NAMES, (k, v) => k.setEmotion(v, 1));
 group('gaze', GAZE_NAMES, (k, v) => k.setGaze(v));
-group('interject', INTERJECTION_IDS, (k, v) => k.interject(v));
-group('gesture', HAND_GESTURE_IDS, (k, v) => k.gesture(v));
+group('action', ACTION_IDS, (k, v) => k.action(v));
 group('speech', ['speak', 'stop', 'blink'], (k, v) => {
   if (v === 'stop') return k.stopSpeaking();
   if (v === 'blink') return k.blink(true);
@@ -131,7 +130,7 @@ window.sweep = async () => {
   for (const s of STATE_NAMES)       { all((k) => k.setState(s));      await wait(90); check(`state ${s}`); }
   for (const e of EMOTION_NAMES)     { all((k) => k.setEmotion(e, 1)); await wait(90); check(`emotion ${e}`); }
   for (const g of GAZE_NAMES)        { all((k) => k.setGaze(g));       await wait(90); check(`gaze ${g}`); }
-  for (const i of INTERJECTION_IDS)  { all((k) => k.interject(i));     await wait(140); check(`interject ${i}`); }
+  for (const i of ACTION_IDS)         { all((k) => k.action(i));       await wait(180); check(`action ${i}`); }
 
   // The hand. Two things are being proved and only one of them is the mixer's.
   // Playing each gesture checks the usual invariants (its face half runs through
@@ -142,7 +141,6 @@ window.sweep = async () => {
   for (const r of rigs) {
     try { checkHandFraming(r.avatar.meta); } catch (e) { problems.push(`${r.name} ${e.message}`); }
   }
-  for (const gid of HAND_GESTURE_IDS) { all((k) => k.gesture(gid));    await wait(180); check(`gesture ${gid}`); }
   all((k) => k.setState('LISTENING'));
   await wait(2000);   // let the longest gesture leave frame before speech starts
 
@@ -155,7 +153,7 @@ window.sweep = async () => {
   log.innerHTML = ok
     ? `sweep passed — ${rigs.length} avatars x ${STATE_NAMES.length} states, `
       + `${EMOTION_NAMES.length} emotions, ${GAZE_NAMES.length} gazes, `
-      + `${INTERJECTION_IDS.length} interjections, ${HAND_GESTURE_IDS.length} hand gestures `
+      + `${ACTION_IDS.length} semantic actions `
       + `(framing asserted per avatar), plus a viseme track`
     : `<span class="bad">${problems.length} problems</span>\n` + problems.slice(0, 40).join('\n');
   return { ok, problems };

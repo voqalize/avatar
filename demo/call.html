@@ -409,10 +409,9 @@ $('btnCam').onclick = () => {
   $('btnCam').classList.toggle('off', on);
 };
 $('btnSpeak').onclick = () => floor.takeTurn();
-// `gesture`, not `interject('WAVE')`: the hand is its own verb on the wire, and
-// this is the page where a stakeholder gets to see the difference.
-$('btnGreet').onclick = () => { avatar.gesture('HI'); emit({ kind: 'clip', text: 'HI', note: 'gesture' }); };
-$('btnBye').onclick = () => { avatar.gesture('BYE'); emit({ kind: 'clip', text: 'BYE', note: 'gesture' }); };
+// Semantic gesture actions compose the hand and face as one public action.
+$('btnGreet').onclick = () => { avatar.action('GESTURE_GREET'); emit({ kind: 'clip', text: 'GREET', note: 'action' }); };
+$('btnBye').onclick = () => { avatar.action('GESTURE_GOODBYE'); emit({ kind: 'clip', text: 'GOODBYE', note: 'action' }); };
 
 // --- hold-to-talk ------------------------------------------------------------
 // Space feeds the floor machine exactly what the VAD feeds it, so barge-in, the

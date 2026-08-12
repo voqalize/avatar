@@ -1,16 +1,12 @@
 """The one frame an application pushes to drive the avatar itself.
 
-`AvatarStateMachine` infers the *base* states — listening, thinking, speaking,
-taking the floor, yielding, degraded — from frames every pipecat pipeline
-already produces. That works because those states are properties of the
-pipeline: the user's voice started, TTS claimed the floor, an error travelled
-upstream. Nothing has to be told.
+The browser infers factual states — listening, speaking, connectivity — from
+Pipecat JavaScript events. The server state machine supplies only lower-priority
+`THINKING`/`WORKING` claims and explicit actions.
 
-The rest of the vocabulary is not like that. `TYPING`, `SEARCHING_SCREEN`,
-`REVIEWING_SCREEN`, `DISTRACTED`, a deliberate `NOD_SLOW`, a `perform()`
-timeline — these are properties of what the *application* is doing, and no
-amount of frame-watching recovers them. A library that guessed would nod at the
-wrong moment, which is worse than not noding at all.
+The application still knows things a generic pipeline cannot: that a long task
+is `WORKING`, or that a deliberate `NOD_SLOW` is appropriate. A library that
+guessed would nod at the wrong moment, which is worse than not nodding at all.
 
 So the seam is explicit and it is one frame wide. Write a `FrameProcessor` in
 your own pipeline, push `AvatarControlFrame` when you know something the
@@ -22,7 +18,7 @@ anything the state machine inferred:
             await super().process_frame(frame, direction)
             if isinstance(frame, MyToolStartedFrame):
                 await self.push_frame(
-                    AvatarControlFrame(AvatarMessage.state(AvatarState.SEARCHING_SCREEN)),
+                    AvatarControlFrame(AvatarMessage.claim(AvatarClaim.WORKING)),
                     direction,
                 )
             await self.push_frame(frame, direction)
@@ -30,15 +26,9 @@ anything the state machine inferred:
 Place the bridge anywhere upstream of `AvatarProcessor` and the control frames
 arrive in pipeline order, interleaved with the inferred ones.
 
-**Precedence is arrival order, and that is a decision, not an oversight.** A
-control frame does not lock out the heuristics, carry a time-to-live, or claim
-ownership of a channel; if the state machine infers `LISTENING` a moment after
-you asked for `TYPING`, `LISTENING` wins because it happened later. A priority
-lattice is the obvious next thing to build and there is not yet a second
-consumer whose collisions would tell us what shape it should be. What the
-library owes in the meantime is that the fight be *visible* rather than
-theoretical — every emitted message carries its origin, so a collision shows up
-in the wire log instead of being reasoned about.
+The browser resolves claims below factual speech states and retires them at real
+turn boundaries so delayed server intent cannot resurface stale. Actions are
+self-completing and return to that current resolved state.
 """
 
 from __future__ import annotations
@@ -59,9 +49,8 @@ class AvatarControlFrame(DataFrame):
     instruction that overtakes the sentence it belongs to is a gesture on the
     wrong words.
 
-    Build `message` with the `AvatarMessage` classmethods — `state()`,
-    `interject()`, `gesture()`, `perform()`, `gaze` via `state(..., gaze=...)`.
-    They are the only things that know the widget's payload keys.
+    Build `message` with `AvatarMessage.claim()` or `AvatarMessage.action()`.
+    They are the only builders that know the wire payload keys.
     """
 
     message: AvatarMessage = None  # type: ignore[assignment]

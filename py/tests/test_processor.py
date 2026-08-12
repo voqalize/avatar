@@ -34,7 +34,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frameworks.rtvi import RTVIServerMessageFrame
 
-from voqalize_avatar import AVATAR_MESSAGE_TYPE, AvatarMessage, AvatarProcessor, AvatarState
+from voqalize_avatar import AVATAR_MESSAGE_TYPE, AvatarClaim, AvatarControlFrame, AvatarMessage, AvatarProcessor
 from voqalize_avatar.state_machine import AvatarStateMachine
 from voqalize_avatar.sentence_audio import EARLY_PARTIAL_BYTES
 from tests.helpers import AvatarPipe, sentence, spoken, word
@@ -63,13 +63,24 @@ async def test_the_avatar_consumes_nothing() -> None:
         assert [type(f) for f in arrived] == [type(f) for f in fed]
 
 
+async def test_a_nonstandard_tts_frame_without_context_never_invents_a_viseme_turn(
+    engine: RecordingEngine,
+) -> None:
+    """FIFO browser binding is safe only for base-TTS context ids."""
+    async with AvatarPipe() as pipe:
+        await pipe.queue(TTSAudioRawFrame(audio=b"a" * 200, sample_rate=24000, num_channels=1))
+        await pipe.settle()
+        assert pipe.avatar._audio.pending("1.1") == 0
+        assert engine.sentences == []
+
+
 async def test_the_start_frame_reaches_the_transport_before_any_avatar_message() -> None:
     """StartFrame carries the sample rates every downstream service needs; it
     cannot wait behind our bookkeeping. It is also the gate: push_frame() drops
     everything silently until the processor has seen its own start."""
     async with AvatarPipe() as pipe:
         assert isinstance(pipe.downstream.frames[0], StartFrame)
-        assert pipe.sent == ["state:IDLE"]
+        assert pipe.sent == []
 
 
 async def test_messages_travel_downstream_in_the_rtvi_server_message_shape() -> None:
@@ -78,7 +89,7 @@ async def test_messages_travel_downstream_in_the_rtvi_server_message_shape() -> 
     whose serializer can claim `RTVIServerMessageFrame` and then block on an ack
     that never comes — so upstream is a deadlock and downstream is free."""
     async with AvatarPipe() as pipe:
-        await pipe.push(UserStartedSpeakingFrame())
+        await pipe.push(AvatarControlFrame(AvatarMessage.claim(AvatarClaim.WORKING)))
         emitted = [f for f in pipe.downstream.frames if isinstance(f, RTVIServerMessageFrame)]
         assert emitted
         for frame in emitted:
@@ -91,14 +102,14 @@ async def test_messages_travel_downstream_in_the_rtvi_server_message_shape() -> 
 # ─── Out-of-band entry points ─────────────────────────────────────────────────
 
 
-async def test_client_ready_replays_the_current_state() -> None:
+async def test_client_ready_replays_the_current_server_claim() -> None:
     """The browser connects after the pipeline; without a resync it would sit
     in whatever pose it booted with."""
     async with AvatarPipe() as pipe:
-        await pipe.push(UserStartedSpeakingFrame())
+        await pipe.push(AvatarControlFrame(AvatarMessage.claim(AvatarClaim.WORKING)))
         pipe.drain()
         await pipe.avatar.on_client_ready()
-        assert pipe.sent == ["state:LISTENING"]
+        assert pipe.sent == ["claim:WORKING"]
 
 
 async def test_client_ready_before_the_start_frame_is_held_not_lost() -> None:
@@ -108,14 +119,14 @@ async def test_client_ready_before_the_start_frame_is_held_not_lost() -> None:
     anything sent before then, so the opening pose would never arrive — and the
     widget would hold whatever it booted with until the first state change.
 
-    One `state:IDLE`, not two: the held resync already announced it, so the
-    state machine's own `start()` dedups to nothing.
+        There is no synthetic idle message: the browser establishes its idle
+        pose from Pipecat `BotReady`.
     """
     async with AvatarPipe(autostart=False) as pipe:
         await pipe.avatar.on_client_ready()
         assert pipe.sent == []
         await pipe.start()
-        assert pipe.sent == ["state:IDLE"]
+        assert pipe.sent == []
         assert isinstance(pipe.downstream.frames[0], StartFrame)
 
 
@@ -124,8 +135,8 @@ async def test_send_lets_a_supervisor_override_the_heuristics() -> None:
     has to be able to say what the frame stream never implies."""
     async with AvatarPipe() as pipe:
         pipe.drain()
-        await pipe.avatar.send(AvatarMessage.state(AvatarState.REVIEWING_SCREEN))
-        assert pipe.sent == ["state:REVIEWING_SCREEN"]
+        await pipe.avatar.send(AvatarMessage.action("ACK_RECEIVE"))
+        assert pipe.sent == ["action:ACK_RECEIVE"]
 
 
 @dataclass
@@ -152,10 +163,10 @@ async def test_a_subclass_can_name_its_own_state_machine() -> None:
     async with AvatarPipe(cls=MyProcessor) as pipe:
         pipe.drain()
         await pipe.push(_MyToolCall())
-        assert pipe.drain() == ["state:THINKING"]
+        assert pipe.drain() == ["claim:WORKING"]
         # ...and everything the base machine does still happens underneath.
         await pipe.push(UserStartedSpeakingFrame())
-        assert pipe.drain() == ["state:LISTENING", "user:True"]
+        assert pipe.drain() == ["claim:None"]
 
 
 # ─── Failure ──────────────────────────────────────────────────────────────────
@@ -165,9 +176,9 @@ async def test_a_non_fatal_error_degrades_and_the_next_turn_recovers() -> None:
     async with AvatarPipe() as pipe:
         pipe.drain()
         await pipe.push(ErrorFrame(error="tts websocket dropped"))
-        assert pipe.drain() == ["state:DEGRADED"]
+        assert pipe.drain() == []
         await pipe.push(UserStartedSpeakingFrame(), UserStoppedSpeakingFrame())
-        assert pipe.drain() == ["state:LISTENING", "user:True", "user:False", "state:THINKING"]
+        assert pipe.drain() == ["claim:THINKING"]
 
 
 async def test_a_fatal_error_goes_offline_and_stays_there() -> None:
@@ -176,7 +187,7 @@ async def test_a_fatal_error_goes_offline_and_stays_there() -> None:
     async with AvatarPipe() as pipe:
         pipe.drain()
         await pipe.push(FatalErrorFrame(error="transport gone"))
-        assert pipe.drain() == ["state:OFFLINE"]
+        assert pipe.drain() == []
         await pipe.push(UserStartedSpeakingFrame(), TTSStartedFrame(context_id="1.1"))
         assert pipe.drain() == []
 
@@ -465,11 +476,11 @@ async def test_a_missing_aligner_costs_the_lipsync_and_nothing_else(
 
     monkeypatch.setattr("voqalize_avatar.processor.build_viseme_engine", explode)
     async with AvatarPipe() as pipe:
-        assert pipe.drain() == ["state:IDLE"]
+        assert pipe.drain() == []
         await pipe.queue(sentence("Take your time.", "1.1"), pcm(b"a", 200), spoken("time.", "1.1"))
         await pipe.settle()
         await pipe.push(TTSStartedFrame(context_id="1.1"), BotStartedSpeakingFrame())
-        assert pipe.drain() == ["state:TAKING_FLOOR", "interject:CLAIM_FLOOR", "speech:start"]
+        assert pipe.drain() == []
 
 
 async def test_with_no_engine_nothing_is_accumulated_at_all(
@@ -495,7 +506,7 @@ async def test_a_silent_session_says_nothing_after_idle() -> None:
     """Constraint: the avatar does nothing autonomous. Idle behaviour is the
     widget's; a server that fills silence nods at the wrong moment."""
     async with AvatarPipe() as pipe:
-        assert pipe.drain() == ["state:IDLE"]
+        assert pipe.drain() == []
         for _ in range(50):
             await pipe.push(
                 OutputAudioRawFrame(audio=b"\x00" * 320, sample_rate=16000, num_channels=1)

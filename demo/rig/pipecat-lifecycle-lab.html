@@ -1,0 +1,215 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pipecat lifecycle lab</title>
+<style>
+  :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; background:#10131b; color:#edf0f5; }
+  body { max-width:1120px; margin:0 auto; padding:24px; }
+  h1 { margin:0 0 6px; font-size:24px; } p { color:#abb5c8; line-height:1.45; max-width:850px; }
+  .layout { display:grid; grid-template-columns:minmax(300px,.9fr) minmax(360px,1.1fr); gap:20px; align-items:start; margin-top:20px; }
+  .stage { min-height:540px; background:#f3eee6; border-radius:12px; overflow:hidden; }
+  .stage svg { display:block; width:100%; height:100%; }
+  .panel { background:#181d29; border:1px solid #303c52; border-radius:12px; padding:16px; }
+  h2 { margin:0 0 10px; font-size:15px; } h3 { margin:18px 0 8px; font-size:12px; color:#abb5c8; letter-spacing:.06em; text-transform:uppercase; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; }
+  button, select { background:#24324a; color:#edf0f5; border:1px solid #415574; border-radius:8px; padding:8px 10px; font:inherit; }
+  button { cursor:pointer; } button:hover { background:#304465; }
+  .facts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+  .fact { padding:9px 10px; background:#121722; border-radius:8px; }
+  .fact dt { color:#8f9cb0; font-size:11px; text-transform:uppercase; letter-spacing:.05em; } .fact dd { margin:3px 0 0; font:600 14px ui-monospace, SFMono-Regular, Menlo, monospace; color:#dce9ff; }
+  #timeline { list-style:none; padding:0; margin:0; max-height:300px; overflow:auto; font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #timeline li { display:grid; grid-template-columns:68px 1fr; gap:8px; padding:6px 0; border-top:1px solid #293347; color:#d8dfeb; }
+  #timeline time { color:#8091ad; } #timeline .server { color:#d9b78b; } #timeline .sdk { color:#9dc6ff; }
+  #status { min-height:1.4em; color:#a9c8ff; margin:0 0 10px; }
+  @media (max-width:760px) { body { padding:16px; } .layout { grid-template-columns:1fr; } .stage { min-height:420px; } }
+</style>
+<h1>Pipecat lifecycle lab</h1>
+<p>Drives the real AvatarClient from a local Pipecat-shaped event emitter. The timeline separates standard Pipecat facts from explicit avatar server messages, so duplicate state paths and unwanted acknowledgements are visible.</p>
+<div class="layout">
+  <section class="stage" id="stage" aria-label="Live avatar"></section>
+  <section class="panel">
+    <div class="controls">
+      <label>Avatar <select id="avatar"></select></label>
+      <button id="reset">Reset</button>
+    </div>
+    <h3>Scenario traces</h3>
+    <div class="controls" id="scenarios">
+      <button data-run="normal">Normal reply</button>
+      <button data-run="streaming">Streaming reply</button>
+      <button data-run="tools">Parallel tools</button>
+      <button data-run="interrupt">Interruption</button>
+      <button data-run="failure">Failure / reconnect</button>
+      <button data-run="explicit">Explicit nod</button>
+    </div>
+    <p id="status" aria-live="polite">Ready. No acknowledgement is generated until an explicit server action is sent.</p>
+    <dl class="facts">
+      <div class="fact"><dt>Avatar state</dt><dd id="state">—</dd></div>
+      <div class="fact"><dt>User speaking</dt><dd id="user">—</dd></div>
+      <div class="fact"><dt>Speech ctx</dt><dd id="ctx">—</dd></div>
+      <div class="fact"><dt>Active clip</dt><dd id="clip">—</dd></div>
+    </dl>
+    <h3>Event timeline</h3>
+    <ol id="timeline" aria-live="polite"></ol>
+  </section>
+</div>
+<script type="module">
+  import { AVATAR_NAMES, createAvatar } from '../../src/avatar.js';
+  import { AvatarClient, RTVI_EVENTS } from '../../client/dist/AvatarClient.js';
+
+  class FakePipecatClient {
+    constructor() { this.listeners = new Map(); }
+    on(event, listener) {
+      const handlers = this.listeners.get(event) || [];
+      handlers.push(listener);
+      this.listeners.set(event, handlers);
+    }
+    off(event, listener) {
+      this.listeners.set(event, (this.listeners.get(event) || []).filter((fn) => fn !== listener));
+    }
+    emit(event, data) {
+      for (const listener of this.listeners.get(event) || []) listener(data);
+    }
+  }
+
+  const stage = document.querySelector('#stage');
+  const select = document.querySelector('#avatar');
+  const timeline = document.querySelector('#timeline');
+  const status = document.querySelector('#status');
+  const facts = {
+    state: document.querySelector('#state'),
+    user: document.querySelector('#user'),
+    ctx: document.querySelector('#ctx'),
+    clip: document.querySelector('#clip'),
+  };
+  for (const name of AVATAR_NAMES) select.add(new Option(name, name));
+
+  let avatar, controller, pipecat, stopAttach, timers = [], startedAt = performance.now();
+  const later = (ms, fn) => timers.push(setTimeout(fn, ms));
+  const clearRun = () => { timers.forEach(clearTimeout); timers = []; };
+  const elapsed = () => String(Math.round(performance.now() - startedAt)) + 'ms';
+  const refresh = () => {
+    facts.state.textContent = avatar ? avatar.state : '—';
+    facts.user.textContent = String(avatar ? avatar.userSpeaking : false);
+    facts.ctx.textContent = controller && controller.turnCtx ? controller.turnCtx : '—';
+    facts.clip.textContent = avatar && avatar.clip ? avatar.clip : '—';
+  };
+  const record = (kind, event, detail) => {
+    const row = document.createElement('li');
+    const time = document.createElement('time');
+    const text = document.createElement('span');
+    time.textContent = elapsed();
+    text.className = kind;
+    text.textContent = event + (detail ? ' · ' + detail : '');
+    row.append(time, text);
+    timeline.prepend(row);
+    refresh();
+  };
+  const sdk = (event, data) => {
+    record('sdk', event, data && data.tool_call_id ? data.tool_call_id : '');
+    pipecat.emit(event, data);
+  };
+  const server = (message) => {
+    record('server', 'avatar.' + message.cmd, message.id || message.event || message.name || message.ctx || '');
+    pipecat.emit(RTVI_EVENTS.serverMessage, message);
+  };
+
+  function mount() {
+    clearRun();
+    if (stopAttach) stopAttach();
+    if (avatar) avatar.destroy();
+    stage.replaceChildren();
+    timeline.replaceChildren();
+    startedAt = performance.now();
+    avatar = createAvatar({ mount: stage, avatar: select.value });
+    pipecat = new FakePipecatClient();
+    controller = new AvatarClient(avatar);
+    stopAttach = controller.attach(pipecat);
+    avatar.on('state', (name) => record('server', 'render.state', name));
+    avatar.on('clipEnd', (id) => record('server', 'render.clipEnd', id));
+    sdk(RTVI_EVENTS.botReady);
+    status.textContent = 'Ready. No acknowledgement is generated until an explicit server action is sent.';
+    refresh();
+  }
+
+  function normalReply() {
+    mount();
+    status.textContent = 'User speaks → server claims thinking → Pipecat playout binds buffered visemes → client listening.';
+    sdk(RTVI_EVENTS.userStartedSpeaking);
+    later(850, () => sdk(RTVI_EVENTS.userStoppedSpeaking));
+    later(900, () => server({ type:'avatar', cmd:'claim', state:'THINKING' }));
+    later(1900, () => server({ type:'avatar', cmd:'cues', ctx:'normal-1', from_ms:0, cues:[{t:0,v:'X'},{t:180,v:'B'},{t:360,v:'C'},{t:560,v:'X'}] }));
+    later(1950, () => {
+      sdk(RTVI_EVENTS.botStartedSpeaking);
+    });
+    later(2750, () => {
+      sdk(RTVI_EVENTS.botStoppedSpeaking);
+    });
+  }
+
+  function streamingReply() {
+    mount();
+    status.textContent = 'Bot playout begins while thinking is claimed; speaking must win over the claim.';
+    sdk(RTVI_EVENTS.userStartedSpeaking);
+    later(500, () => sdk(RTVI_EVENTS.userStoppedSpeaking));
+    later(650, () => server({ type:'avatar', cmd:'claim', state:'THINKING' }));
+    later(980, () => {
+      server({ type:'avatar', cmd:'cues', ctx:'stream-1', from_ms:0, cues:[{t:0,v:'X'},{t:170,v:'C'},{t:430,v:'D'},{t:640,v:'X'}] });
+      sdk(RTVI_EVENTS.botStartedSpeaking);
+    });
+    later(2200, () => {
+      sdk(RTVI_EVENTS.botStoppedSpeaking);
+    });
+  }
+
+  function parallelTools() {
+    mount();
+    status.textContent = 'Two tools overlap. The server holds WORKING until the second call ends.';
+    sdk(RTVI_EVENTS.userStartedSpeaking);
+    later(450, () => sdk(RTVI_EVENTS.userStoppedSpeaking));
+    later(600, () => server({ type:'avatar', cmd:'claim', state:'THINKING' }));
+    later(850, () => server({ type:'avatar', cmd:'claim', state:'WORKING' }));
+    later(2450, () => server({ type:'avatar', cmd:'claim', state:null }));
+  }
+
+  function interruption() {
+    mount();
+    status.textContent = 'User VAD does not override bot speech. A server-confirmed interruption action starts only after playout stops.';
+    later(120, () => {
+      server({ type:'avatar', cmd:'cues', ctx:'cut-1', from_ms:0, cues:[{t:0,v:'X'},{t:160,v:'C'},{t:420,v:'D'}] });
+      sdk(RTVI_EVENTS.botStartedSpeaking);
+    });
+    later(480, () => sdk(RTVI_EVENTS.userStartedSpeaking));
+    later(500, () => server({ type:'avatar', cmd:'action', id:'RESPONSE_INTERRUPTED' }));
+    later(560, () => sdk(RTVI_EVENTS.botStoppedSpeaking));
+  }
+
+  function failureReconnect() {
+    mount();
+    status.textContent = 'Recoverable error → degraded; disconnect → offline; bot-ready clears offline.';
+    sdk(RTVI_EVENTS.error, { data:{ fatal:false } });
+    later(900, () => sdk(RTVI_EVENTS.disconnected));
+    later(1700, () => sdk(RTVI_EVENTS.connected));
+    later(1800, () => sdk(RTVI_EVENTS.botReady));
+  }
+
+  function explicitNod() {
+    mount();
+    status.textContent = 'This is the only nod in the lab: an explicit backend action.';
+    sdk(RTVI_EVENTS.userStartedSpeaking);
+    later(700, () => server({ type:'avatar', cmd:'action', id:'ACK_NOD' }));
+    later(1450, () => sdk(RTVI_EVENTS.userStoppedSpeaking));
+  }
+
+  document.querySelector('#reset').addEventListener('click', mount);
+  select.addEventListener('change', mount);
+  document.querySelector('#scenarios').addEventListener('click', (event) => {
+    const run = event.target.closest('button').dataset.run;
+    if (run === 'normal') normalReply();
+    if (run === 'streaming') streamingReply();
+    if (run === 'tools') parallelTools();
+    if (run === 'interrupt') interruption();
+    if (run === 'failure') failureReconnect();
+    if (run === 'explicit') explicitNod();
+  });
+  mount();
+</script>

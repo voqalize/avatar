@@ -384,118 +384,35 @@ export class IdleLayer {
 }
 
 /**
- * The listening engine: backchannels and engagement posture for LISTENING.
+ * The listening engine is now deliberately posture-only.
  *
- * An agent who sits motionless while you talk feels like a recording — but the
- * fix is not more nodding. Gratch's rapport experiments showed that nod
- * *frequency* without *contingency* creates no rapport at all, and an agent
- * that acknowledges on a metronome reads as distracting
- * (docs/research-biomechanics.md §3.5). So this engine is contingent first:
- *
- *   · The server tells it about the user's voice — a coarse speaking flag
- *     (setUserSpeaking), off its own endpointer. With no signal at all the
- *     scheduler falls back to a timer, which is the weakest mode and is meant
- *     to be: contingency is the whole point.
- *   · Acknowledgements fire at PAUSE ONSETS: when the user stops talking, a
- *     nod lands 250–600 ms later, about half the time, never more often than
- *     every 2.5 s. That timing is where a human listener's nod sits.
- *   · During a long unbroken stretch of user speech a rare mid-speech nod
- *     keeps the face alive (nods fill ~26% of human listening time — we err
- *     far quieter, per the screen-share bitrate constraint).
- *   · Engagement posture: `engage` rises while the user speaks and relaxes
- *     after long silence. The mixer spends it on torsoLean — forward lean is
- *     the highest-value listening channel the rig has (§6.3).
- *
- * If the host never supplies any user signal, the old loose random timer runs
- * instead — a worse listener, but never a dead one.
+ * `setUserSpeaking()` receives Pipecat's VAD verdict through the client
+ * adapter. It may alter the sustained engagement lean, but it never chooses or
+ * fires a clip: a nod, brow acknowledgement or any other facial claim of
+ * understanding is an explicit backend/application `action()` decision.
  */
 export class ListeningEngine {
-  constructor(fire) {
-    this.fire = fire;
+  constructor() {
     this.enabled = false;
     this.t = 0;
     this.engage = 0;
-    this.lastFireAt = -1e9;
-    // --- no-signal fallback timer (the pre-contingency behaviour, verbatim)
-    this.minGap = 3.4;
-    this.maxGap = 8.0;
-    this._next = 0;
-    // --- user-signal state
     this._hasSignal = false;
-    this._explicit = null;   // server-declared flag; null = not driven
-    this._speaking = false;  // merged VAD, after hysteresis
-    this._spokeAt = -1e9;    // start of the current speech stretch
-    this._silentAt = 0;      // end of the last one
-    this._pending = -1;      // scheduled contingent fire time, <0 = none
-    this._midNext = 0;
-    this._cededUntil = -1e9; // the server is driving; stay quiet until then
+    this._explicit = null;
+    this._speaking = false;
+    this._silentAt = 0;
   }
 
-  /**
-   * Stand down: the server just sent a backchannel of its own, so it is driving
-   * this channel and we are not.
-   *
-   * This exists because a server *can* now time acknowledgements better than we
-   * can. Our engine reads a coarse speaking flag; a server that endpoints the
-   * audio knows the pause length and the terminal pitch contour, and low-flat
-   * terminal pitch is the measured invitation cue we have no way to see. Two
-   * engines both firing on the same pause is not twice as attentive — it is
-   * double the rate, straight out of the 6-12/min band that separates a good
-   * listener from an annoying one, and the extra nods are the *worse-informed*
-   * ones.
-   *
-   * Ceding is timed rather than latched, so it is self-healing in the direction
-   * that matters: a host that never sends backchannels is unaffected, and one
-   * that stops (a backend flag flipped, an upstream signal lost) gets its
-   * autonomous listener back after one window instead of going still for the
-   * rest of the call. Only the acknowledgement family cedes — a `SORRY` or a
-   * `ONE_MOMENT` is the agent talking, not the agent listening, and must not
-   * silence the listener for ten seconds.
-   */
-  cede(seconds) {
-    this._cededUntil = this.t + seconds;
-    this._pending = -1;
-  }
+  /** Compatibility no-ops retained for existing hosts that reached these
+   * internals indirectly. With no autonomous clips there is nothing to reset
+   * or cede. */
+  cede() {}
+  get ceded() { return false; }
+  reset() {}
 
-  get ceded() { return this.t < this._cededUntil; }
-
-  /** Push the next autonomous fire out — called on state changes and after any
-   *  manual interjection, so scheduled nods never pile onto server-driven ones. */
-  reset(delay = 2.5) {
-    this._next = this.t + delay;
-    this.lastFireAt = this.t;
-    this._pending = -1;
-  }
-
-  /** Server-declared user speech, off the pipeline's own endpointer. Pass null
-   *  to hand back to the no-signal timer. */
+  /** Pipecat VAD's user-speaking truth. `null` removes the engagement signal. */
   setUserSpeaking(b) {
     if (b !== null) this._hasSignal = true;
     this._explicit = b === null ? null : !!b;
-  }
-
-  /** The one seam for choosing an acknowledgement. Context-aware: what the
-   *  user just did decides the weight class of the reply
-   *  (docs/research-biomechanics.md §3.3 — continuers co-occur with ongoing
-   *  speech, assessments with completed content; corpus mix 49/40/12,
-   *  shifted quieter here per the screen-share constraint). */
-  pickAck(context) {
-    const r = Math.random();
-    // Mid-speech nods stay minimal: the user still has the floor.
-    if (context === 'midspeech') return r < 0.7 ? 'NOD_SMALL' : 'BROW_ACK';
-    // A pause after a LONG stretch earns an assessment-class nod — the user
-    // completed a thought, and answering a paragraph with a continuer reads
-    // as not having listened to it. NOD_UP is rationed: a realization every
-    // few seconds stops meaning realization.
-    const utter = this._hasSignal ? this._silentAt - this._spokeAt : 0;
-    if (utter >= 4) {
-      if (r < 0.45) return 'NOD_SLOW';
-      if (r < 0.65) return 'NOD_UP';
-      if (r < 0.85) return 'NOD_SMALL';
-      return 'BROW_ACK';
-    }
-    // Short utterance (and the no-signal fallback timer): continuer country.
-    return r < 0.55 ? 'NOD_SMALL' : r < 0.8 ? 'BROW_ACK' : 'NOD_SLOW';
   }
 
   get speaking() { return this._explicit === true; }
@@ -509,40 +426,10 @@ export class ListeningEngine {
     // relaxing the moment they pause would read as relief that they stopped.
     if (speaking !== this._speaking) {
       this._speaking = speaking;
-      if (speaking) { this._spokeAt = t; this._pending = -1; }
-      else {
-        this._silentAt = t;
-        // Pause onset: the contingent backchannel moment. Half of pauses get
-        // an acknowledgement; the other half, keeping still IS the answer.
-        if (this.enabled && this._hasSignal && !this.ceded
-            && t - this.lastFireAt >= 2.5 && Math.random() < 0.5) {
-          this._pending = t + 0.15 + Math.random() * 0.3;
-        }
-      }
+      if (!speaking) this._silentAt = t;
     }
     const engaged = speaking || t - this._silentAt < 8;
     this.engage = approach(this.engage, engaged && this._hasSignal ? 1 : 0,
       speaking ? 1.5 : 6.0, dt);
-
-    if (!this.enabled) { this._pending = -1; return; }
-
-    if (this._hasSignal) {
-      if (this._pending > 0 && t >= this._pending) {
-        this._pending = -1;
-        this.lastFireAt = t;
-        this.fire(this.pickAck('pause'));
-      }
-      // A long unbroken stretch of user speech earns a rare mid-speech nod.
-      if (!this.ceded
-          && speaking && t - this._spokeAt > 5.5 && t - this.lastFireAt > 3.5 && t >= this._midNext) {
-        this._midNext = t + 2.6 + Math.random() * 1.8;
-        if (Math.random() < 0.35) { this.lastFireAt = t; this.fire(this.pickAck('midspeech')); }
-      }
-    } else if (!this.ceded && t >= this._next) {
-      // No user signal was ever supplied: the loose timer, exactly as before.
-      this._next = t + this.minGap + Math.random() * (this.maxGap - this.minGap);
-      this.lastFireAt = t;
-      this.fire(this.pickAck('pause'));
-    }
   }
 }

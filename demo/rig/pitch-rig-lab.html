@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Avatar — pitch-rig lab</title>
+<style>
+  :root { color-scheme:dark; font-family:ui-sans-serif,system-ui,sans-serif; background:#10131b; color:#edf0f5; }
+  body { max-width:960px; padding:24px; margin:auto; }
+  h1 { margin:0 0 6px; font-size:24px; } p { max-width:760px; color:#abb5c8; line-height:1.45; }
+  button { background:#24324a; color:#edf0f5; border:1px solid #415574; border-radius:8px; padding:8px 11px; font:inherit; cursor:pointer; }
+  .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-top:20px; }
+  .card { background:#181d29; border:1px solid #303c52; border-radius:12px; overflow:hidden; }
+  h2 { margin:0; padding:10px 12px; font-size:15px; border-bottom:1px solid #303c52; }
+  .stage { aspect-ratio:3/4; min-height:360px; background:#f3eee6; }
+  .stage svg { display:block; width:100%; height:100%; }
+  .note { margin:0; padding:10px 12px; color:#aab6ca; font-size:13px; line-height:1.4; }
+  code { color:#a9c8ff; } @media (max-width:650px) { .grid { grid-template-columns:1fr; } }
+</style>
+<h1>Pitch-rig comparison</h1>
+<p>Same receipt clip, same face, same timing. The right side only adds the proposed authoring contract: separate <code>neck</code> and <code>skull</code> groups plus a calibrated neck hinge.</p>
+<button id="play">Play receipt nod</button>
+<button id="hold">Hold at arrival</button>
+<main class="grid">
+  <section class="card"><h2>Legacy: one head group</h2><div class="stage" id="legacy"></div><p class="note">The whole head-and-neck drawing translates vertically.</p></section>
+  <section class="card"><h2>Corrective contract</h2><div class="stage" id="corrective"></div><p class="note">Skull, face and hair share the hinge; neck shortens behind them.</p></section>
+</main>
+<script type="module">
+  import { createFace } from '../../src/face-peep.js';
+  import { REST, CHANNELS, TAU, RANGE, clamp, approach, makeParams } from '../../src/params.js';
+  import { ClipPlayer } from '../../src/clips.js';
+  import { INTERNAL_CLIPS } from '../../src/interjections.js';
+
+  const legacy = createFace(document.querySelector('#legacy'), {}, { pitchRig:false });
+  const corrective = createFace(document.querySelector('#corrective'));
+  let player, cur, last, active = false;
+  const reset = () => { player = new ClipPlayer(); player.play(INTERNAL_CLIPS.NOD_SLOW); cur = { ...REST }; last = performance.now(); active = true; };
+  const tick = (now) => {
+    if (active) {
+      const dt = Math.min(34, now - last); last = now;
+      const { delta } = player.update(dt);
+      const target = { ...REST };
+      if (delta) for (const ch in delta) target[ch] = clamp(target[ch] + delta[ch], ...(RANGE[ch] || [-1, 1]));
+      for (const ch of CHANNELS) cur[ch] = approach(cur[ch], target[ch], TAU[ch], dt / 1000);
+      if (!player.playing) active = false;
+    }
+    const params = makeParams(cur || REST); legacy.apply(params); corrective.apply(params);
+    requestAnimationFrame(tick);
+  };
+  document.querySelector('#play').onclick = reset;
+  document.querySelector('#hold').onclick = () => {
+    active = false;
+    cur = { ...REST, headPitch: 1.02, torsoLean: 0.08, shoulderL: 0.03, shoulderR: 0.03, lidL: 0.05, lidR: 0.05 };
+  };
+  reset(); requestAnimationFrame(tick);
+</script>

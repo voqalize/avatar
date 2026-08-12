@@ -38,8 +38,6 @@ const ACK_RATE = 0.5;
 // Backchannels, in rising order of commitment. The silent ones are the rig's
 // own clips; the voiced ones are real TTS with cue tracks, so an ack that
 // happens to land can still be lipsynced properly.
-const SILENT_ACKS = ['MM_HMM', 'I_SEE', 'NOD_SMALL', 'NOD_SLOW', 'NOD_UP'];
-const VOICED_ACKS = ['pf_00', 'pf_02', 'pf_01', 'pf_03'];
 
 const pick = (a) => a[(Math.random() * a.length) | 0];
 
@@ -120,15 +118,9 @@ export class Floor {
 
   /** Fire a short acknowledgement — the "I'm still with you" beat. */
   _ack() {
-    if (Math.random() < 0.45) {
-      const id = pick(VOICED_ACKS);
-      this.emit({ kind: 'ack', text: this.clips.get(id).text, note: 'voiced' });
-      this._play(id, { ack: true });
-    } else {
-      const id = pick(SILENT_ACKS);
-      this.emit({ kind: 'ack', text: id, note: 'gesture only' });
-      this.k.interject(id);
-    }
+    const id = Math.random() < 0.5 ? 'ACK_CONTINUE' : 'ACK_NOD';
+    this.emit({ kind: 'ack', text: id, note: 'semantic action' });
+    this.k.action(id);
   }
 
   /** Silence held. Show the intent to speak, then speak. */
@@ -136,7 +128,6 @@ export class Floor {
     if (this.userSpeaking || !this.enabled) return;
     this.emit({ kind: 'floor', text: 'WANTS_IN', note: `${HANDOVER_MS}ms silence` });
     this._state('WANTS_IN');
-    this.k.interject('CLAIM_FLOOR');
     // The gesture leads the audio. Perceptual tolerance here is asymmetric:
     // a body that moves slightly early reads as someone drawing breath, and a
     // body that moves late reads as a dubbing error.
@@ -156,7 +147,7 @@ export class Floor {
   _yield() {
     this._stopAudio();
     this.k.stopSpeaking();
-    this.k.interject('YIELD_FLOOR');
+    this.k.action('RESPONSE_INTERRUPTED');
     this._state('YIELDED');
     this.emit({ kind: 'floor', text: 'YIELDED' });
     // A beat of visibly-having-stopped before settling into listening. Cutting

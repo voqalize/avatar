@@ -26,8 +26,7 @@ export interface FakeAvatarCalls {
   speak: Array<{ o?: SpeakOptions }>;
   pushCues: Array<{ cues: Cue[] }>;
   stopSpeaking: number;
-  interject: Array<{ id: string }>;
-  gesture: Array<{ id: string }>;
+  action: Array<{ id: string }>;
   perform: Array<{ actions: AvatarAction[]; o?: PerformOptions }>;
   setUserSpeaking: Array<boolean | null>;
   destroy: number;
@@ -47,8 +46,7 @@ export function createFakeAvatar(): FakeAvatar {
     speak: [],
     pushCues: [],
     stopSpeaking: 0,
-    interject: [],
-    gesture: [],
+    action: [],
     perform: [],
     setUserSpeaking: [],
     destroy: 0,
@@ -91,12 +89,8 @@ export function createFakeAvatar(): FakeAvatar {
       speaking = false;
       return api;
     },
-    interject(id) {
-      calls.interject.push({ id });
-      return api;
-    },
-    gesture(id) {
-      calls.gesture.push({ id });
+    action(id) {
+      calls.action.push({ id });
       return api;
     },
     setHandSide() {
@@ -108,6 +102,9 @@ export function createFakeAvatar(): FakeAvatar {
     },
     setUserSpeaking(b) {
       calls.setUserSpeaking.push(b);
+      return api;
+    },
+    attend() {
       return api;
     },
     setMouthGain() {

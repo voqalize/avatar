@@ -1,0 +1,92 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Avatar presence reel</title>
+<style>
+  :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; background:#10131b; color:#edf0f5; }
+  body { margin:0; padding:24px; max-width:1120px; margin-inline:auto; }
+  h1 { margin:0 0 6px; font-size:24px; } p { color:#abb5c8; max-width:760px; line-height:1.45; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 24px; }
+  button { background:#24324a; color:#edf0f5; border:1px solid #415574; border-radius:8px; padding:8px 11px; font:inherit; cursor:pointer; }
+  button:hover { background:#304465; }
+  #status { min-height:1.4em; color:#a9c8ff; font-size:14px; }
+  .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+  .card { background:#181d29; border:1px solid #303c52; border-radius:12px; overflow:hidden; }
+  .card h2 { margin:0; padding:10px 12px; font-size:15px; border-bottom:1px solid #303c52; }
+  .stage { aspect-ratio:3/4; min-height:320px; background:#f3eee6; }
+  .stage svg { width:100%; height:100%; display:block; }
+  .caption { margin:0; padding:10px 12px; font-size:12px; line-height:1.4; color:#aab6ca; }
+  @media (max-width:720px) { .grid { grid-template-columns:1fr; } .stage { min-height:380px; } }
+</style>
+<h1>Presence reel</h1>
+<p>Production-size review of shared behavior. Compare eye-first understanding beats with the optional two-stroke nod; the same script drives every shipped SVG avatar.</p>
+<div class="controls">
+  <button data-run="neutral">Reset to neutral availability</button>
+  <button data-run="continuer">Quiet continuer</button>
+  <button data-run="receipt">Understanding receipt</button>
+  <button data-run="realization">Realisation</button>
+  <button data-run="empathy">Empathy</button>
+  <button data-run="twoStroke">Two-stroke tilted nod</button>
+  <button data-run="listen">Run listening turn</button>
+  <button data-run="work">Run work loop</button>
+</div>
+<div id="status" aria-live="polite">Ready for review.</div>
+<main class="grid" id="grid"></main>
+<script type="module">
+  import { AVATAR_NAMES, createAvatar, createPresenceDirector } from '../../src/avatar.js';
+
+  const cards = [];
+  const grid = document.getElementById('grid');
+  const status = document.getElementById('status');
+  let timers = [];
+  const later = (ms, fn) => timers.push(setTimeout(fn, ms));
+  const clearRun = () => { timers.forEach(clearTimeout); timers = []; };
+
+  for (const name of AVATAR_NAMES) {
+    const card = document.createElement('section'); card.className = 'card';
+    card.innerHTML = `<h2>${name}</h2><div class="stage"></div><p class="caption">Shared SVG rig at a reviewable tile size.</p>`;
+    grid.append(card);
+    const avatar = createAvatar({ mount: card.querySelector('.stage'), avatar: name });
+    cards.push({ avatar, director: createPresenceDirector(avatar) });
+  }
+
+  const all = (fn) => cards.forEach(fn);
+  const reset = () => { clearRun(); all(({ director }) => director.setUserSpeaking(null).setMode('AVAILABLE')); };
+  const ack = (kind) => { reset(); all(({ director }) => director.setMode('LISTENING').acknowledge(kind, { force:true })); status.textContent = `${kind.toLowerCase()} shown across all avatars.`; };
+  const twoStroke = () => {
+    reset();
+    all(({ avatar, director }) => { director.setMode('LISTENING'); avatar.attend(1500).action('ACK_NOD'); });
+    status.textContent = 'Two-stroke, slight-tilt nod shown for comparison; it is not the director default.';
+  };
+
+  const listeningTurn = () => {
+    reset();
+    status.textContent = 'Listening: user speaking → clause continuer → meaningful receipt → response handoff.';
+    all(({ director }) => director.setMode('LISTENING').setUserSpeaking(true));
+    later(1450, () => all(({ director }) => director.acknowledge('CONTINUER', { force:true })));
+    later(3100, () => all(({ director }) => director.acknowledge('RECEIPT', { force:true })));
+    later(4400, () => all(({ director }) => director.setUserSpeaking(false)));
+    later(5100, () => all(({ director }) => director.beginResponse()));
+    later(6500, () => all(({ director }) => director.endResponse()));
+  };
+
+  const work = () => {
+    reset();
+    status.textContent = 'Working: typing → reviewing → typing → searching. It only runs while a tool is active.';
+    all(({ director }) => director.setToolStatus('WORKING'));
+    later(7600, () => { all(({ director }) => director.setToolStatus('COMPLETE')); status.textContent = 'Work complete: awaiting the user.'; });
+  };
+
+  document.querySelector('.controls').addEventListener('click', (event) => {
+    const run = event.target.closest('button')?.dataset.run;
+    if (!run) return;
+    if (run === 'neutral') { reset(); status.textContent = 'Neutral availability: no permanent social smile.'; }
+    else if (run === 'continuer') ack('CONTINUER');
+    else if (run === 'receipt') ack('RECEIPT');
+    else if (run === 'realization') ack('REALIZATION');
+    else if (run === 'empathy') ack('EMPATHY');
+    else if (run === 'twoStroke') twoStroke();
+    else if (run === 'listen') listeningTurn();
+    else if (run === 'work') work();
+  });
+</script>

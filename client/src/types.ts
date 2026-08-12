@@ -22,25 +22,15 @@ export interface AvatarCue {
   i?: number;
 }
 
-export interface AvatarStateCmd {
-  cmd: "state";
-  name: string;
-  emotion?: string;
-  gaze?: string;
+/** A durable, lower-priority server claim. `null` explicitly clears it. */
+export interface AvatarClaimCmd {
+  cmd: "claim";
+  state: "THINKING" | "WORKING" | null;
 }
 
-export interface AvatarInterjectCmd {
-  cmd: "interject";
-  id: string;
-}
-
-/**
- * A hand gesture — the hand at the frame edge plus its face half. Separate from
- * `interject` on purpose: `interject("WAVE")` is the face alone and always was,
- * so a server that upgrades gets no hand until it asks for one.
- */
-export interface AvatarGestureCmd {
-  cmd: "gesture";
+/** A self-completing authored sequence: face, body, and optionally a hand. */
+export interface AvatarActionCmd {
+  cmd: "action";
   id: string;
 }
 
@@ -54,9 +44,8 @@ export interface AvatarCuesCmd {
    * True on the one chunk that completes this turn's track: the TTS context is
    * closed, so no further chunk will splice into `ctx`. What a client may
    * assume, exactly — nothing about playout. The audio it describes is still
-   * ahead, and `speech stop` remains the end of the turn. It is safe to release
-   * per-turn cue state (the splice buffer for `ctx`) once the last cue has
-   * played, and safe to stop expecting more.
+   * ahead, and Pipecat's `botStoppedSpeaking` remains the end of the turn. It
+   * is safe to stop expecting more cue chunks after `final`.
    *
    * Absent on an interrupted turn, deliberately: a turn that was cut never
    * claims to have completed. Absent chunks are the normal case — the widget's
@@ -66,24 +55,10 @@ export interface AvatarCuesCmd {
   final?: boolean;
 }
 
-export interface AvatarSpeechCmd {
-  cmd: "speech";
-  event: "start" | "stop";
-  ctx: string;
-}
-
-export interface AvatarUserCmd {
-  cmd: "user";
-  speaking: boolean;
-}
-
 export type AvatarCommand =
-  | AvatarStateCmd
-  | AvatarInterjectCmd
-  | AvatarGestureCmd
-  | AvatarCuesCmd
-  | AvatarSpeechCmd
-  | AvatarUserCmd;
+  | AvatarClaimCmd
+  | AvatarActionCmd
+  | AvatarCuesCmd;
 
 /** The full server-message payload: the envelope plus its command. */
 export type AvatarServerMessage = AvatarCommand & { type: "avatar" };

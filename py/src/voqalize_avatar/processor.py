@@ -32,8 +32,8 @@ halves of the viseme pipeline on the wire, and has since our declared floor:
 
 - **A sentence was handed to TTS** is `AggregatedTextFrame(will_be_spoken=True)`,
   pushed immediately before the `TTSStartedFrame` of the audio context it
-  describes. That drives the floor claim *and* the fast (text-predicted) viseme
-  leg. (`TTSTextFrame` subclasses it and also sets the flag — those are the
+  describes. That drives the fast (text-predicted) viseme leg.
+  (`TTSTextFrame` subclasses it and also sets the flag — those are the
   per-word karaoke frames, and the `not isinstance` guard is what separates them.
   It is the same discriminator pipecat's own sequencer uses.)
 - **That sentence's audio is complete** is `AggregatedTextProgressFrame` with an
@@ -52,11 +52,9 @@ the opening (`visemes.py` § Why there is an early leg).
 
 ## What it does not do
 
-It does not decide anything about the call. It reports what the pipeline did.
-Backchannel timing lives in the widget's listening engine (it has the user's
-voice and the research behind the timing); anything that depends on what the
-application is *doing* — a deliberate performance, a tool-specific pose,
-user-idle behaviour — is signalled explicitly, as an `AvatarControlFrame` from a
+It does not decide anything about the call. Pipecat's JavaScript client projects
+the lifecycle it already receives. This processor supplies correlated visemes
+and passes through explicit application intent as an `AvatarControlFrame` from a
 processor of your own (see `frames.py`).
 """
 
@@ -195,7 +193,7 @@ class AvatarProcessor(FrameProcessor):
     # ─── Visemes ────────────────────────────────────────────────────────
 
     def _start_visemes(self, sample_rate: int) -> None:
-        """Build the lipsync engine, or run the state channel alone.
+        """Build the lipsync engine, or run the speech channel alone.
 
         `build_viseme_engine` raises — it is the internal API and it fails fast,
         naming the path it could not find. This is the pipecat wrapper, and the
@@ -220,7 +218,7 @@ class AvatarProcessor(FrameProcessor):
 
         Cue chunks are client-anchored: `t` is relative to the turn's first audio
         sample, and the widget schedules them against its own clock from the
-        `speech start` anchor. `from_ms` is the splice point, which is what lets
+        `botStartedSpeaking` anchor. `from_ms` is the splice point, which is what lets
         the accurate (rhubarb) leg overwrite the fast (textsync) leg's
         not-yet-played tail invisibly.
         """
@@ -231,18 +229,22 @@ class AvatarProcessor(FrameProcessor):
     async def _sentence_queued(self, frame: AggregatedTextFrame) -> None:
         """A sentence's text reached the TTS. Predict its cues now.
 
-        The floor claim this frame also triggers is the state machine's half; it
-        happens in `on_frame` below, so the two halves cannot drift apart.
+        The browser's Pipecat lifecycle controller supplies any floor-taking
+        presentation; this path only supplies the predicted viseme leg.
         """
         if self._engine is None:
             return
-        ctx = frame.context_id or self._machine.ctx
+        ctx = self._context_id(frame.context_id, "sentence")
+        if ctx is None:
+            return
         await self._engine.on_sentence_queued(ctx, frame.text)
 
     async def _accumulate(self, frame: TTSAudioRawFrame) -> None:
         if self._engine is None:
             return
-        ctx = frame.context_id or self._machine.ctx
+        ctx = self._context_id(frame.context_id, "audio")
+        if ctx is None:
+            return
         if ctx not in self._open_ctxs:
             self._open_ctxs.append(ctx)
         self._audio.add(ctx, frame.audio)
@@ -270,7 +272,9 @@ class AvatarProcessor(FrameProcessor):
         """
         if self._engine is None:
             return
-        ctx = context_id or self._machine.ctx
+        ctx = self._context_id(context_id, "audio cut")
+        if ctx is None:
+            return
         pcm = self._audio.take(ctx)
         if not pcm:
             # Nothing new since the last cut: a progress frame for a sentence
@@ -283,7 +287,23 @@ class AvatarProcessor(FrameProcessor):
         """No more sentences will be queued on this context — the track is final."""
         if self._engine is None:
             return
-        await self._engine.on_context_closed(frame.context_id or self._machine.ctx)
+        ctx = self._context_id(frame.context_id, "TTS stop")
+        if ctx is not None:
+            await self._engine.on_context_closed(ctx)
+
+    @staticmethod
+    def _context_id(context_id: str | None, source: str) -> str | None:
+        """Require the stock base-TTS context rather than inventing one.
+
+        The client binds these contexts FIFO to Pipecat's uncorrelated browser
+        speaking events. A synthetic id would make that binding look valid while
+        describing unknown audio, so a non-standard TTS implementation without
+        contexts deliberately loses lipsync rather than animating the wrong turn.
+        """
+        if context_id:
+            return context_id
+        logger.warning("avatar: skipping {} viseme data without a Pipecat TTS context_id", source)
+        return None
 
     async def _end_turns(self) -> None:
         ctxs, self._open_ctxs = self._open_ctxs, []

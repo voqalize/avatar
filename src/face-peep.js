@@ -354,8 +354,8 @@ const PLACKET = [[387, 700], [390, 734], [385, 768], [389, 800]];
 // Four, the same set blue-shirt runs. Draw order is head, body, features, hair:
 // the shirt has to be over the neck, and the fringe has to be over the brows.
 // ---------------------------------------------------------------------------
-const PARALLAX = { head: 1.0, body: 0.1, features: 1.22, hair: 1.12 };
-const LAYERS = ['head', 'body', 'features', 'hair'];
+const PARALLAX = { neck: 1.0, skull: 1.0, body: 0.1, features: 1.22, hair: 1.12 };
+const LAYERS = ['neck', 'skull', 'body', 'features', 'hair'];
 
 // Roll pivots at the base of the neck. About the chin, the cranium swings
 // sideways and the whole thing reads as a puppet on a stick.
@@ -378,6 +378,16 @@ const POSE = {
   shrugLift: 30, shrugTiltDeg: 1.6, shrugPivot: { x: PIVOT.x, y: 800 },
   yawPx: 28, pitchPx: 17,
   pivot: PIVOT,
+  // The optional pitch contract is the smallest useful upgrade for a face
+  // whose acknowledgements need to read as nods: a neck behind an independently
+  // movable skull/face/hair set, plus six calibration numbers. There are no
+  // nod-specific paths here — existing art remains the source of truth.
+  pitch: {
+    headLayers: ['skull', 'features', 'hair'], neckLayer: 'neck',
+    hinge: { x: CX, y: 620 }, neckBase: { x: CX, y: 720 },
+    headTravel: 1.0, neckTravel: 0.22,
+    foreshorten: 0.040, neckCompress: 0.034,
+  },
   // 1.2% at full inhale. Chest circumference changes ~2-3% in quiet
   // breathing, so a little over half that in linear scale is the calm end of
   // real — and it renders as the shoulder line rising 3 units and the chest
@@ -444,11 +454,11 @@ function mouthGeometry(p) {
   // face has no such detail to fall back on — the bow IS the expression, so it
   // has to be geometric.
   //
-  // The constant 6 is resting pleasantness. An attentive agent's neutral is not a
-  // flat line, and at mouthCorner's REST value of 0.1 the corner term alone
-  // gives 2.4 units of bow across an 84-wide mouth, which is nothing.
-  const yL = cy - 6 - p.mouthCornerL * 24;
-  const yR = cy - 6 - p.mouthCornerR * 24;
+  // Keep a trace of organic bow at rest, but not a social smile. Warmth is a
+  // context-driven expression layered by the behavior director, not the
+  // permanent default while the avatar is merely available.
+  const yL = cy - 1.5 - p.mouthCornerL * 24;
+  const yR = cy - 1.5 - p.mouthCornerR * 24;
 
   // The aperture opens DOWNWARD, 3:1. The upper lip is anchored to the maxilla
   // and barely moves; the lower rides the jaw. Splitting it evenly is what makes
@@ -620,12 +630,18 @@ function markup(id, t) {
 
   <rect x="${VB.x}" y="${VB.y}" width="${VB.w}" height="${VB.h}" fill="url(#${id}-gBg)"/>
 
-  <!-- head, ears and neck. Ears go under the head fill so the loop's inner half
-       is covered and only the rim reads. -->
-  <g id="${id}-head">
+  <!-- The neck stays behind the skull. This explicit split is the pitch-rig
+       contract: a nod can now shorten the neck and pivot the head surface
+       without treating the entire portrait as one vertically sliding layer. -->
+  <g id="${id}-neck">
     <path d="${NECK_FILL}" fill="${t.paper}"/>
     ${ink(taper(NECK_L, [3, 8, 6]))}
     ${ink(taper(NECK_R, [3, 8, 6]))}
+  </g>
+
+  <!-- head and ears. Ears go under the head fill so the loop's inner half
+       is covered and only the rim reads. -->
+  <g id="${id}-skull">
     <path d="${EAR_L_FILL}" fill="${t.paper}"/>
     <path d="${EAR_R_FILL}" fill="${t.paper}"/>
     ${ink(EAR_L_RING)}
@@ -702,21 +718,24 @@ function markup(id, t) {
 // ---------------------------------------------------------------------------
 let uid = 0;
 
-export function createFace(mount, theme = {}) {
+export function createFace(mount, theme = {}, options = {}) {
   const t = Object.assign({}, THEME, theme);
   const id = `peep${++uid}`;
   const { svg, $, set } = createFaceShell(mount, id, markup(id, t));
 
   const el = {
-    head: $('head'), body: $('body'), features: $('features'), hair: $('hair'),
+    neck: $('neck'), skull: $('skull'), body: $('body'), features: $('features'), hair: $('hair'),
     browL: $('browL'), browR: $('browR'),
     eyes: $('eyes'), eyeL: $('eyeL'), eyeR: $('eyeR'),
     mouthIn: $('mouthIn'), lips: $('lips'), clipMouth: $('clipMouthP'),
     teeth: $('teeth'), teethLo: $('teethLo'), tongue: $('tongue'),
   };
+  // Kept as an opt-out solely for the pitch-rig comparison lab. Production
+  // mounts take the corrective contract above; legacy faces omit it entirely.
+  const pose = options.pitchRig === false ? { ...POSE, pitch: null } : POSE;
 
   function apply(p) {
-    poseTransforms(p, set, el, POSE);
+    poseTransforms(p, set, el, pose);
 
     // --- eyes -------------------------------------------------------------
     // With no sclera the whole bean travels; see the header for what that costs

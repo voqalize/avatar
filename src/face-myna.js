@@ -428,8 +428,8 @@ function mouthGeometry(p) {
   // Corner travel 28 (was 23): the tile swallows less. Press straightens the
   // band by pulling the corner lift toward zero.
   const cLift = 1 - 0.85 * press;
-  const yL = cy - (6 + p.mouthCornerL * 28) * cLift;
-  const yR = cy - (6 + p.mouthCornerR * 28) * cLift;
+  const yL = cy - (1.5 + p.mouthCornerL * 28) * cLift;
+  const yR = cy - (1.5 + p.mouthCornerR * 28) * cLift;
 
   const apTop = cy - h * 0.25;
   let apBot = cy + h * 0.75;

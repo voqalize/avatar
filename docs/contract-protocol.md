@@ -26,27 +26,31 @@ unknown emotion falls back to `neutral` silently; unknown gaze falls back to
 
 ## States — `setState(name, { emotion?, intensity?, gaze?, keepGaze? })`
 
+> Runtime wire note: application code may still use this SVG API directly, but
+> the Pipecat wire does **not** send arbitrary states. It sends lower-priority
+> `claim` values (`THINKING`, `WORKING`, or `null`) and self-completing
+> `action` ids. The browser resolves factual speech states from Pipecat first.
+
 A state is a *condition*, not an event: it holds until replaced. Each state
-bundles a default gaze, emotion, idle-energy level and whether autonomous
-backchannel nods run. Passing `emotion`/`gaze` overrides the bundle;
-`keepGaze: true` preserves whatever gaze was already set.
+bundles a default gaze, emotion and idle-energy level. Passing `emotion`/`gaze`
+overrides the bundle; `keepGaze: true` preserves whatever gaze was already set.
 
 | state | send when | behaviour highlights |
 |---|---|---|
 | `IDLE` | nothing is happening | full idle motion, gaze on user |
-| `LISTENING` | the user is speaking | slight brow lift + eye widen; blink ~16/min; contingent backchannels + engagement lean when the user's voice is supplied (see below) |
+| `LISTENING` | the user is speaking | slight brow lift + eye widen; blink ~16/min; engagement lean when Pipecat VAD says the user is speaking (see below) |
 | `THINKING` | the agent is working out what to say | gaze breaks away **downward** (`AWAY_DOWN` — where measured cognitive aversion actually goes), wandering on the ~3.5 s aversion cadence with a return to the user about one dwell in four; thoughtful affect, slow blinks, faster/shallower breath, occasional dead-still holds |
 | `SPEAKING` | agent audio is playing | reduced idle sway so the head is stable while talking. `speak()` enters it automatically |
 | `REVIEWING_SCREEN` | the agent is reading the shared screen | gaze wanders across screen targets every 1.8–5 s |
-| `WAITING_FOR_USER` | the agent asked something and the floor is the user's | encouraging affect, raised brows, head tilt; backchannel on |
+| `WAITING_FOR_USER` | the agent asked something and the floor is the user's | encouraging affect, raised brows and head tilt |
 | `TYPING` | the agent is busy doing something the user asked for | head pitched into work, gaze parked down-left on `SCREEN_WORK`, task-rate blinks (~9/min), shoulders raised and working in bursts; glances back up to the user every 4–7 s — the cue that they aren't forgotten |
 | `TYPING_CHAT` | the audio channel is broken and the agent is typing in chat to communicate | `TYPING`'s mechanics turned communicative: after each typing burst it looks up and **holds** on the user 1.2–2 s, expectant (chat is now the channel), vs `TYPING`'s brief ~0.8 s check-in; mouth pressed flat with a touch of browInner apology. Sequence it after `DEGRADED` — DEGRADED says "my feed is broken", this says "I'm working around it". They stay separate states |
-| `DISTRACTED` | the agent's attention is genuinely elsewhere | gaze wanders sideways/up targets, held long (2.8–6.8 s each), looser sway, **no backchannels** — the missing nod is as diagnostic as the look-away. The widget only looks away; deciding when to snap back is the server's call |
+| `DISTRACTED` | the agent's attention is genuinely elsewhere | gaze wanders sideways/up targets, held long (2.8–6.8 s each), looser sway. The widget only looks away; deciding when to snap back is the server's call |
 | `SEARCHING_SCREEN` | filler while an async activity completes — "finding the right control". Server exits it when the activity is done | the hunt: search saccades every 0.8–2 s across screen targets with revisits (vs `REVIEWING_SCREEN`'s 1.8–5 s reading dwells), an occasional tiny "not this one" yaw flick, lowered brows, mouth pressed flat. Buys time while *visibly working on it* |
-| `CANT_HEAR` | the user's audio is soft / low-SNR and the agent is trying | the strongest lean the widget makes (the lean *is* the message), head cheated aside on `USER_EAR` so an ear favors the speaker while the eyes hold contact, concentration squint + lowered brows, frequent dead-still holds, **no backchannels** — you don't nod along to what you can't hear. Typically followed by `SORRY` or a "could you repeat" utterance. If the user's voice is supplied, the lean intensifies slightly while a faint voice is actually present |
+| `CANT_HEAR` | the user's audio is soft / low-SNR and the agent is trying | the strongest lean the widget makes (the lean *is* the message), head cheated aside on `USER_EAR` so an ear favors the speaker while the eyes hold contact, concentration squint + lowered brows and frequent dead-still holds. Typically followed by `SORRY` or a "could you repeat" utterance. If Pipecat VAD says the user is speaking, the lean intensifies slightly |
 | `TAKING_FLOOR` | ~350 ms before agent audio starts | inbreath pose: shoulders rise, lips part, lean in |
 | `WANTS_IN` | the agent wants the floor but won't barge in | stronger, *stiller* version of the same bid — holds until the user notices |
-| `YIELDED` | the user barged in and the agent stopped | recoil: lean back, shoulders drop; pair with the `YIELD_FLOOR` interjection which delivers the fast mouth-shut |
+| `YIELDED` | historical local authoring state | superseded in the protocol by `RESPONSE_INTERRUPTED` |
 | `DEGRADED` | the connection/pipeline is impaired | drowsy lids + desaturating CSS filter |
 | `OFFLINE` | the agent is gone | lids nearly shut, grayscale |
 
@@ -87,37 +91,26 @@ final ~2.4 s of the agent's own utterance. Human speakers return to mutual
 gaze before they stop talking; an agent that ends its turn looking away fails
 to pass the floor, and the user sits waiting for a signal that never comes.
 
-Gaze is also set implicitly by states (table above) and temporarily by a few
-interjections (`HMM`, `ONE_MOMENT`); a clip's gaze wins for the clip's
-duration, then releases.
+Gaze is also set implicitly by states; an action may temporarily override it,
+then releases it when the action lands.
 
-## Interjections — `interject(id)`
+## Authoring-only clip studies
 
 One-shot gesture clips with baked plausible timings, so they are convincing
-with **no audio attached**. `attachAudio(id, url)` upgrades any of them with a
-real TTS clip later; the clip then clocks itself off that audio. Durations
-below are the baked defaults, in ms. Full list: `INTERJECTION_IDS`; the 12 with
-spoken text: `SPOKEN_IDS`.
+with **no audio attached**. They are authoring tools, not wire ids. The public
+action list is in the protocol section below.
 
-**Wordless backchannel** — fire while the user talks; these are also fired
-autonomously in `LISTENING`/`WAITING_FOR_USER` by the listening engine (see
-[The user's voice](#the-users-voice--setuseraudiosource-setuserspeakingbool)):
-contingently on the user's pauses when the host supplies a voice signal, on a
-loose 3.4–8 s timer when it never does. The picker answers what the user just
-did: mid-speech stays minimal (70% `NOD_SMALL` / 30% `BROW_ACK`); a pause
-after a *short* utterance draws from continuer country (55% `NOD_SMALL`, 25%
-`BROW_ACK`, 20% `NOD_SLOW`); a pause after a **long** utterance (≥4 s) earns
-the assessment class (45% `NOD_SLOW`, 20% `NOD_UP`, 20% `NOD_SMALL`, 15%
-`BROW_ACK`). The three nods are the mocap taxonomy — continuer / assessment /
-realization — with authored cycle decay, and all sit under the 1.5 Hz line
-where a nod flips from attention to impatience.
+**Wordless acknowledgement** — local clip studies used to author the public
+action set. The frontend never autonomously emits one.
 
 | id | dur | intent |
 |---|---|---|
-| `NOD_SMALL` | 800 | single-cycle continuer — "go on" |
-| `NOD_SLOW` | 1420 | two-beat assessment — first beat deepest, second decayed; "I agree" |
-| `NOD_UP` | 1750 | realization — rises *before* it commits, brows leading; "ah, I see" |
-| `BROW_ACK` | 720 | eyebrow acknowledgement, no head commitment |
+| `NOD_SMALL` | 900 | single-cycle continuer — internal authoring study |
+| `NOD_SLOW` | 1200 | deliberate single-stroke receipt — internal authoring study |
+| `NOD_UP` | 1750 | realization — internal authoring study |
+| `ACK_NOD` | 1120 | two-stroke nod with a slight listening tilt; public action |
+| `BROW_ACK` | 720 | eyebrow acknowledgement, no head commitment; explicit only |
+| `ACK_CONTINUE` / `ACK_RECEIVE` / `ACK_REALIZE` / `ACK_EMPATHIZE` | 620–1180 | eye-first acknowledgement clips; public actions |
 | `HEAD_SHAKE` | 1350 | firm "no" — two decaying yaw cycles (~1.5 Hz), lowered brows, mouth firmed flat. **Server-sent only**: disagreement is never autonomous |
 | `HEAD_SHAKE_SOFT` | 1700 | polite "hmm, not quite" — slower cycle-and-a-half at smaller amplitude, sympathetic head tilt, knit brows: sorry to be disagreeing. **Server-sent only**, same rule |
 | `BLINK_LONG` | 850 | deliberate ~600 ms blink + barely-there nod: "that's noted — move on". **Server-sent only, never autonomous** — it measurably shortens what the user says next, so send it as a policy decision, not a reflex |
@@ -130,8 +123,7 @@ where a nod flips from attention to impatience.
 | `YIELD_FLOOR` | 420 | interrupted: lips shut within ~50 ms, recoil |
 | `RAISE_HAND` | 1600 | "may I come in" — long held plateau is the message |
 
-**Re-authored gestures** — these ids predate the arm removal and keep their
-wire meaning, now performed by face, shoulders and torso.
+**Re-authored gestures** — local studies retained for authoring.
 
 | id | dur | intent |
 |---|---|---|
@@ -152,29 +144,24 @@ until `attachAudio` gives them a voice.
 | `I_SEE` | 1050 | | `GOT_IT` | 820 |
 | `RIGHT` | 740 | | `TAKE_YOUR_TIME` | 1500 |
 
-A repeated `interject(id)` while that clip is already playing is collapsed to a
-no-op; a *different* id replaces the running clip immediately.
+A repeated internal clip while that clip is already playing is collapsed to a
+no-op; study IDs are not client or wire API.
 
-## Hand gestures — `gesture(id)`
+## Authoring-only hand studies
 
 A hand rising into the bottom of the frame, plus the face half that makes it
-belong to somebody. **This is a separate verb from `interject` on purpose.**
-The four ids below are disjoint from `INTERJECTION_IDS`, and `interject('WAVE')`
-still means exactly what it always meant — the face alone. A server that
-upgrades the widget gets no hand until it asks for one.
+belong to somebody. These are local authoring entries; server messages use the
+semantic `GESTURE_*` actions below.
 
 | id | dur | what it does |
 |---|---|---|
-| `HI` | 1250 | open palm rises and waves — greeting. Face half: `WAVE` |
-| `BYE` | 1550 | the same wave, one swing longer and a touch slower — parting. Face half: `WAVE` |
-| `THUMBS_UP` | 1300 | fist, back of hand to camera, thumb up — approval. Face half: `THUMBS_UP` |
-| `ONE_MOMENT` | 1700 | a single raised index finger, held — "one moment". Face half: `ONE_MOMENT`, which speaks |
+| `GESTURE_GREET` | 1250 | open palm rises and waves — greeting |
+| `GESTURE_GOODBYE` | 1550 | the same wave, one swing longer and a touch slower — parting |
+| `GESTURE_APPROVE` | 1300 | fist, back of hand to camera, thumb up — approval |
+| `GESTURE_WAIT` | 1700 | a single raised index finger, held — "one moment" |
 
-Calling `gesture(id)` fires the face half as an `interject()` on the caller's
-behalf — do **not** send both; the second one replaces the first mid-clip. It
-also suppresses autonomous backchannels for the gesture's duration plus 500 ms,
-because a nod landing on top of a deliberate hand is the listening engine
-talking over the server.
+The semantic `GESTURE_*` action composes the hand and face halves. Hosts never
+address study IDs directly.
 
 What the widget guarantees, and why it is stated here rather than left to the
 drawing: **nothing but a single digit ever passes the mouth.** Mouth sync is
@@ -188,7 +175,7 @@ face half and nothing else, which is the same fallback every id already had
 before the hand existed. `api.gesturing` is the id in flight, or `null` — which
 is what it always reads under `hand: false`, and `gestureEnd` correspondingly
 never fires there: both describe the *hand*, and there is no hand. An unknown
-id throws, as `interject` does.
+id throws.
 
 `setHandSide(+1 | -1)` picks which side of the frame the hand enters from;
 `+1` (the viewer's right) is the default.
@@ -236,29 +223,14 @@ spoken interjection in flight. `speakEnd` fires when the track completes.
 
 ## The user's voice — `setUserSpeaking(bool)`
 
-Backchannels only create rapport when they are *contingent* on the speaker —
-identical nods on a timer measurably read as distracting
-(docs/research-biomechanics.md §3.5). Tell the widget when the user holds the
-floor and the listening engine does the rest.
+The Pipecat client adapter calls this from `UserStartedSpeaking` and
+`UserStoppedSpeaking`. It changes only the sustained engagement lean: the
+avatar leans in while the user holds the floor and relaxes slowly after a
+pause. It never creates a clip. In particular it never emits a nod, brow
+acknowledgement or any other conversational reaction.
 
-`setUserSpeaking(bool)` is the whole input side: the turn signal from the
-server's endpointer, which is the one that already decides where a turn ends.
-Pass `null` to hand back. The widget used to be able to derive this itself from
-the user's `MediaStream` (`setUserAudio`), a second VAD racing the server's —
-`docs/removed.md` § Client-side VAD.
-
-While `LISTENING`/`WAITING_FOR_USER` with a signal supplied: an
-acknowledgement fires 250–600 ms after a user pause onset, on about half of
-pauses, never more often than every 2.5 s; long unbroken user speech earns a
-rare minimal mid-speech nod; and the avatar leans in (`torsoLean` up to
-+0.16) while the user holds the floor, relaxing after ~8 s of silence. Every
-autonomous fire is announced via `on('backchannel', id)`, so a server can log
-exactly what the widget did on its own.
-
-If neither method is ever called, the engine falls back to the loose 3.4–8 s
-timer — a worse listener, never a dead one. Server-driven `interject()` calls
-push the autonomous scheduler out (min 2.5 s), so the two sources never pile
-up.
+The complete Pipecat event mapping, including LLM, TTS, tool and failure
+lifecycle, is [Pipecat lifecycle protocol](pipecat-lifecycle-protocol.md).
 
 ### The mouth priority rule (invariant)
 
@@ -274,8 +246,6 @@ degrades this ordering is a regression.
 - `on('state', fn)` — state changed (fires with the new name)
 - `on('speakEnd', fn)` — cue track completed
 - `on('clipEnd', fn)` — interjection finished (fires with its id)
-- `on('backchannel', fn)` — the listening engine fired an acknowledgement on
-  its own (fires with the interjection id)
 - `on('performEnd', fn)` — a performance's last action has fired (see
   *Composing behavior*)
 - `on('gestureEnd', fn)` — the hand has left the frame (fires with the gesture
@@ -322,13 +292,13 @@ The composition surface. A **performance** is a list of timed verbs fired
 against a clock; each verb resolves to one of the enums above. This is how a
 backend assembles a turn: it sequences from a constrained vocabulary and
 cannot invent motion — every wire-visible move is something that was authored
-and tuned on the rig. A backend wanting a new move asks for a new enum entry
-(a state, an interjection), never for a channel-level escape hatch.
+and tuned on the rig. A backend wanting a new move asks for a new action id,
+never for a channel-level escape hatch.
 
 ```js
 { "t": 4200, "do": "emotion",   "name": "warm", "i": 0.8 }
 { "t": 5100, "do": "gaze",      "name": "SCREEN_WORK" }
-{ "t": 6300, "do": "interject", "id": "NOD_SMALL" }
+{ "t": 6300, "do": "action", "id": "ACK_NOD" }
 { "t": 8000, "do": "state",     "name": "WAITING_FOR_USER" }
 ```
 
@@ -337,8 +307,7 @@ and tuned on the rig. A backend wanting a new move asks for a new enum entry
 | `state` | `name`, `keepGaze?` (default **true**) | `setState(name, {keepGaze})` |
 | `emotion` | `name`, `i?` 0..1 (default 1) | `setEmotion(name, i)` |
 | `gaze` | `name` | `setGaze(name)` |
-| `interject` | `id` | `interject(id)` |
-| `gesture` | `id` | `gesture(id)` — the hand *and* its face half |
+| `action` | `id` | `action(id)` |
 
 The natural unit a server assembles is audio + cue track + action track on
 **one clock** (`demo/perf-clips.json` scripts every demo turn this way, and
@@ -356,8 +325,7 @@ Rules:
   `perform` never starts or stops audio — `speak` owns the sound.
 - **Times fire verbatim** — no `LEAD_MS`. Visemes lead the audio because
   phoneme sync is frame-critical; gestures arrive through their channels'
-  smoothing lag, and a deliberate lead (`CLAIM_FLOOR` ~350 ms before the first
-  sample) is authored into `t` by the composer.
+  smoothing lag, and any deliberate lead is authored into `t` by the composer.
 - **There is no `speak` verb.** Speech defines the clock a performance rides
   on; a timeline that could start new audio would be a clock inside a clock,
   and stopping it would have to answer for the cue track too. The utterance
@@ -382,16 +350,17 @@ Rules:
 ## The reference backend — `voqalize-avatar`
 
 This contract has a living server implementation in this repo: the `py/`
-package (`pip install voqalize-avatar`), a pipecat `FrameProcessor` that infers
-the base states from stock frames and emits the envelope below as RTVI
-server-messages. Design and rationale:
+package (`pip install voqalize-avatar`), a pipecat `FrameProcessor` that emits
+server-owned claims, actions, and correlated viseme cues as RTVI server-messages.
+Factual speech states resolve in the browser from Pipecat.
+Design and rationale:
 [design-library-split.md](design-library-split.md). A host driving the widget
 through that stack never calls the API above directly; it renders
 `<Avatar client={pipecatClient} />` from `@voqalize/avatar`, and the dispatcher
 inside it turns these messages into the calls above:
 
 ```json
-{ "type": "avatar", "cmd": "state", "name": "THINKING" }
+{ "type": "avatar", "cmd": "claim", "state": "THINKING" }
 ```
 
 `{"type": "avatar"}` is the whole membership test — an RTVI server-message in
@@ -402,17 +371,23 @@ rule below, which a version number would not have improved
 
 | `cmd` | payload → widget call |
 |---|---|
-| `state` | `name`, `emotion?`, `gaze?` → `setState` |
-| `interject` | `id` → `interject` |
-| `gesture` | `id` → `gesture` (a hand gesture id, not an interjection id) |
+| `claim` | `state: THINKING\|WORKING\|null` → lower-priority durable state intent |
+| `action` | `id` → self-completing authored face/body/hand action |
 | `cues` | `ctx`, `from_ms`, `cues`, `final?` → splice, then `speak`/`pushCues` |
-| `speech` | `event: start\|stop`, `ctx` → anchor / release the turn clock |
-| `user` | `speaking` → `setUserSpeaking` |
 
-That is the whole wire vocabulary. `perform` (a timeline as one message) and
-`hint` (an advisory with no rendering) were both on it and are not any more —
+That is the whole wire vocabulary. `perform` (a timeline as one message),
+arbitrary `state`, low-level clip/gesture verbs, and `hint` (an advisory with no
+rendering) are not on it —
 `docs/removed.md` § The `perform` command and § The `hint` command. `perform()`
 itself is untouched; what went away is a *server* being able to send one.
+
+The public `action.id` vocabulary is intentionally small and semantic:
+
+| Family | IDs |
+|---|---|
+| Acknowledgement | `ACK_CONTINUE`, `ACK_RECEIVE`, `ACK_REALIZE`, `ACK_EMPATHIZE`, `ACK_NOD` |
+| System transition | `RESPONSE_INTERRUPTED` |
+| Visible gesture | `GESTURE_GREET`, `GESTURE_GOODBYE`, `GESTURE_APPROVE`, `GESTURE_WAIT` |
 
 Semantics the envelope adds on top of this contract:
 
@@ -422,15 +397,17 @@ Semantics the envelope adds on top of this contract:
   re-issues `speak()` on the turn's original clock when anything was
   discarded. This is how the server's fast text-predicted cues are overwritten
   by audio-recognized ones mid-turn without the widget ever seeing a seam.
-- **The anchor.** `speech start` (sent on the server's playout-true
-  bot-started-speaking signal) sets the turn's t=0; the cue clock is
-  `performance.now() - t0`. The data channel beats jitter-buffered audio, so
-  residual error lands video-first — the +125 ms side of the asymmetric
-  tolerance window, not the −45 ms one.
-- **Explicit instructions override heuristics.** An application that knows
-  something the pipeline cannot infer pushes the same envelope from its own
-  code; it dispatches into the same handler. The backend's state heuristics are
-  the default layer underneath, not a competing one.
+- **The anchor.** Stock Pipecat base TTS attaches an opaque `context_id` to
+  each serialized context. The server uses it as `cues.ctx`; on standard
+  `botStartedSpeaking`, whose JavaScript payload has no context, the browser
+  FIFO-claims the next buffered context and sets t=0 to `performance.now()`.
+  `botStoppedSpeaking` closes that active context. There is deliberately no
+  avatar-specific speech marker.
+- **Claims are bounded intent.** The server may set `THINKING` or `WORKING`,
+  then clear it with `null`; real user and bot turn boundaries also retire it.
+  An action has no end frame: it completes physically while the current factual
+  state continues to resolve underneath it. See the
+  [Pipecat lifecycle protocol](pipecat-lifecycle-protocol.md).
 - Unknown `cmd`s are ignored — the server may grow vocabulary ahead of
   deployed clients.
 
@@ -451,7 +428,7 @@ renames were: `createKiran`→`createAvatar`, gaze `CANDIDATE`→`USER` and
 `CODE_AREA`→`SCREEN_WORK`, state `WAITING_FOR_ANSWER`→`WAITING_FOR_USER`.
 Everything else in this document — the descriptor (`api.meta`), `perform()`,
 the listening engine, the compound states, the disagree family and the hand
-gestures — landed 2026-08 and is current. `gesture` is the newest verb
+gestures — landed 2026-08 and is current. `action` is the public semantic verb
 (2026-08-07); a widget older than it ignores the `cmd` and drops the
 `perform()` verb with a warning, which is the forward-compat rule working as
 intended, so a backend may send it unconditionally.

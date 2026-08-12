@@ -65,6 +65,13 @@ export function faceApi(mount, svg, apply, theme) {
  *   shrugPivot   {x, y} the sternum
  *   yawPx        px of head travel at headYaw = 1
  *   pitchPx      px at headPitch = 1
+ *   pitch        optional corrective-pose contract for rigs that can nod:
+ *                `{ headLayers, neckLayer, hinge, headTravel, neckTravel,
+ *                   foreshorten, neckCompress, neckBase }`.
+ *                `headLayers` must be separate SVG groups for the skull and
+ *                its attached surface layers; `neckLayer` must be behind it.
+ *                This is intentionally a small group-level contract, not a
+ *                second set of authored paths per expression.
  *   pivot        {x, y} roll pivot — the base of the neck, not the chin:
  *                rotating about the chin swings the whole cranium sideways
  *                and reads as a puppet on a stick
@@ -128,17 +135,36 @@ export function poseTransforms(p, set, el, spec) {
 
   const yx = p.headYaw * spec.yawPx;
   const py = p.headPitch * spec.pitchPx;
+  const pitch = spec.pitch;
   for (const key of spec.layers) {
     const k = spec.parallax[key];
     const torso = spec.torsoLayers.includes(key);
     const roll = torso ? p.headRoll * ROLL_TORSO : p.headRoll * ROLL_HEAD;
+    const isPitchHead = !!pitch && pitch.headLayers.includes(key);
+    const isPitchNeck = !!pitch && pitch.neckLayer === key;
+    // A pitch-capable rig makes its skull, features and hair move together:
+    // their old parallax values still apply to yaw, but not to the vertical
+    // nod. That coherence is the point of separating them from the neck.
+    const pitchTravel = isPitchHead ? pitch.headTravel
+      : isPitchNeck ? pitch.neckTravel : k;
+    const pitchScale = isPitchHead
+      ? 1 - Math.max(0, p.headPitch) * pitch.foreshorten : 1;
+    const neckScale = isPitchNeck
+      ? 1 - Math.max(0, p.headPitch) * pitch.neckCompress : 1;
+    const pitchT = pitchScale !== 1
+      ? `translate(${f(pitch.hinge.x)} ${f(pitch.hinge.y)}) scale(1 ${f(pitchScale)}) translate(${f(-pitch.hinge.x)} ${f(-pitch.hinge.y)}) `
+      : '';
+    const neckT = neckScale !== 1
+      ? `translate(${f(pitch.neckBase.x)} ${f(pitch.neckBase.y)}) scale(1 ${f(neckScale)}) translate(${f(-pitch.neckBase.x)} ${f(-pitch.neckBase.y)}) `
+      : '';
     // Torso layers get their breath from the swell inside torsoT; head layers
     // get the matching lift, which is derived from the swell rather than tuned
     // separately — the neck rides on the chest it sits on.
     const bob = torso ? 0 : -neckLift;
     set(el[key], 'transform',
       leanT + (torso ? torsoT : '')
-      + `translate(${f(yx * k)} ${f(py * k + bob)}) rotate(${f(roll)} ${f(spec.pivot.x)} ${f(spec.pivot.y)})`);
+      + pitchT + neckT
+      + `translate(${f(yx * k)} ${f(py * pitchTravel + bob)}) rotate(${f(roll)} ${f(spec.pivot.x)} ${f(spec.pivot.y)})`);
   }
 }
 

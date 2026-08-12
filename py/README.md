@@ -42,11 +42,11 @@ pipeline = Pipeline([
 ```
 
 No arguments, no binaries to install, no environment variables — that is the
-whole integration, and it needs no other application code. From
-stock pipecat frames the state machine delivers `IDLE`, `LISTENING`,
-`THINKING`, `SPEAKING`, `TAKING_FLOOR`, `WAITING_FOR_USER`, `YIELDED`,
-`DEGRADED` and `OFFLINE`, plus the turn-clock anchor the client splices cues
-onto and the user-speaking truth the listening engine times backchannels off.
+whole integration, and it needs no other application code. Pipecat's JavaScript
+client projects the standard lifecycle locally; this processor supplies
+base-TTS-context-correlated viseme cues it cannot reconstruct. Explicit
+application states, acknowledgements and gestures remain `AvatarControlFrame`
+messages. See the repository's `docs/pipecat-lifecycle-protocol.md`.
 
 ## Mouth shapes
 
@@ -91,27 +91,25 @@ that predicts the timeline from text before the audio exists (~0.4 ms), an
 
 ## Saying what the pipeline cannot infer
 
-Some states need to know what your application is doing — `TYPING`,
-`SEARCHING_SCREEN`, `CANT_HEAR`, a deliberate interjection, a hand gesture. No
-amount of frame-watching infers those correctly, and a
-library that guessed would nod at the wrong moment. Two seams, in order of
-reach for:
+Some behavior needs application knowledge — a deliberate acknowledgement or a
+hand gesture. No amount of frame-watching infers those correctly, and a library
+that guessed would nod at the wrong moment.
 
 **Push an `AvatarControlFrame`** from anywhere in your pipeline:
 
 ```python
-from voqalize_avatar import AvatarControlFrame, AvatarMessage, Interjection
+from voqalize_avatar import AvatarAction, AvatarControlFrame, AvatarMessage
 
-await self.push_frame(AvatarControlFrame(message=AvatarMessage.interject(Interjection.MM_HMM)))
+await self.push_frame(AvatarControlFrame(message=AvatarMessage.action(AvatarAction.ACK_CONTINUE)))
 ```
 
 Hand gestures ride the same seam and are never inferred — a hand in frame is an
 application's decision:
 
 ```python
-from voqalize_avatar import HandGesture
+from voqalize_avatar import AvatarAction
 
-await self.push_frame(AvatarControlFrame(message=AvatarMessage.gesture(HandGesture.HI)))
+await self.push_frame(AvatarControlFrame(message=AvatarMessage.action(AvatarAction.GESTURE_GREET)))
 ```
 
 **Or subclass `AvatarStateMachine`** (from `voqalize_avatar.state_machine`) when

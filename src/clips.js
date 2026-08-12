@@ -6,9 +6,10 @@
  * is already doing, which is what makes "nod while speaking" work without any
  * special-casing.
  *
- * Two behaviours matter more here than the curves themselves:
- *   · clips are interruptible (barge-in must kill an in-flight nod), and
- *   · the queue collapses duplicates — three stacked nods reads as a fault.
+ * A server action is a physical movement, not an abstract state transition.
+ * Queued actions finish their landing before the next action begins; their
+ * underlying state may change freely while that happens. `stop()` remains for
+ * real speech taking mouth ownership.
  */
 
 import { clamp } from './params.js';
@@ -50,6 +51,7 @@ export class ClipPlayer {
     this.mouth = new VisemeTrack();
     this._blinksDone = 0;
     this.onEnd = null;
+    this.queue = [];
   }
 
   get playing() { return !!this.clip; }
@@ -60,11 +62,17 @@ export class ClipPlayer {
    * @param {HTMLAudioElement} [audio] if given, the clip's mouth track is
    *        scheduled against the audio clock instead of the local timer
    */
-  play(clip, audio) {
+  play(clip, audio, { queue = false } = {}) {
     if (!clip) return;
-    // Collapse a repeat of the clip already running.
-    if (this.clip && this.clip.id === clip.id && !this.fading) return;
+    if (this.clip && queue) {
+      if (this.clip.id === clip.id || this.queue.some((item) => item.clip.id === clip.id)) return;
+      this.queue.push({ clip, audio });
+      return;
+    }
+    this._start(clip, audio);
+  }
 
+  _start(clip, audio) {
     this.clip = clip;
     this.t = 0;
     this.fading = false;
@@ -101,6 +109,8 @@ export class ClipPlayer {
     if (this.audio) { this.audio.pause(); this.audio = null; }
     if (had && had.gaze && this.hooks.onGaze) this.hooks.onGaze(null);
     if (this.onEnd) this.onEnd(had);
+    const next = this.queue.shift();
+    if (next) this._start(next.clip, next.audio);
   }
 
   /**

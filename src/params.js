@@ -21,8 +21,10 @@ export const REST = {
   mouthRound: 0.1, // pucker / lip protrusion
   mouthPress: 0.15, // lips thinned & pressed together
   mouthTuck: 0.0, // lower lip drawn under upper teeth (F/V)
-  mouthCornerL: 0.1, // -1 frown .. +1 smile
-  mouthCornerR: 0.1,
+  // Availability is not a permanent smile. Warmth and encouragement are
+  // explicit behavioral choices layered above this neutral resting shape.
+  mouthCornerL: 0.0, // -1 frown .. +1 smile
+  mouthCornerR: 0.0,
   teethUpper: 0.0, // how far the upper teeth show, 0..1
   tongue: 0.0, // tongue raised into the aperture, 0..1
   jaw: 0.0, // extra chin drop, follows mouthOpen but slower

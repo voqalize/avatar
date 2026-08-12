@@ -438,8 +438,8 @@ export const HAND_GESTURES = {
   // and spending that outboard is what put the thumb through the portrait
   // window the first time. Swinging further toward the person you are waving at
   // is also, conveniently, what people do.
-  HI: {
-    id: 'HI', label: 'wave hello', shape: 'PALM', face: 'WAVE', dur: 1250, sc: 0.70,
+  GESTURE_GREET: {
+    id: 'GESTURE_GREET', label: 'greet', shape: 'PALM', face: 'GESTURE_GREET', dur: 1250, sc: 0.70,
     out: [[0, 0], [150, 74], [300, 114], [1000, 114], [1250, 30]],
     dy: [[0, HIDE], [150, 240], [300, 40], [390, 60], [700, 50], [1000, 58], [1120, 136], [1250, HIDE]],
     rot: [[0, -3], [150, 2], [310, 16], [475, -2], [640, 16], [805, -1], [970, 12], [1000, 8], [1250, -3]],
@@ -447,8 +447,8 @@ export const HAND_GESTURES = {
   // Goodbye: same hand, slower, one more swing, and it lingers at the top
   // before dropping. A wave that leaves as briskly as it arrived reads as a
   // dismissal rather than a farewell.
-  BYE: {
-    id: 'BYE', label: 'wave goodbye', shape: 'PALM', face: 'WAVE', dur: 1550, sc: 0.70,
+  GESTURE_GOODBYE: {
+    id: 'GESTURE_GOODBYE', label: 'goodbye', shape: 'PALM', face: 'GESTURE_GREET', dur: 1550, sc: 0.70,
     out: [[0, 0], [170, 76], [320, 116], [1300, 116], [1550, 32]],
     dy: [[0, HIDE], [160, 230], [320, 32], [410, 54], [700, 42], [1000, 52], [1300, 46], [1420, 128], [1550, HIDE]],
     rot: [[0, -3], [170, 2], [330, 16], [510, -2], [690, 16], [870, -2], [1050, 16], [1230, -1], [1300, 8], [1550, -3]],
@@ -461,8 +461,8 @@ export const HAND_GESTURES = {
   // exactly why it read the way it did. The wrist spends the entire budget (it
   // sits on the floor), so the fist rides the bottom edge and only the thumb is
   // up near the face.
-  THUMBS_UP: {
-    id: 'THUMBS_UP', label: 'thumbs up', shape: 'FIST', face: 'THUMBS_UP', dur: 1300,
+  GESTURE_APPROVE: {
+    id: 'GESTURE_APPROVE', label: 'approve', shape: 'FIST', face: 'GESTURE_APPROVE', dur: 1300,
     out: [[0, 0], [160, 54], [300, 84], [1050, 84], [1300, 32]],
     dy: [[0, HIDE], [160, 174], [300, 24], [390, 42], [700, 34], [1050, 40], [1160, 120], [1300, HIDE]],
     rot: [[0, -6], [160, -2], [300, 3], [400, 0], [700, 1.5], [1000, 0], [1050, 0], [1300, -8]],
@@ -472,8 +472,8 @@ export const HAND_GESTURES = {
   // couple of units and a degree, which reads as a held hand rather than as a
   // stopped clock. Held longest of the four, because it is the one gesture
   // whose job is to buy time (research-perception.md §1, latency masking).
-  ONE_MOMENT: {
-    id: 'ONE_MOMENT', label: 'one moment', shape: 'POINT', face: 'ONE_MOMENT', dur: 1700,
+  GESTURE_WAIT: {
+    id: 'GESTURE_WAIT', label: 'wait', shape: 'POINT', face: 'GESTURE_WAIT', dur: 1700,
     out: [[0, 0], [170, 60], [320, 96], [1400, 96], [1700, 34]],
     dy: [[0, HIDE], [170, 244], [320, 32], [410, 54], [700, 46], [1100, 53], [1400, 48], [1520, 136], [1700, HIDE]],
     rot: [[0, -7], [170, -2], [320, 2], [420, 0], [800, 1], [1200, -0.5], [1400, 0], [1700, -9]],
@@ -520,7 +520,7 @@ function sample(keys, t) {
 
 /**
  * Mount the hand over a face and return the player. Built by `createAvatar`;
- * a host drives it through `avatar.gesture(id)`, never directly.
+ * the public avatar composes it through a semantic `GESTURE_*` action.
  *
  * @param {SVGElement} svg    the mounted face's own root — same coordinate space
  * @param {{ink:string, paper:string}} theme  the mounted face's palette
@@ -575,6 +575,7 @@ export function createHand(svg, theme, meta, opts = {}) {
   for (const [k, s] of Object.entries(SHAPES)) shapes[k] = build(s);
 
   let current = null; // { def, start }
+  const queue = [];
   let lastT = 0;
 
   function place(x, y, rot, sc) {
@@ -595,9 +596,13 @@ export function createHand(svg, theme, meta, opts = {}) {
     get id() { return current ? current.def.id : null; },
     setDir(d) { dir = d === -1 ? -1 : 1; if (!current) park(); },
     /** @param {string} id  @param {number} [atMs] start time on the layer's clock */
-    play(id, atMs) {
+    play(id, atMs, { queue: shouldQueue = false } = {}) {
       const def = HAND_GESTURES[id];
       if (!def) throw new Error(`unknown hand gesture: ${id}`);
+      if (current && shouldQueue) {
+        if (current.def.id !== id && !queue.some((item) => item.id === id)) queue.push({ id, def });
+        return def;
+      }
       for (const [k, s] of Object.entries(shapes)) {
         s.style.display = k === def.shape ? '' : 'none';
       }
@@ -610,7 +615,18 @@ export function createHand(svg, theme, meta, opts = {}) {
       const local = tMs - current.start;
       if (local < 0) return;
       const def = current.def;
-      if (local >= def.dur) { current = null; park(); return def; }
+      if (local >= def.dur) {
+        const done = def;
+        const next = queue.shift();
+        if (next) {
+          for (const [k, s] of Object.entries(shapes)) s.style.display = k === next.def.shape ? '' : 'none';
+          current = { def: next.def, start: tMs };
+        } else {
+          current = null;
+          park();
+        }
+        return done;
+      }
       place(
         fr.cx + dir * sample(def.out, local),
         fr.bottom + sample(def.dy, local),
@@ -618,7 +634,7 @@ export function createHand(svg, theme, meta, opts = {}) {
         def.sc || 1
       );
     },
-    stop() { current = null; park(); },
+    stop() { current = null; queue.length = 0; park(); },
     destroy() { if (g.parentNode) g.parentNode.removeChild(g); },
   };
 }

@@ -19,7 +19,7 @@
   difference frames and call the result a measurement.
 
   ?face=peep&state=LISTENING&seed=7&w=440&talk=0&user=0
-  ?gesture=HI&at=0.4&side=1   fires a hand gesture at an absolute sim time, so a
+  ?gesture=GESTURE_GREET&at=0.4&side=1 fires a semantic gesture action at an absolute sim time, so a
                               frame-edge hand can be filmstripped the same way
                               body motion is. `at` gives the idle layer time to
                               settle first — a gesture fired at t=0 is measured
@@ -83,7 +83,7 @@ let gestureFired = false;
 window.stepTo = (t) => {
   let n = 0;
   while (sim < t - DT / 2) {
-    if (gesture && !gestureFired && sim >= gestureAt) { avatar.gesture(gesture); gestureFired = true; }
+    if (gesture && !gestureFired && sim >= gestureAt) { avatar.action(gesture); gestureFired = true; }
     avatar.step(DT);
     sim += DT;
     n++;

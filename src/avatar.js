@@ -7,8 +7,8 @@
  *   avatar.setGaze('SCREEN_LEFT')
  *   avatar.speak({ audio, cues })        // cues are {t, v, i?} in ms
  *   avatar.pushCues(moreCues)            // streaming top-up
- *   avatar.interject('OKAY')
- *   avatar.gesture('HI')                 // a hand at the frame edge + its face
+ *   avatar.action('ACK_RECEIVE')
+ *   avatar.action('GESTURE_GREET')       // a hand at the frame edge + its face
  *   avatar.perform(beats, { audio })     // timed {t, do, ...} verbs, same clock
  *   avatar.setUserSpeaking(bool)         // the user has the floor, so listening
  *                                        // is contingent instead of timed
@@ -33,7 +33,7 @@ import { emotionPose } from './emotions.js';
 import { GazeLayer, GAZE_TARGETS, AVERSION } from './gaze.js';
 import { IdleLayer, ListeningEngine } from './idle.js';
 import { ClipPlayer } from './clips.js';
-import { INTERJECTIONS } from './interjections.js';
+import { ACTIONS, INTERNAL_CLIPS } from './interjections.js';
 import { VisemeTrack, shapeFor, SILENT } from './visemes.js';
 import { PerformTrack } from './perform.js';
 import { createHand, HAND_GESTURES } from './hand.js';
@@ -43,13 +43,13 @@ import { createHand, HAND_GESTURES } from './hand.js';
 // alone separates listening (~16/min) from thinking (~25/min) from visually
 // busy (~9/min), and it is the cheapest state signal the rig has.
 export const STATES = {
-  IDLE:               { gaze: 'USER',     emotion: 'neutral',    idle: { sway: 1.0 }, backchannel: false,
+  IDLE:               { gaze: 'USER',     emotion: 'neutral',    idle: { sway: 1.0 }, engagement: false,
                         aversion: 'LISTEN' },
   // `aversion` is why this state does not stare. Continuous eye contact is not
   // the attentive pose it looks like — it is a demand for more talk (Rossano)
   // and it measures as *tense*, not attentive (Wang & Gratch). See AVERSION in
   // gaze.js for the numbers; the mixer holds it off near a turn boundary.
-  LISTENING:          { gaze: 'USER',     emotion: 'neutral',    backchannel: true,
+  LISTENING:          { gaze: 'USER',     emotion: 'neutral',    engagement: true,
                         aversion: 'LISTEN',
                         idle: { sway: 1.0, blinkGap: [3.1, 4.2] },
                         pose: { browRaiseL: 0.06, browRaiseR: 0.06, lidL: -0.04, lidR: -0.04 } },
@@ -59,13 +59,13 @@ export const STATES = {
   // leads DOWN (39% of measured cognitive aversions, §4.2) and wanders on the
   // ~3.5s cognitive-aversion cadence, coming back to the user roughly one
   // dwell in four — still with you, working.
-  THINKING:           { gaze: 'AWAY_DOWN', emotion: 'thoughtful', backchannel: false,
+  THINKING:           { gaze: 'AWAY_DOWN', emotion: 'thoughtful', engagement: false,
                         idle: { sway: 0.7, blinkGap: [2.1, 2.7], breathRate: 1.18, breathAmp: 0.7,
                                 hold: { every: [4.5, 9.0], dur: [0.8, 1.5] } },
                         wander: { targets: ['AWAY_DOWN', 'AWAY_DOWN', 'AWAY_THINKING', 'USER'],
                                   every: [2.6, 4.4] } },
-  SPEAKING:           { gaze: 'USER',     emotion: 'neutral',    idle: { sway: 0.55 }, backchannel: false },
-  REVIEWING_SCREEN:   { gaze: 'SCREEN_CENTER', emotion: 'thoughtful', backchannel: false,
+  SPEAKING:           { gaze: 'USER',     emotion: 'neutral',    idle: { sway: 0.55 }, engagement: false },
+  REVIEWING_SCREEN:   { gaze: 'SCREEN_CENTER', emotion: 'thoughtful', engagement: false,
                         idle: { sway: 0.8, blinkGap: [4.0, 6.5] },
                         wander: { targets: ['SCREEN_CENTER', 'SCREEN_LEFT', 'SCREEN_RIGHT', 'SCREEN_TOP', 'SCREEN_WORK'],
                                   every: [1.8, 5.0] } },
@@ -73,7 +73,7 @@ export const STATES = {
   // multiplier to exist at all: 0.05 here renders as 0.3° of rotation, which
   // is no tilt whatever the number says. 0.30 renders ~1.7° — visible at tile
   // size, still gentle. Every other channel in this pose read fine on screen.
-  WAITING_FOR_USER: { gaze: 'USER',     emotion: 'encouraging', backchannel: true,
+  WAITING_FOR_USER: { gaze: 'USER',     emotion: 'encouraging', engagement: true,
                         idle: { sway: 1.0, blinkGap: [3.1, 4.2] },
                         pose: { headRoll: 0.30, browRaiseL: 0.16, browRaiseR: 0.12 } },
   // Straining to hear. The one state where the amplitude constraint yields,
@@ -81,11 +81,11 @@ export const STATES = {
   // engagement ceiling (+0.16), head cheated aside on USER_EAR so an ear
   // favors the speaker while the eyes hold contact, and a concentration
   // squint with knit brows. Stillness does the rest — straining people
-  // freeze — so holds are frequent and there are NO backchannels: you don't
+  // freeze — so holds are frequent and there is no engagement lean: you don't
   // nod along to what you can't hear. Server sends it on soft/low-SNR user
   // audio, typically followed by SORRY or a "could you repeat" utterance.
   CANT_HEAR: {
-    gaze: 'USER_EAR', emotion: 'neutral', backchannel: false,
+    gaze: 'USER_EAR', emotion: 'neutral', engagement: false,
     idle: { sway: 0.5, blinkGap: [4.5, 6.5],
             hold: { every: [2.5, 5.5], dur: [1.0, 1.8] } },
     // A minimal line face swallows small deltas — the ink moves whole units
@@ -113,7 +113,7 @@ export const STATES = {
     // follow seals the eyes, and at tile size shut eyes read as asleep, not
     // busy. A mild down-left with the head pitched into it keeps the iris in
     // the opening — eyes down but awake.
-    gaze: 'SCREEN_WORK', emotion: 'neutral', backchannel: false,
+    gaze: 'SCREEN_WORK', emotion: 'neutral', engagement: false,
     idle: { sway: 0.6, blinkGap: [6.0, 7.5], breathRate: 1.05,
             rhythm: { amp: 0.05, freq: 2.2 } },
     glance: { to: 'USER', every: [4, 7], hold: [0.7, 1.1] },
@@ -129,7 +129,7 @@ export const STATES = {
   // DEGRADED says "my feed is broken", TYPING_CHAT says "I'm working around
   // it" — a server will typically sequence DEGRADED → TYPING_CHAT.
   TYPING_CHAT: {
-    gaze: 'SCREEN_WORK', emotion: 'neutral', backchannel: false,
+    gaze: 'SCREEN_WORK', emotion: 'neutral', engagement: false,
     idle: { sway: 0.6, blinkGap: [5.5, 7.0], breathRate: 1.05,
             rhythm: { amp: 0.055, freq: 2.5 } },
     glance: { to: 'USER', every: [3.2, 5.5], hold: [1.2, 2.0] },
@@ -142,12 +142,12 @@ export const STATES = {
   },
   // Attention genuinely elsewhere. What separates this from TYPING is target
   // *stability* (§6.4): busy is one steady off-user target, distracted is
-  // wandering ones, held long (aversion >3s), with no backchannels — the
+  // wandering ones, held long (aversion >3s), with no engagement lean — the
   // missing nod is as diagnostic as the look-away. Sway is looser than
   // LISTENING because attention is what was holding the body still. The
   // widget only looks away; deciding when to snap back is the server's call.
   DISTRACTED: {
-    gaze: 'AWAY_RIGHT', emotion: 'neutral', backchannel: false,
+    gaze: 'AWAY_RIGHT', emotion: 'neutral', engagement: false,
     idle: { sway: 1.15, blinkGap: [1.8, 4.2] },
     // Sideways and up, never steep-down: lateral is where real intimacy/
     // distraction aversions live, and a steep down target seals this rig's
@@ -162,7 +162,7 @@ export const STATES = {
   // wiggle nobody makes while merely reading. Server semantics: a filler
   // while an async activity completes; the server exits it when done.
   SEARCHING_SCREEN: {
-    gaze: 'SCREEN_CENTER', emotion: 'neutral', backchannel: false,
+    gaze: 'SCREEN_CENTER', emotion: 'neutral', engagement: false,
     idle: { sway: 0.65, blinkGap: [5.0, 6.8], breathRate: 1.05,
             flick: { amp: 0.30, every: [3.5, 7.0] } },
     wander: { targets: ['SCREEN_CENTER', 'SCREEN_LEFT', 'SCREEN_TOP', 'SCREEN_WORK',
@@ -186,7 +186,7 @@ export const STATES = {
   // use to predict that someone is about to speak. The head comes *up* rather
   // than down: a lowered head is deferential and reads as yielding.
   TAKING_FLOOR: {
-    gaze: 'USER', emotion: 'neutral', idle: { sway: 0.6 }, backchannel: false,
+    gaze: 'USER', emotion: 'neutral', idle: { sway: 0.6 }, engagement: false,
     pose: {
       browRaiseL: 0.26, browRaiseR: 0.22, lidL: -0.10, lidR: -0.10,
       headPitch: -0.10, torsoLean: 0.22, shoulderL: 0.30, shoulderR: 0.30,
@@ -199,7 +199,7 @@ export const STATES = {
   // purpose — stillness is what makes it read as intent rather than as fidget),
   // leaning in, lips apart and staying apart.
   WANTS_IN: {
-    gaze: 'USER', emotion: 'neutral', idle: { sway: 0.45 }, backchannel: false,
+    gaze: 'USER', emotion: 'neutral', idle: { sway: 0.45 }, engagement: false,
     pose: {
       browRaiseL: 0.42, browRaiseR: 0.38, lidL: -0.14, lidR: -0.14,
       headPitch: -0.14, torsoLean: 0.42, shoulderL: 0.45, shoulderR: 0.45,
@@ -210,17 +210,17 @@ export const STATES = {
   // happen faster than anything else on the face — see YIELD_FLOOR, which is
   // what actually delivers the snap.
   YIELDED: {
-    gaze: 'USER', emotion: 'neutral', idle: { sway: 0.9 }, backchannel: false,
+    gaze: 'USER', emotion: 'neutral', idle: { sway: 0.9 }, engagement: false,
     pose: {
       browRaiseL: 0.10, browRaiseR: 0.08,
       torsoLean: -0.18, shoulderL: -0.12, shoulderR: -0.12,
     },
   },
 
-  DEGRADED:           { gaze: 'USER',     emotion: 'neutral',    backchannel: false,
+  DEGRADED:           { gaze: 'USER',     emotion: 'neutral',    engagement: false,
                         idle: { sway: 0.4, blinkGap: [4.0, 8.0] },
                         pose: { lidL: 0.3, lidR: 0.3 }, filter: 'grayscale(.55) brightness(.82)' },
-  OFFLINE:            { gaze: 'USER',     emotion: 'neutral',    backchannel: false,
+  OFFLINE:            { gaze: 'USER',     emotion: 'neutral',    engagement: false,
                         idle: { sway: 0.15, blinkGap: [9, 15] },
                         pose: { lidL: 0.95, lidR: 0.95, mouthCornerL: 0, mouthCornerR: 0 },
                         filter: 'grayscale(1) brightness(.6)' },
@@ -294,17 +294,7 @@ export function createAvatar(opts = {}) {
     onGaze: (g) => { gazeOverrideByClip = g; applyGaze(); },
     onBlink: () => idle.blink(),
   });
-  // True only while the listening engine is playing one of its OWN
-  // acknowledgements. Its acks go out through `interject()` like any other, and
-  // without this flag the engine would read its own nod as the server driving
-  // the channel and cede to itself — going silent for a whole window after
-  // every autonomous nod.
-  let selfAck = false;
-  const backchannel = new ListeningEngine((id) => {
-    selfAck = true;
-    try { interject(id); } finally { selfAck = false; }
-    emit('backchannel', id);
-  });
+  const engagement = new ListeningEngine();
   const performTrack = new PerformTrack();
   // The hand is a sibling of the mixer, not a layer inside it: it writes SVG
   // directly rather than parameter channels, because a hand at the frame edge is
@@ -316,7 +306,7 @@ export function createAvatar(opts = {}) {
   gaze.onLargeShift = () => idle.blink();
 
   const listeners = {
-    state: [], speakEnd: [], clipEnd: [], backchannel: [], performEnd: [], gestureEnd: [],
+    state: [], speakEnd: [], clipEnd: [], performEnd: [], gestureEnd: [],
   };
   const emit = (ev, ...a) => listeners[ev] && listeners[ev].forEach((f) => f(...a));
   clip.onEnd = (c) => { if (c) emit('clipEnd', c.id); };
@@ -452,18 +442,18 @@ export function createAvatar(opts = {}) {
     gaze.setAversion(st.aversion ? AVERSION[st.aversion] : null);
     gaze.hold = attendUntil > elapsed || clip.playing;
 
-    backchannel.enabled = !!st.backchannel && !clip.playing;
-    backchannel.update(dt);
+    engagement.enabled = !!st.engagement && !clip.playing;
+    engagement.update(dt);
     // Engagement posture: forward lean while the user holds the floor, spent
     // only in the states that are *about* the user holding the floor. The
     // research (docs/research-biomechanics.md §6.3) puts sustained attentive
     // lean at +0.15–0.25; engage glides, and torsoLean's 0.24s tau smooths
     // the state gate, so the lean arrives and leaves like weight shifting.
-    if (st.backchannel) target.torsoLean += 0.16 * backchannel.engage;
+    if (st.engagement) target.torsoLean += 0.16 * engagement.engage;
     // Straining leans harder while there is actually a faint voice to strain
     // after. engage already tracks "the user is (barely) talking", so this
     // costs nothing; with no user signal the static pose carries the state.
-    else if (stateName === 'CANT_HEAR') target.torsoLean += 0.10 * backchannel.engage;
+    else if (stateName === 'CANT_HEAR') target.torsoLean += 0.10 * engagement.engage;
 
     // 4. mouth. The server's viseme track wins; a clip's mouth track fills the
     // gaps. There is deliberately no third leg: with no cues the mouth stays
@@ -579,7 +569,6 @@ export function createAvatar(opts = {}) {
     // fire a stale timestamp immediately.
     glanceUntil = 0;
     glanceAt = elapsed + (st.glance ? st.glance.every[0] + Math.random() * (st.glance.every[1] - st.glance.every[0]) : 0);
-    backchannel.reset(name === 'LISTENING' ? 2.2 : 4);
     face.svg.style.filter = st.filter || '';
     face.svg.style.transition = 'filter .5s ease';
     if (changed) { idle.blink(); emit('state', name); }
@@ -603,8 +592,9 @@ export function createAvatar(opts = {}) {
    * @param {() => number} [o.clock] custom ms clock, if you drive audio yourself
    */
   function speak(o = {}) {
-    // A spoken interjection must die before real speech starts.
-    if (clip.playing && clip.clip.mouthCues) clip.stop();
+    // Speech owns the mouth in the mixer, but a server action still gets to
+    // complete its physical landing on the other channels. Do not cancel it
+    // here: a hand or head cannot disappear simply because playout began.
     speakStart = performance.now();
     speakClock = o.clock
       ? o.clock
@@ -624,8 +614,7 @@ export function createAvatar(opts = {}) {
    * speaker periodically looks at the listener, mutual gaze is established, the
    * listener responds inside that window, and the speaker looks away again
    * (Bavelas, Coates & Johnson 2002) — listener responses cluster inside the
-   * window rather than being scattered across the turn. It is the single
-   * strongest predictor of *when* a backchannel is due.
+   * window rather than being scattered across the turn.
    *
    * We cannot see the user, so we cannot observe the window opening. What a
    * caller *can* do is name the moments that co-occur with it — a mid-turn
@@ -637,7 +626,7 @@ export function createAvatar(opts = {}) {
    * call — a window that opens and draws nothing is a real and common outcome
    * (with every measured invitation cue present, humans respond to only ~30% of
    * opportunities), and conflating the two would make the avatar answer
-   * everything.
+   * everything. The explicit response remains a backend/application decision.
    *
    * Deliberately **not on the wire yet**: there is no `attend` command in
    * `client/src/types.ts`, so today this is reachable only from JS (the demo and
@@ -656,24 +645,10 @@ export function createAvatar(opts = {}) {
 
   function stopSpeaking() { speech.stop(); return api; }
 
-  // The acknowledgement family: exactly what the listening engine's own
-  // `pickAck` can produce, plus the vocal continuer. A server sending one of
-  // these is doing the engine's job, so the engine stands down (see
-  // ListeningEngine.cede). Everything else — SORRY, ONE_MOMENT, OKAY — is the
-  // agent talking rather than listening and only gets the usual short reset.
-  const ACK_IDS = new Set(['NOD_SMALL', 'NOD_SLOW', 'NOD_UP', 'BROW_ACK', 'MM_HMM']);
-  // One window of standing down. Long enough that a server acknowledging inside
-  // the 6-12/min band (one per 5-10 s) keeps the floor uncontested; short enough
-  // that a server which stops hands the listener back rather than leaving the
-  // face still for the rest of the call.
-  const CEDE_S = 12;
-
   function interject(id) {
-    const c = INTERJECTIONS[id];
+    const c = INTERNAL_CLIPS[id];
     if (!c) throw new Error(`unknown interjection: ${id}`);
     clip.play(c, c.audioEl);
-    backchannel.reset(3.5);
-    if (!selfAck && ACK_IDS.has(id)) backchannel.cede(CEDE_S);
     return api;
   }
 
@@ -683,34 +658,45 @@ export function createAvatar(opts = {}) {
    *
    * The face half is not a convenience — a hand rising to the jaw over a head
    * and shoulders sitting perfectly still is a cut-out, not a gesture. Each
-   * entry in HAND_GESTURES names an interjection that already exists and was
-   * already tuned (`WAVE`, `THUMBS_UP`, `ONE_MOMENT`); firing it here is the
+   * entry in HAND_GESTURES names the matching semantic face action; firing it here is the
    * library composing two authored things, not the client inventing motion.
    *
-   * The two halves stay separable in both directions. `interject('WAVE')` is
-   * still the face alone and is unchanged by this — a server that upgrades gets
-   * no new behaviour until it asks for one — and on an avatar mounted with
-   * `hand: false` this call degrades to exactly that interjection, which is the
-   * same graceful failure the arm removal already forced every id through.
+   * On an avatar mounted with `hand: false` this internal helper degrades to
+   * the face action alone.
    */
   function gesture(id) {
     const def = HAND_GESTURES[id];
     if (!def) throw new Error(`unknown hand gesture: ${id}`);
     if (hand) hand.play(id, elapsed * 1000);
     if (def.face) interject(def.face);
-    // A hand in frame is a deliberate move; a backchannel landing on top of it
-    // is the listening engine talking over the server.
-    backchannel.reset(def.dur / 1000 + 0.5);
+    return api;
+  }
+
+  /** One self-completing server action. State continues to resolve underneath;
+   * face and hand layers queue their next movement so an in-flight physical
+   * gesture always gets to land. */
+  function action(id) {
+    const handDef = HAND_GESTURES[id];
+    if (handDef) {
+      if (hand) hand.play(id, elapsed * 1000, { queue: true });
+      if (handDef.face) {
+        const faceClip = ACTIONS[handDef.face];
+        if (faceClip) clip.play(faceClip, faceClip.audioEl, { queue: true });
+      }
+      return api;
+    }
+    const faceClip = ACTIONS[id];
+    if (!faceClip) throw new Error(`unknown action: ${id}`);
+    clip.play(faceClip, faceClip.audioEl, { queue: true });
     return api;
   }
 
   /**
-   * Tell the listening engine whether the USER holds the floor, so backchannels
-   * become contingent on their pauses instead of running on a timer. The server
-   * owns this — it has the endpointer — and sends it as the `user` command;
-   * `null` hands back to the no-signal timer fallback.
+   * Tell the listening engine whether Pipecat VAD says the user holds the
+   * floor. This changes only sustained engagement posture; it can never create
+   * a nod or acknowledgement clip.
    */
-  function setUserSpeaking(b) { backchannel.setUserSpeaking(b); return api; }
+  function setUserSpeaking(b) { engagement.setUserSpeaking(b); return api; }
 
   // What one action does when its moment comes. Enum validity is checked here,
   // where the enums live: a bad value warns and is skipped, because one stale
@@ -723,8 +709,7 @@ export function createAvatar(opts = {}) {
       if (a.do === 'state') setState(a.name, { keepGaze: a.keepGaze !== false });
       else if (a.do === 'emotion') setEmotion(a.name, a.i ?? 1);
       else if (a.do === 'gaze') setGaze(a.name);
-      else if (a.do === 'interject') interject(a.id);
-      else if (a.do === 'gesture') gesture(a.id);
+      else if (a.do === 'action') action(a.id);
     } catch (e) {
       console.warn(`perform: ${a.do} at ${a.t}ms skipped — ${e.message}`);
     }
@@ -734,7 +719,7 @@ export function createAvatar(opts = {}) {
 
   /**
    * Play a timed action track — the composition surface a server assembles
-   * turns from. Verbs: state / emotion / gaze / interject / gesture (see
+   * turns from. Verbs: state / emotion / gaze / action (see
    * perform.js for hygiene, docs/contract-protocol.md for the schema).
    *
    * Clock resolution mirrors speak(): explicit `clock` fn, else the audio
@@ -764,8 +749,8 @@ export function createAvatar(opts = {}) {
   }
 
   const api = {
-    setState, setEmotion, setGaze, speak, pushCues, stopSpeaking, interject, attend,
-    gesture, perform,
+    setState, setEmotion, setGaze, speak, pushCues, stopSpeaking, attend,
+    action, perform,
     /** Which hand the character gestures with: +1 the viewer's right (its own
      *  left), -1 the other. Both are anatomically real — the thumb splays away
      *  from the body either way — so this is a character choice, not a fix. */
@@ -796,7 +781,7 @@ export function createAvatar(opts = {}) {
     /** The hand gesture in flight, or null. `null` forever if `hand: false`. */
     get gesturing() { return hand ? hand.id : null; },
     get params() { return cur; },
-    get userSpeaking() { return backchannel.speaking; },
+    get userSpeaking() { return engagement.speaking; },
     svg: face.svg,
     meta,
     /** The mounted rig's palette, merged with any `opts.theme` overrides. A
@@ -816,10 +801,10 @@ export function createAvatar(opts = {}) {
   return api;
 }
 
-export { INTERJECTIONS, INTERJECTION_IDS, SPOKEN_IDS, attachAudio } from './interjections.js';
+export { ACTION_IDS, ACTIONS, attachAudio } from './interjections.js';
 export { GAZE_NAMES, GAZE_TARGETS } from './gaze.js';
 export { normalizeActions } from './perform.js';
-export { HAND_GESTURES, HAND_GESTURE_IDS, checkHandFraming } from './hand.js';
+export { checkHandFraming } from './hand.js';
 export { EMOTION_NAMES } from './emotions.js';
 export {
   VISEME_LETTERS, VISEME_SHAPES, normalizeCues, textToCues,

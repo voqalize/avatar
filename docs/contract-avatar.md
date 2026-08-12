@@ -203,7 +203,7 @@ its theme keys stay overridable, but do not add a `dark` selector.
 
 ## The hand — a layer no face draws
 
-`src/hand.js` puts a hand into the bottom of the frame for `gesture(id)`
+`src/hand.js` puts a hand into the bottom of the frame for `GESTURE_*` actions
 (protocol side: [contract-protocol.md](contract-protocol.md) § Hand gestures).
 It is deliberately **not** part of this contract's parameter space: it writes a
 transform on its own `<g>` appended over the face's svg, it has no channel in
@@ -228,7 +228,7 @@ tile slices anything outboard with a hard vertical line that reads as a
 rendering fault). `sweep()` runs it for every registered avatar, so a new face
 with an unusual window fails the gate rather than the eye.
 
-If a character's idiom cannot carry it, mount with `hand: false`; `gesture()`
+If a character's idiom cannot carry it, mount with `hand: false`; a `GESTURE_*`
 then plays the face half alone.
 
 ## Checklist for a new avatar

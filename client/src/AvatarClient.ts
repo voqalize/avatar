@@ -4,38 +4,19 @@
  *
  * ## Turn clock anchoring
  *
- * A turn's `t0` is anchored to `performance.now()` **at the moment this client
- * receives the `{cmd:"speech", event:"start"}` message** — cues are
- * client-anchored, not per-cue server-released. That message rides the RTVI
- * data channel, ahead of the jitter-buffered audio path, so the residual error
- * lands on the video-leads side — the side `docs/contract-protocol.md` says
- * perceptual tolerance favours (+125 ms vs -45 ms).
+ * Base Pipecat TTS gives each serialized TTS context an opaque `context_id`.
+ * The server uses it only to group and splice cue chunks. `botStartedSpeaking`
+ * has no context payload, so the browser FIFO-claims the next buffered context
+ * at that factual playout event and anchors its clock there. `botStoppedSpeaking`
+ * closes the active context. No avatar-specific speech marker exists.
  *
- * We investigated anchoring on pipecat client-js's own `RTVIEvent
- * .BotStartedSpeaking`/`BotStoppedSpeaking` instead (or as a refinement) and
- * chose not to, for two reasons:
- *
- *   1. **No turn correlation.** Those events carry no payload — no `ctx` — so
- *      there is no way to tell which turn a firing belongs to. Our own
- *      `speech` command carries `ctx`, which the splice logic below needs
- *      regardless, so anchoring off it costs nothing extra.
- *   2. **Same source, same path, no accuracy gain.** The `AvatarProcessor`
- *      sits between the TTS service and the output transport and observes the
- *      transport's own `BotStarted/StoppedSpeakingFrame` broadcasts — the exact
- *      frame pipecat's built-in speaking detection is *also* driven from. Both
- *      notifications travel the same data-channel path to the browser. There is
- *      no local "truly audible now" signal cheaply available: the audio arrives
- *      on a `MediaStreamTrack` whose only lifecycle events (`unmute`/`mute`)
- *      fire once per call, not per utterance. Tapping the decoded remote audio
- *      with a WebAudio `AnalyserNode` RMS gate *would* give one, but it adds
- *      its own onset latency and a real audio pipeline to build and tune, and
- *      it would eat into the intentional video-first safety margin rather than
- *      improve it. Left as a documented option, not built.
- *
- * `attach()` therefore subscribes to exactly one pipecat event,
- * `serverMessage`. It used to also subscribe to both speaking events to report
- * a diagnostic drift between our anchor and pipecat's; that hook is gone with
- * the rest of the observability surface (`docs/removed.md` § Client callbacks).
+ * `attach()` subscribes to the avatar server-message channel *and* Pipecat's
+ * standard lifecycle events. Server messages carry only what Pipecat cannot:
+ * correlated speech/cue timing and deliberate application instructions. The
+ * lifecycle events project the factual presence states locally. The server
+ * supplies only lower-priority `THINKING` / `WORKING` claims and deliberate,
+ * self-completing actions. This keeps the face tied to playout truth even if a
+ * server claim is delayed or stale.
  *
  * ## Cue splice
  *
@@ -60,10 +41,10 @@
  *     an unchanged state is a no-op past the profile/gaze reset the widget
  *     already does for a same-name `setState`).
  *
- * Cues commonly arrive **before** `speech start` — the fast leg starts the
- * moment a sentence is handed to TTS, well before `BotStartedSpeakingFrame`.
+ * Cues commonly arrive **before** `botStartedSpeaking` — the fast leg starts
+ * the moment a sentence is handed to TTS, well before audio playout.
  * Chunks that arrive before the clock is anchored are spliced into the
- * canonical array but not yet handed to the widget; `speech start` hands over
+ * canonical array but not yet handed to the widget; `botStartedSpeaking` hands over
  * whatever has accumulated as the turn's first `speak()` call. So "the first
  * chunk of a turn starts speak()" means the first *widget* call, not
  * necessarily the first *message*.
@@ -76,8 +57,6 @@ import {
   type AvatarCommand,
   type AvatarCue,
   type AvatarCuesCmd,
-  type AvatarSpeechCmd,
-  type AvatarStateCmd,
 } from "./types.js";
 
 
@@ -85,7 +64,7 @@ interface Turn {
   ctx: string;
   /** The canonical, already-spliced cue track for this turn. */
   cues: AvatarCue[];
-  /** Whether `speech start` has anchored a clock and issued the first `speak()`. */
+  /** Whether Pipecat playout has anchored a clock and issued `speak()`. */
   started: boolean;
   clock: (() => number) | null;
 }
@@ -108,6 +87,11 @@ export interface AvatarClientOptions {
   onError?: (err: unknown, msg: AvatarCommand) => void;
   /** Override for tests. Defaults to `performance.now`. */
   now?: () => number;
+  /** Quiet time in listening before the client-owned idle loop begins. */
+  idleDelayMs?: number;
+  /** Timer seams keep lifecycle behavior deterministic in tests. */
+  setTimeout?: typeof setTimeout;
+  clearTimeout?: typeof clearTimeout;
 }
 
 /**
@@ -127,7 +111,18 @@ export interface AvatarClientOptions {
  */
 export const RTVI_EVENTS = {
   serverMessage: "serverMessage",
+  connected: "connected",
+  disconnected: "disconnected",
+  botReady: "botReady",
+  error: "error",
+  userStartedSpeaking: "userStartedSpeaking",
+  userStoppedSpeaking: "userStoppedSpeaking",
+  botStartedSpeaking: "botStartedSpeaking",
+  botStoppedSpeaking: "botStoppedSpeaking",
 } as const satisfies Record<string, string>;
+
+type LifecycleState = "IDLE" | "LISTENING" | "THINKING" | "TYPING" | "SPEAKING" | "DEGRADED" | "OFFLINE";
+type ServerClaim = "THINKING" | "WORKING" | null;
 
 /** Defensive unwrap for the `RTVIEvent.ServerMessage` `{ data }` quirk: some
  * transports deliver the payload directly and some wrap it once more. */
@@ -142,11 +137,30 @@ export class AvatarClient {
   private readonly opts: AvatarClientOptions;
   private readonly now: () => number;
   private turn: Turn | null = null;
+  private readonly turns = new Map<string, Turn>();
+  private readonly pendingCtxs: string[] = [];
+  private readonly closedCtxs = new Set<string>();
+  private projected: LifecycleState | null = null;
+  private serverClaim: ServerClaim = null;
+  private userSpeaking = false;
+  private botSpeaking = false;
+  private listening = false;
+  private idle = true;
+  private failure: "DEGRADED" | "OFFLINE" | null = null;
+  private idleTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingInterruptedAction = false;
+  private discardQueuedContextsOnBotStop = false;
+  private readonly idleDelayMs: number;
+  private readonly setTimer: typeof setTimeout;
+  private readonly clearTimer: typeof clearTimeout;
 
   constructor(avatar: AvatarApi, opts: AvatarClientOptions = {}) {
     this.avatar = avatar;
     this.opts = opts;
     this.now = opts.now ?? (() => performance.now());
+    this.idleDelayMs = opts.idleDelayMs ?? 12_000;
+    this.setTimer = opts.setTimeout ?? globalThis.setTimeout.bind(globalThis);
+    this.clearTimer = opts.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
   }
 
   /** The active turn's ctx, or `null` between turns. For tests and telemetry. */
@@ -167,23 +181,14 @@ export class AvatarClient {
     const msg: AvatarCommand = raw;
     try {
       switch (msg.cmd) {
-        case "state":
-          this.handleState(msg);
+        case "claim":
+          this.handleClaim(msg.state);
           break;
-        case "interject":
-          this.avatar.interject(msg.id);
-          break;
-        case "gesture":
-          this.avatar.gesture(msg.id);
+        case "action":
+          this.handleAction(msg.id);
           break;
         case "cues":
           this.handleCues(msg);
-          break;
-        case "speech":
-          this.handleSpeech(msg);
-          break;
-        case "user":
-          this.avatar.setUserSpeaking(msg.speaking);
           break;
         // No default: an unknown `cmd` is a newer server talking to an older
         // widget, and the protocol's forward-compat rule says ignore it. There
@@ -196,36 +201,50 @@ export class AvatarClient {
     }
   }
 
-  private handleState(msg: AvatarStateCmd) {
-    // Deliberately no client-side dedup: pass every `state` command straight
-    // through. The widget's own setState already no-ops the parts that matter
-    // for an unchanged name (`changed` gates the blink and the 'state' event in
-    // avatar.js), and a server resending the same state name as a
-    // keepalive/resync must still land so an `emotion`/`gaze` override on this
-    // particular message takes effect.
-    this.avatar.setState(msg.name, { emotion: msg.emotion, gaze: msg.gaze });
+  private handleClaim(state: ServerClaim): void {
+    this.serverClaim = state;
+    if (state) this.idle = false;
+    this.applyProjection();
+    this.armIdleIfEligible();
+  }
+
+  private handleAction(id: string): void {
+    // An interruption is a server-confirmed explanation of a transition, not
+    // authority to steal the mouth while bot audio is still playing. Hold it
+    // until playout has released the speaking state.
+    if (id === "RESPONSE_INTERRUPTED" && this.botSpeaking) {
+      this.pendingInterruptedAction = true;
+      // Any prefetched TTS contexts behind an interrupted playout belong to
+      // audio Pipecat will now discard. Never let one animate a later reply.
+      this.discardQueuedContextsOnBotStop = true;
+      return;
+    }
+    this.playAction(id);
+  }
+
+  private playAction(id: string): void {
+    this.avatar.action(id);
   }
 
   private ensureTurn(ctx: string): Turn {
-    if (!this.turn || this.turn.ctx !== ctx) {
-      // A different ctx supersedes whatever turn we had — a stale trailing
-      // message for the old ctx will find `this.turn.ctx !== ctx` in
-      // handleSpeech's stop-guard and be ignored, rather than cutting off the
-      // new turn.
-      this.turn = { ctx, cues: [], started: false, clock: null };
-    }
-    return this.turn;
+    const existing = this.turns.get(ctx);
+    if (existing) return existing;
+    const turn = { ctx, cues: [], started: false, clock: null };
+    this.turns.set(ctx, turn);
+    this.pendingCtxs.push(ctx);
+    return turn;
   }
 
   private handleCues(msg: AvatarCuesCmd) {
+    if (this.closedCtxs.has(msg.ctx)) return;
     const turn = this.ensureTurn(msg.ctx);
     const kept = turn.cues.filter((c) => c.t < msg.from_ms);
     const discarded = turn.cues.length - kept.length;
     turn.cues = [...kept, ...msg.cues].sort((a, b) => a.t - b.t);
 
     if (!turn.started) {
-      // No clock yet — buffer. `speech start` will hand this over as the turn's
-      // first speak() call.
+      // No clock yet — buffer. Pipecat playout will claim this FIFO context.
+      if (this.botSpeaking && this.turn === null) this.activateNextTurn();
       return;
     }
     if (discarded === 0) {
@@ -235,36 +254,180 @@ export class AvatarClient {
     }
   }
 
-  private handleSpeech(msg: AvatarSpeechCmd) {
-    if (msg.event === "start") {
-      const turn = this.ensureTurn(msg.ctx);
-      const t0 = this.now();
-      const clock = () => this.now() - t0;
-      turn.clock = clock;
-      turn.started = true;
-      this.avatar.speak({ cues: turn.cues, clock });
-      return;
+  private activateNextTurn(): void {
+    if (this.turn) return;
+    let turn: Turn | undefined;
+    while (this.pendingCtxs.length && !turn) {
+      turn = this.turns.get(this.pendingCtxs.shift()!);
     }
-    // "stop": only act if it names the turn we're actually riding. A stale stop
-    // for an already-superseded ctx must not cut off a newer turn.
-    if (this.turn && this.turn.ctx === msg.ctx) {
-      this.avatar.stopSpeaking();
-      this.turn = null;
+    if (!turn) return;
+    const t0 = this.now();
+    turn.clock = () => this.now() - t0;
+    turn.started = true;
+    this.turn = turn;
+    this.avatar.speak({ cues: turn.cues, clock: turn.clock });
+  }
+
+  private discardQueuedTurns(): void {
+    for (const ctx of this.pendingCtxs.splice(0)) {
+      this.closedCtxs.add(ctx);
+      this.turns.delete(ctx);
     }
   }
 
+  private lifecycleState(): LifecycleState {
+    if (this.failure) return this.failure;
+    // Audio truth is the P0 invariant: no lower claim or microphone event may
+    // put the face in a non-speaking pose while bot speech is audible.
+    if (this.botSpeaking) return "SPEAKING";
+    if (this.userSpeaking) return "LISTENING";
+    if (this.serverClaim === "WORKING") return "TYPING";
+    if (this.serverClaim === "THINKING") return "THINKING";
+    if (this.idle) return "IDLE";
+    return "LISTENING";
+  }
+
+  private applyProjection(force = false): void {
+    const state = this.lifecycleState();
+    if (force || this.projected !== state) {
+      this.avatar.setState(state);
+      this.projected = state;
+    }
+  }
+
+  private clearIdleTimer(): void {
+    if (this.idleTimer !== null) {
+      this.clearTimer(this.idleTimer);
+      this.idleTimer = null;
+    }
+  }
+
+  private armIdleIfEligible(): void {
+    this.clearIdleTimer();
+    if (!this.listening || this.userSpeaking || this.botSpeaking || this.serverClaim || this.failure) return;
+    this.idleTimer = this.setTimer(() => {
+      this.idleTimer = null;
+      if (!this.userSpeaking && !this.botSpeaking && !this.serverClaim && !this.failure) {
+        this.idle = true;
+        this.applyProjection();
+      }
+    }, this.idleDelayMs);
+  }
+
+  private enterListening(): void {
+    this.listening = true;
+    this.idle = false;
+    this.applyProjection();
+    this.armIdleIfEligible();
+  }
+
+  private clearClaimForTurnBoundary(): void {
+    // Claims are lower-priority hints. A fresh user turn or real playout means
+    // any prior thinking/work claim is no longer allowed to reappear later.
+    this.serverClaim = null;
+  }
+
+  private maybePlayInterrupted(): void {
+    if (this.pendingInterruptedAction && !this.botSpeaking) {
+      this.pendingInterruptedAction = false;
+      this.playAction("RESPONSE_INTERRUPTED");
+    }
+  }
+
+  private clearRecoverableFailure(): void {
+    if (this.failure === "DEGRADED") {
+      this.failure = null;
+      this.applyProjection();
+    }
+  }
+
+  private onUserStartedSpeaking = (): void => {
+    this.clearRecoverableFailure();
+    this.userSpeaking = true;
+    this.clearClaimForTurnBoundary();
+    this.listening = true;
+    this.idle = false;
+    this.clearIdleTimer();
+    this.avatar.setUserSpeaking(true);
+    this.applyProjection();
+  };
+
+  private onUserStoppedSpeaking = (): void => {
+    this.userSpeaking = false;
+    this.avatar.setUserSpeaking(false);
+    this.enterListening();
+  };
+
+  private onBotStartedSpeaking = (): void => {
+    this.clearRecoverableFailure();
+    this.botSpeaking = true;
+    this.clearClaimForTurnBoundary();
+    this.idle = false;
+    this.clearIdleTimer();
+    this.applyProjection();
+    this.activateNextTurn();
+  };
+
+  private onBotStoppedSpeaking = (): void => {
+    this.botSpeaking = false;
+    // Playout truth releases the only active mouth track. A late cue chunk for
+    // this context is ignored rather than reviving a silent mouth.
+    if (this.turn) {
+      this.avatar.stopSpeaking();
+      this.closedCtxs.add(this.turn.ctx);
+      this.turns.delete(this.turn.ctx);
+      this.turn = null;
+    }
+    if (this.discardQueuedContextsOnBotStop) {
+      this.discardQueuedContextsOnBotStop = false;
+      this.discardQueuedTurns();
+    }
+    this.enterListening();
+    this.maybePlayInterrupted();
+  };
+
+  private onError = (raw: unknown): void => {
+    const data = (raw as { data?: unknown })?.data as { fatal?: unknown } | undefined;
+    this.failure = data?.fatal === true ? "OFFLINE" : "DEGRADED";
+    this.applyProjection();
+  };
+
+  private onDisconnected = (): void => {
+    this.failure = "OFFLINE";
+    this.clearIdleTimer();
+    this.applyProjection();
+  };
+
+  private onConnectedOrReady = (): void => {
+    if (this.failure === "OFFLINE") this.failure = null;
+    this.applyProjection();
+  };
+
   /**
-   * Subscribe to a live `PipecatClient`'s server messages and dispatch the
-   * avatar commands among them — the ones in the protocol's own
-   * `{type:"avatar"}` envelope, which `isAvatarMessage` is the definition of.
-   * Never throws on a malformed or irrelevant message.
+   * Subscribe to a live `PipecatClient`. Standard client events own the normal
+   * lifecycle projection; avatar server-messages carry correlated visemes and
+   * explicit application intent. Never throws on malformed or irrelevant
+   * server messages.
    *
    * @returns an unsubscribe function; call it on unmount or disconnect.
    */
   attach(client: PipecatClient): () => void {
     const onServerMessage = (raw: unknown) => this.dispatch(unwrapServerMessage(raw));
-    const serverMessage = RTVI_EVENTS.serverMessage as RTVIEvent;
-    client.on(serverMessage, onServerMessage);
-    return () => client.off(serverMessage, onServerMessage);
+    const subscriptions: Array<[string, (...args: any[]) => void]> = [
+      [RTVI_EVENTS.serverMessage, onServerMessage],
+      [RTVI_EVENTS.connected, this.onConnectedOrReady],
+      [RTVI_EVENTS.botReady, this.onConnectedOrReady],
+      [RTVI_EVENTS.disconnected, this.onDisconnected],
+      [RTVI_EVENTS.error, this.onError],
+      [RTVI_EVENTS.userStartedSpeaking, this.onUserStartedSpeaking],
+      [RTVI_EVENTS.userStoppedSpeaking, this.onUserStoppedSpeaking],
+      [RTVI_EVENTS.botStartedSpeaking, this.onBotStartedSpeaking],
+      [RTVI_EVENTS.botStoppedSpeaking, this.onBotStoppedSpeaking],
+    ];
+    for (const [event, listener] of subscriptions) client.on(event as RTVIEvent, listener as never);
+    return () => {
+      this.clearIdleTimer();
+      for (const [event, listener] of subscriptions) client.off(event as RTVIEvent, listener as never);
+    };
   }
 }

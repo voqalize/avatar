@@ -26,9 +26,13 @@ const nod = (peak, at = 0.24, rebound = 0.56) => [
   [0, 0], [at, peak], [rebound, -peak * 0.24], [1, 0],
 ];
 
-export const INTERJECTIONS = {
+// This is the authoring library. It intentionally contains exploratory clips
+// as well as production ones; only the small `ACTIONS` export below is
+// part of the public action contract.
+const CLIPS = {
   // ---------------------------------------------------------------------
-  // Pure backchannel — no words, fired automatically while LISTENING.
+  // Wordless acknowledgement clips. Every one is an explicit backend or
+  // application decision; the client never fires them from VAD or a timer.
   // ---------------------------------------------------------------------
   // The nod peaks below are pre-compensated for the head's 160ms time constant.
   // Authored at their perceptual value (~0.3) they rendered at ~0.6x and read as
@@ -44,26 +48,27 @@ export const INTERJECTIONS = {
   // drops further than the trend — and everything stays under the 1.5 Hz line
   // where sustained attention turns into impatience.
   NOD_SMALL: {
-    id: 'NOD_SMALL', label: 'nod (continuer)', text: '', duration: 800,
+    id: 'NOD_SMALL', label: 'nod (continuer)', text: '', duration: 900,
     keys: {
-      // One cycle: single-cycle nods are 42% of the corpus, and the continuer
-      // is the quietest citizen of the family — "go on", not "I agree".
-      headPitch: nod(0.55, 0.22, 0.52),
-      browRaiseL: [[0, 0], [0.3, 0.14], [1, 0]],
-      browRaiseR: [[0, 0], [0.3, 0.14], [1, 0]],
+      // One readable stroke, not an ambient bob. The peak is deliberately
+      // authored above its desired rendered travel because the common head
+      // smoothing absorbs a fast impulse before it reaches the SVG.
+      headPitch: [[0, 0], [0.25, 0.74], [0.38, 0.70], [0.68, -0.12], [1, 0]],
+      browRaiseL: [[0, 0], [0.34, 0.16], [1, 0]],
+      browRaiseR: [[0, 0], [0.34, 0.16], [1, 0]],
     },
   },
   NOD_SLOW: {
-    id: 'NOD_SLOW', label: 'nod (assessment, two-beat)', text: '', duration: 1420,
+    id: 'NOD_SLOW', label: 'nod (assessment / receipt)', text: '', duration: 1200,
     keys: {
-      // Two cycles at ~1.4 Hz. The first beat is the deepest thing any nod
-      // does (anticipatory rising) and the second sits well below it —
-      // declination plus final lowering, which is what makes the gesture
-      // resolve instead of merely stopping. The lift between beats crosses
-      // slightly above rest so the cycles read as separate strokes.
-      headPitch: [[0, 0], [0.16, 0.85], [0.38, -0.10], [0.60, 0.55], [0.85, -0.06], [1, 0]],
-      mouthCornerL: [[0, 0], [0.45, 0.12], [1, 0]],
-      mouthCornerR: [[0, 0], [0.45, 0.12], [1, 0]],
+      // A receipt needs an arrival. The former two fast peaks registered as
+      // idle bobbing at call-tile size, so this is one deep downstroke with a
+      // short dwell and a slower recovery. The tiny torso commitment keeps the
+      // head from looking like it is sliding independently of the body.
+      headPitch: [[0, 0], [0.18, 0.18], [0.39, 1.06], [0.52, 1.02], [0.78, -0.16], [1, 0]],
+      torsoLean: [[0, 0], [0.40, 0.09], [0.58, 0.07], [1, 0]],
+      browRaiseL: [[0, 0], [0.23, 0.12], [0.62, 0.08], [1, 0]],
+      browRaiseR: [[0, 0], [0.23, 0.10], [0.62, 0.07], [1, 0]],
     },
   },
   // The "ah — I see" nod. What separates it from agreement is the upswing:
@@ -88,13 +93,93 @@ export const INTERJECTIONS = {
     keys: {
       browRaiseL: [[0, 0], [0.24, 0.30], [0.7, 0.06], [1, 0]],
       browRaiseR: [[0, 0], [0.24, 0.26], [0.7, 0.06], [1, 0]],
-      headPitch: [[0, 0], [0.3, 0.08], [1, 0]],
       mouthCornerL: [[0, 0], [0.35, 0.14], [1, 0]],
       mouthCornerR: [[0, 0], [0.35, 0.14], [1, 0]],
     },
     blinkAt: [0.22],
   },
-  // The disagree family follows the same three laws as the nods (§3.4): the
+  // ---------------------------------------------------------------------
+  // Understanding beats — eye/face/body composites, deliberately separate
+  // from nods. They are the shared low-authoring-cost alternative when a
+  // portrait's pitch geometry is too limited to carry acknowledgement alone.
+  // ---------------------------------------------------------------------
+  ACK_CONTINUE: {
+    id: 'ACK_CONTINUE', label: 'acknowledge: continue', text: '', duration: 620,
+    keys: {
+      // Eyes acknowledge first; nothing here claims agreement or closes the
+      // conversational floor while the user is still talking.
+      browRaiseL: [[0, 0], [0.18, 0.14], [0.48, 0.06], [1, 0]],
+      browRaiseR: [[0, 0], [0.18, 0.12], [0.48, 0.05], [1, 0]],
+      lidL: [[0, 0], [0.20, 0.035], [0.58, 0.01], [1, 0]],
+      lidR: [[0, 0], [0.20, 0.035], [0.58, 0.01], [1, 0]],
+    },
+  },
+  ACK_RECEIVE: {
+    id: 'ACK_RECEIVE', label: 'acknowledge: received', text: '', duration: 1120,
+    keys: {
+      // Recognition → take it in → settle. The face does not nod; it lands in
+      // a quiet, held receipt, leaving room for the user to see the response.
+      browRaiseL: [[0, 0], [0.12, 0.16], [0.34, 0.055], [1, 0]],
+      browRaiseR: [[0, 0], [0.12, 0.13], [0.34, 0.045], [1, 0]],
+      lidL: [[0, 0], [0.16, 0.15], [0.49, 0.14], [0.82, 0.035], [1, 0]],
+      lidR: [[0, 0], [0.16, 0.15], [0.49, 0.14], [0.82, 0.035], [1, 0]],
+      mouthPress: [[0, 0], [0.23, 0.20], [0.60, 0.17], [1, 0]],
+      mouthCornerL: [[0, 0], [0.34, 0.08], [0.80, 0.055], [1, 0]],
+      mouthCornerR: [[0, 0], [0.34, 0.08], [0.80, 0.055], [1, 0]],
+      torsoLean: [[0, 0], [0.34, 0.13], [0.70, 0.10], [1, 0]],
+      shoulderL: [[0, 0], [0.50, 0.070], [0.76, 0.045], [1, 0]],
+      shoulderR: [[0, 0], [0.50, 0.070], [0.76, 0.045], [1, 0]],
+    },
+  },
+  ACK_REALIZE: {
+    id: 'ACK_REALIZE', label: 'acknowledge: realization', text: '', duration: 980,
+    keys: {
+      // The brows and widened lid lead: this means "the point connected", not
+      // the generic social smile which looks like agreement in a small tile.
+      browRaiseL: [[0, 0], [0.15, 0.36], [0.42, 0.20], [1, 0]],
+      browRaiseR: [[0, 0], [0.15, 0.32], [0.42, 0.18], [1, 0]],
+      lidL: [[0, 0], [0.16, -0.07], [0.48, -0.025], [1, 0]],
+      lidR: [[0, 0], [0.16, -0.07], [0.48, -0.025], [1, 0]],
+      mouthCornerL: [[0, 0], [0.35, 0.12], [0.80, 0.09], [1, 0]],
+      mouthCornerR: [[0, 0], [0.35, 0.12], [0.80, 0.09], [1, 0]],
+      torsoLean: [[0, 0], [0.38, 0.07], [0.72, 0.05], [1, 0]],
+    },
+  },
+  ACK_EMPATHIZE: {
+    id: 'ACK_EMPATHIZE', label: 'acknowledge: empathy', text: '', duration: 1180,
+    keys: {
+      // Inner brows and softened lids acknowledge the affect without signalling
+      // agreement. Keep the mouth nearly neutral for professional contexts.
+      browInnerL: [[0, 0], [0.22, 0.24], [0.68, 0.16], [1, 0]],
+      browInnerR: [[0, 0], [0.22, 0.20], [0.68, 0.13], [1, 0]],
+      browRaiseL: [[0, 0], [0.22, 0.07], [0.68, 0.05], [1, 0]],
+      browRaiseR: [[0, 0], [0.22, 0.06], [0.68, 0.04], [1, 0]],
+      lidL: [[0, 0], [0.25, 0.06], [0.72, 0.04], [1, 0]],
+      lidR: [[0, 0], [0.25, 0.06], [0.72, 0.04], [1, 0]],
+      mouthPress: [[0, 0], [0.34, 0.06], [0.72, 0.045], [1, 0]],
+      torsoLean: [[0, 0], [0.40, 0.065], [0.76, 0.045], [1, 0]],
+    },
+  },
+  // A comparison nod, not the director's default. Two quick decaying strokes
+  // with a barely-there listening tilt reflect the common conversational form
+  // the current single deep receipt does not show. It stays comparison-only:
+  // the host can decide whether this faster cadence fits its conversation.
+  ACK_NOD: {
+    id: 'ACK_NOD', label: 'acknowledge: nod', text: '', duration: 1120,
+    keys: {
+      // Values are intentionally a little theatrical at close range: at a
+      // video-call tile the head's 160 ms smoothing otherwise eats the second
+      // beat and the slight listening tilt entirely.
+      headPitch: [[0, 0], [0.12, -0.15], [0.30, 0.98], [0.46, -0.13], [0.64, 0.68], [0.82, -0.09], [1, 0]],
+      headRoll: [[0, 0], [0.18, -0.090], [0.68, -0.070], [1, 0]],
+      torsoLean: [[0, 0], [0.31, 0.115], [0.68, 0.075], [1, 0]],
+      shoulderL: [[0, 0], [0.43, 0.055], [0.73, 0.032], [1, 0]],
+      shoulderR: [[0, 0], [0.43, 0.055], [0.73, 0.032], [1, 0]],
+      lidL: [[0, 0], [0.30, 0.065], [0.64, 0.038], [1, 0]],
+      lidR: [[0, 0], [0.30, 0.065], [0.64, 0.038], [1, 0]],
+    },
+  },
+  // The disagree family follows the same three laws as explicit nods (§3.4): the
   // first swing is the biggest, every cycle decays, and the whole gesture
   // stays at or under ~1.5 Hz. Both are SERVER-SENT ONLY — an agent must
   // never disagree autonomously, so neither is in the listening engine's
@@ -211,6 +296,24 @@ export const INTERJECTIONS = {
     blinkAt: [0.1],
   },
 
+  /** Server-confirmed cut-off after playout stopped. This is not a state: the
+   * clip explains the abrupt transition, then lands in whatever factual pose
+   * Pipecat has resolved underneath it. */
+  RESPONSE_INTERRUPTED: {
+    id: 'RESPONSE_INTERRUPTED', label: 'response: interrupted', text: '', duration: 1550,
+    keys: {
+      mouthOpen: [[0, 0], [0.06, 0.36], [0.80, 0.36], [1, 0]],
+      jaw: [[0, 0], [0.08, 0.20], [0.80, 0.20], [1, 0]],
+      browRaiseL: [[0, 0], [0.12, 0.46], [0.72, 0.34], [1, 0]],
+      browRaiseR: [[0, 0], [0.12, 0.40], [0.72, 0.30], [1, 0]],
+      lidL: [[0, 0], [0.12, -0.18], [0.72, -0.12], [1, 0]],
+      lidR: [[0, 0], [0.12, -0.16], [0.72, -0.10], [1, 0]],
+      torsoLean: [[0, 0], [0.18, -0.16], [0.72, -0.10], [1, 0]],
+      shoulderL: [[0, 0], [0.18, -0.12], [0.72, -0.08], [1, 0]],
+      shoulderR: [[0, 0], [0.18, -0.12], [0.72, -0.08], [1, 0]],
+    },
+  },
+
   /**
    * "May I come in." This used to be a raised palm, and it is now the same
    * signal without one: the body claims a little space and the face asks. The
@@ -273,8 +376,8 @@ export const INTERJECTIONS = {
    * oscillation left to fill the time; a held smile past about a second stops
    * being a greeting and becomes an expression.
    */
-  WAVE: {
-    id: 'WAVE', label: 'greet (brow flash)', text: '', duration: 1300,
+  GESTURE_GREET: {
+    id: 'GESTURE_GREET', label: 'gesture: greet', text: '', duration: 1300,
     keys: {
       browRaiseL: [[0, 0], [0.11, 0.85], [0.4, 0.22], [0.75, 0.12], [1, 0]],
       browRaiseR: [[0, 0], [0.11, 0.80], [0.4, 0.20], [0.75, 0.10], [1, 0]],
@@ -304,8 +407,8 @@ export const INTERJECTIONS = {
    * Deep enough to be unmistakable: peak 0.62 against NOD_SMALL's 0.52, over
    * nearly three times the duration.
    */
-  THUMBS_UP: {
-    id: 'THUMBS_UP', label: 'approve', text: '', duration: 1500,
+  GESTURE_APPROVE: {
+    id: 'GESTURE_APPROVE', label: 'gesture: approve', text: '', duration: 1500,
     keys: {
       headPitch: [[0, 0], [0.3, 0.62], [0.58, 0.20], [0.78, 0.34], [1, 0]],
       mouthCornerL: [[0, 0], [0.36, 0.58], [0.8, 0.48], [1, 0]],
@@ -473,8 +576,8 @@ export const INTERJECTIONS = {
       torsoLean: [[0, 0], [0.25, 0.10], [0.7, 0.08], [1, 0]],
     },
   },
-  ONE_MOMENT: {
-    id: 'ONE_MOMENT', label: 'one moment', text: 'one moment', duration: 1350,
+  GESTURE_WAIT: {
+    id: 'GESTURE_WAIT', label: 'gesture: wait', text: 'one moment', duration: 1350,
     // w · ʌ · n  ·  m · oʊ · m · ə · n · t
     mouthCues: [
       { t: 0, v: 'F' }, { t: 110, v: 'C' }, { t: 210, v: 'A' }, { t: 320, v: 'F' },
@@ -557,19 +660,41 @@ export const INTERJECTIONS = {
   },
 };
 
-export const INTERJECTION_IDS = Object.keys(INTERJECTIONS);
-
-/** Clips that carry words, vs. wordless backchannel. */
-export const SPOKEN_IDS = INTERJECTION_IDS.filter((k) => INTERJECTIONS[k].text);
+/** Full local authoring library. Not a server action vocabulary. */
+export const INTERNAL_CLIPS = CLIPS;
 
 /**
- * Attach audio to a clip. Call once at boot with your own TTS renders:
- *   attachAudio('OKAY', '/audio/agent-okay.mp3')
+ * Public, server-addressable actions. Naming is `CATEGORY_INTENT`:
+ * acknowledgements are `ACK_*`, the special transition is `RESPONSE_*`, and
+ * visible hand/body movements are `GESTURE_*`. This is deliberately an intent
+ * vocabulary — `ACK_NOD` is one implementation, not a promise about anatomy.
+ */
+export const ACTION_IDS = Object.freeze([
+  'ACK_CONTINUE', 'ACK_RECEIVE', 'ACK_REALIZE', 'ACK_EMPATHIZE', 'ACK_NOD',
+  'RESPONSE_INTERRUPTED',
+  'GESTURE_GREET', 'GESTURE_GOODBYE', 'GESTURE_APPROVE', 'GESTURE_WAIT',
+]);
+
+/** Face-capable subset of the action contract. */
+export const ACTIONS = Object.freeze({
+  ...Object.fromEntries(ACTION_IDS.filter((id) => CLIPS[id]).map((id) => [id, CLIPS[id]])),
+  // The goodbye face intentionally reuses the greeting brow-flash while its
+  // hand owns the distinct, longer farewell motion. It still needs metadata so
+  // a client can enumerate every public action without knowing that detail.
+  GESTURE_GOODBYE: {
+    ...CLIPS.GESTURE_GREET,
+    id: 'GESTURE_GOODBYE', label: 'gesture: goodbye', duration: 1550,
+  },
+});
+
+/**
+ * Attach audio to an internal authoring clip. Production actions are silent
+ * sequences; response speech always belongs to Pipecat's audio/viseme track.
  * The baked viseme track is then scheduled against that file's clock instead of
  * the local timer, so any timing drift resolves in the audio's favour.
  */
 export function attachAudio(id, url) {
-  const clip = INTERJECTIONS[id];
+  const clip = CLIPS[id];
   if (!clip) throw new Error(`unknown interjection: ${id}`);
   const el = new Audio(url);
   el.preload = 'auto';

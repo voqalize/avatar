@@ -229,7 +229,7 @@ a turn with three tools shows one settled `THINKING` rather than a flicker.
 ### 5. The widget's public surface does not change
 
 The widget keeps the surface both contracts describe — `createAvatar`,
-`setState`, `interject`, `speak`/`pushCues`, `gesture`, `setUserSpeaking`.
+`setState`, `action`, `speak`/`pushCues`, `setUserSpeaking`.
 What changed in 0.2 is what the *npm package* exports, not what the widget can
 do: one React entry point, and the imperative surface behind it. Nothing in this
 reorganization touches `src/params.js` or any face module. If it does, something

@@ -437,12 +437,10 @@ Findings that constrain design:
   reads as mockery; ~4 s reads as rapport. (Burleson found no effect from a
   similar intervention — the effect is real but not robust.)
 
-Direct implication for Kiran: our autonomous backchannel timer in `idle.js`
-fires on a random 3.4–8.0 s gap, which is precisely the *non-contingent*
-condition Gratch used as a negative control. It is fine as a fallback for
-degraded/muted mode, but the server-driven path must be the primary one, and
-when the server is talking the autonomous timer should be off or heavily
-attenuated.
+Direct implication for Kiran: the former autonomous timer in `idle.js` was
+precisely the *non-contingent* condition Gratch used as a negative control. It
+has been removed. Pipecat supplies factual listening posture, while the backend
+is solely responsible for every explicit acknowledgement.
 
 SimSensei Kiosk (Gratch, DeVault et al., AAMAS 2014) is the closest published
 system to Kiran's use case — a virtual human interviewer conducting structured
@@ -1008,12 +1006,12 @@ it touches. Ordered roughly by expected value per unit of work.
     it past the threshold or cut it and rely on the aversion controller. —
     *LISTENING* — `pupilX`, `pupilY`. (§4.6, constraint 8)
 
-14. **Prefer server-contingent backchannels and attenuate the autonomous timer.**
+14. **Use server-contingent backchannels; no autonomous timer.**
     Gratch's negative control was *exactly* our `IdleBackchannel`: correct
     frequency, no contingency — and it did not create rapport, while an
     always-on responsive agent was rated more distracting and less trustworthy
-    than a human. Keep the autonomous timer strictly as a muted/degraded-mode
-    fallback. — *LISTENING* — clip firing policy. (§3.5)
+    than a human. Pipecat VAD may drive posture, but clip firing stays explicit
+    backend/application policy. — *LISTENING* — clip firing policy. (§3.5)
 
 15. **Adopt a caricature gain on expressive deviation from REST, ~1.2–1.5×.**
     This is Rhodes's 16–48 % exaggeration applied to our parameter space, where

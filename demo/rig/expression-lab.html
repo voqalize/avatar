@@ -226,7 +226,7 @@ const cur = () => clips()[i];
 const beatsOf = (c) => (perfOn && c.beats) || [];
 
 function label(b) {
-  return b.do === 'interject' ? b.id
+  return b.do === 'action' ? b.id
     : b.do === 'emotion' ? `${b.name}${b.i != null ? ` ${b.i}` : ''}`
     : b.name;
 }
@@ -293,7 +293,7 @@ function paint() {
 function apply(b) {
   if (b.do === 'emotion') avatar.setEmotion(b.name, b.i ?? 1);
   else if (b.do === 'gaze') avatar.setGaze(b.name);
-  else if (b.do === 'interject') avatar.interject(b.id);
+  else if (b.do === 'action') avatar.action(b.id);
   // keepGaze so a state change late in a clip does not yank the eyes back to the
   // user and undo a gaze beat that was the point of the performance.
   else if (b.do === 'state') avatar.setState(b.name, { keepGaze: true });

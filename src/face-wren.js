@@ -254,8 +254,8 @@ function mouthGeometry(p) {
   const h = open * MOUTH_APERTURE;
   const k = clamp(open / 0.18);
 
-  const yL = cy - 6 - p.mouthCornerL * 22;
-  const yR = cy - 6 - p.mouthCornerR * 22;
+  const yL = cy - 1.5 - p.mouthCornerL * 22;
+  const yR = cy - 1.5 - p.mouthCornerR * 22;
 
   const apTop = cy - h * 0.25;
   let apBot = cy + h * 0.75;

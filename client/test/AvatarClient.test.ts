@@ -3,44 +3,26 @@ import { AvatarClient, RTVI_EVENTS } from "../src/AvatarClient.js";
 import { createFakeAvatar } from "./fakeAvatar.js";
 
 describe("AvatarClient dispatch", () => {
-  it("passes every state command straight through, including repeats (dedup passthrough)", () => {
+  it("accepts a durable lower-priority server claim", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api);
 
-    client.dispatch({ type: "avatar", cmd: "state", name: "SPEAKING", emotion: "warm" });
-    client.dispatch({ type: "avatar", cmd: "state", name: "SPEAKING", emotion: "warm" });
-    client.dispatch({ type: "avatar", cmd: "state", name: "SPEAKING", gaze: "USER" });
+    client.dispatch({ type: "avatar", cmd: "claim", state: "THINKING" });
+    client.dispatch({ type: "avatar", cmd: "claim", state: "WORKING" });
+    client.dispatch({ type: "avatar", cmd: "claim", state: null });
 
-    // No client-side dedup: three messages in, three setState calls out —
-    // a resend must still land (e.g. a gaze/emotion override on a repeat).
     expect(calls.setState).toHaveLength(3);
-    expect(calls.setState[0]).toEqual({ name: "SPEAKING", o: { emotion: "warm", gaze: undefined } });
-    expect(calls.setState[1]).toEqual({ name: "SPEAKING", o: { emotion: "warm", gaze: undefined } });
-    expect(calls.setState[2]).toEqual({ name: "SPEAKING", o: { emotion: undefined, gaze: "USER" } });
+    expect(calls.setState.map(({ name }) => name)).toEqual(["THINKING", "TYPING", "LISTENING"]);
   });
 
-  it("routes interject and user commands straight through", () => {
+  it("routes all one-shot sequences through action()", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api);
 
-    client.dispatch({ type: "avatar", cmd: "interject", id: "OKAY" });
-    client.dispatch({ type: "avatar", cmd: "user", speaking: true });
-    client.dispatch({ type: "avatar", cmd: "user", speaking: false });
+    client.dispatch({ type: "avatar", cmd: "action", id: "ACK_RECEIVE" });
+    client.dispatch({ type: "avatar", cmd: "action", id: "GESTURE_GREET" });
 
-    expect(calls.interject).toEqual([{ id: "OKAY" }]);
-    expect(calls.setUserSpeaking).toEqual([true, false]);
-  });
-
-  it("routes gesture to gesture(), never to interject()", () => {
-    const { api, calls } = createFakeAvatar();
-    const client = new AvatarClient(api);
-
-    client.dispatch({ type: "avatar", cmd: "gesture", id: "HI" });
-
-    expect(calls.gesture).toEqual([{ id: "HI" }]);
-    // The face half is the widget's business — a server asking for a gesture
-    // must not also see an interjection dispatched behind its back.
-    expect(calls.interject).toHaveLength(0);
+    expect(calls.action).toEqual([{ id: "ACK_RECEIVE" }, { id: "GESTURE_GREET" }]);
   });
 
   it("ignores an unknown cmd silently — a newer server talking to an older widget", () => {
@@ -52,7 +34,7 @@ describe("AvatarClient dispatch", () => {
     // No widget method should have fired for an unrecognized cmd, and there is
     // deliberately no callback reporting it — see docs/removed.md.
     expect(calls.setState).toHaveLength(0);
-    expect(calls.interject).toHaveLength(0);
+    expect(calls.action).toHaveLength(0);
     expect(calls.speak).toHaveLength(0);
   });
 
@@ -65,29 +47,29 @@ describe("AvatarClient dispatch", () => {
     expect(() => client.dispatch({ notACmd: true })).not.toThrow();
     // A bare command with no envelope is somebody else's message that happens
     // to have a `cmd` field. The envelope is the whole membership test.
-    expect(() => client.dispatch({ cmd: "state", name: "SPEAKING" })).not.toThrow();
+    expect(() => client.dispatch({ cmd: "claim", state: "THINKING" })).not.toThrow();
     // ...and so is a foreign envelope carrying one.
-    expect(() => client.dispatch({ type: "llm", cmd: "state", name: "SPEAKING" })).not.toThrow();
+    expect(() => client.dispatch({ type: "llm", cmd: "claim", state: "THINKING" })).not.toThrow();
     expect(calls.setState).toHaveLength(0);
   });
 
   it("routes a thrown widget error to onError instead of propagating", () => {
     const { api } = createFakeAvatar();
-    api.setState = () => {
+    api.action = () => {
       throw new Error("unknown state");
     };
     const onError = vi.fn();
     const client = new AvatarClient(api, { onError });
 
-    expect(() => client.dispatch({ type: "avatar", cmd: "state", name: "BOGUS" })).not.toThrow();
+    expect(() => client.dispatch({ type: "avatar", cmd: "action", id: "BOGUS" })).not.toThrow();
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
   });
 
 });
 
-describe("AvatarClient speech start/stop lifecycle", () => {
-  it("buffers cues that arrive before speech start, then hands them to the first speak() call", () => {
+describe("AvatarClient Pipecat-bound cue lifecycle", () => {
+  it("buffers cues by base-TTS context, then starts the FIFO context at bot playout", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api, { now: () => 1000 });
 
@@ -97,22 +79,24 @@ describe("AvatarClient speech start/stop lifecycle", () => {
     // Buffered, not yet handed to the widget.
     expect(calls.speak).toHaveLength(0);
     expect(calls.pushCues).toHaveLength(0);
-    expect(client.turnCues).toEqual([{ t: 0, v: "X" }, { t: 40, v: "B" }]);
+    expect(client.turnCtx).toBeNull();
 
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-1" });
+    (client as any).onBotStartedSpeaking();
 
     expect(calls.speak).toHaveLength(1);
     expect(calls.speak[0].o?.cues).toEqual([{ t: 0, v: "X" }, { t: 40, v: "B" }]);
+    expect(client.turnCues).toEqual([{ t: 0, v: "X" }, { t: 40, v: "B" }]);
     expect(typeof calls.speak[0].o?.clock).toBe("function");
   });
 
-  it("anchors the clock at the moment speech start is dispatched, not at construction", () => {
+  it("anchors the clock at Pipecat bot-start, not at construction", () => {
     let t = 500;
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api, { now: () => t });
 
     t = 5000;
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-1" });
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [] });
+    (client as any).onBotStartedSpeaking();
     const clock = calls.speak[0].o!.clock!;
 
     expect(clock()).toBe(0); // t0 == 5000, now() == 5000
@@ -120,41 +104,34 @@ describe("AvatarClient speech start/stop lifecycle", () => {
     expect(clock()).toBe(250);
   });
 
-  it("stop ends the named turn and clears it", () => {
+  it("bot stop ends the active FIFO context and rejects a late cue", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api, { now: () => 0 });
 
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-1" });
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [] });
+    (client as any).onBotStartedSpeaking();
     expect(client.turnCtx).toBe("turn-1");
 
-    client.dispatch({ type: "avatar", cmd: "speech", event: "stop", ctx: "turn-1" });
+    (client as any).onBotStoppedSpeaking();
 
     expect(calls.stopSpeaking).toBe(1);
     expect(client.turnCtx).toBeNull();
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [{ t: 0, v: "A" }] });
+    expect(client.turnCues).toEqual([]);
   });
 
-  it("ignores a stale stop naming a superseded ctx, and does not cut off the newer turn", () => {
-    const { api, calls } = createFakeAvatar();
-    const client = new AvatarClient(api, { now: () => 0 });
-
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-1" });
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-2" }); // supersedes turn-1
-    client.dispatch({ type: "avatar", cmd: "speech", event: "stop", ctx: "turn-1" }); // stale
-
-    expect(calls.stopSpeaking).toBe(0);
-    expect(client.turnCtx).toBe("turn-2");
-  });
-
-  it("a new ctx on speech start supersedes an unfinished turn outright", () => {
+  it("FIFO-binds consecutive base-TTS contexts to consecutive playout intervals", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api, { now: () => 0 });
 
     client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [{ t: 0, v: "A" }] });
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-2" });
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-2", from_ms: 0, cues: [{ t: 0, v: "B" }] });
+    (client as any).onBotStartedSpeaking();
+    (client as any).onBotStoppedSpeaking();
+    (client as any).onBotStartedSpeaking();
 
     expect(client.turnCtx).toBe("turn-2");
-    expect(client.turnCues).toEqual([]); // turn-1's buffered cues are gone with it
-    expect(calls.speak[0].o?.cues).toEqual([]);
+    expect(calls.speak.at(-1)?.o?.cues).toEqual([{ t: 0, v: "B" }]);
   });
 });
 
@@ -163,10 +140,10 @@ describe("AvatarClient cue splice", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api, { now: () => 0 });
 
-    // Buffered pre-start, then handed over as the turn's one speak() call —
+    // Buffered pre-playout, then handed over as the turn's one speak() call —
     // see the lifecycle describe block for that behavior in isolation.
     client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [{ t: 0, v: "A" }, { t: 100, v: "B" }] });
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-1" });
+    (client as any).onBotStartedSpeaking();
     expect(calls.speak).toHaveLength(1);
     expect(calls.speak[0].o?.cues).toEqual([{ t: 0, v: "A" }, { t: 100, v: "B" }]);
 
@@ -196,7 +173,7 @@ describe("AvatarClient cue splice", () => {
       from_ms: 0,
       cues: [{ t: 0, v: "A" }, { t: 100, v: "B" }, { t: 200, v: "C" }, { t: 300, v: "D" }],
     });
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-1" });
+    (client as any).onBotStartedSpeaking();
     expect(calls.speak).toHaveLength(1); // the turn-start handoff
 
     // The accurate leg corrects everything from 150ms on.
@@ -224,7 +201,8 @@ describe("AvatarClient cue splice", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api, { now: () => 0 });
 
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-1" });
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [] });
+    (client as any).onBotStartedSpeaking();
     client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [{ t: 0, v: "A" }, { t: 300, v: "D" }] });
     // A splice that both discards (300 >= 50) and inserts out of order relative
     // to what's already queued.
@@ -242,7 +220,8 @@ describe("AvatarClient cue splice", () => {
     const { api } = createFakeAvatar();
     const client = new AvatarClient(api, { now: () => 0 });
 
-    client.dispatch({ type: "avatar", cmd: "speech", event: "start", ctx: "turn-1" });
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [] });
+    (client as any).onBotStartedSpeaking();
     client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [{ t: 0, v: "A" }, { t: 100, v: "B" }] });
     client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 100, cues: [{ t: 100, v: "Z" }] });
 
@@ -252,7 +231,7 @@ describe("AvatarClient cue splice", () => {
 });
 
 describe("RTVI_EVENTS", () => {
-  it("spells the one event name the real enum spells", async () => {
+  it("spells the subscribed event names the real enum spells", async () => {
     // AvatarClient imports the enum type-only, so nothing above can catch a
     // rename — string enums are nominal, so the compiler will not compare a
     // literal against RTVIEvent either. This test is the check, and it belongs
@@ -261,5 +240,108 @@ describe("RTVI_EVENTS", () => {
     const { RTVIEvent } = await import("@pipecat-ai/client-js");
 
     expect(RTVI_EVENTS.serverMessage).toBe(RTVIEvent.ServerMessage);
+    expect(RTVI_EVENTS.userStartedSpeaking).toBe(RTVIEvent.UserStartedSpeaking);
+    expect(RTVI_EVENTS.userStoppedSpeaking).toBe(RTVIEvent.UserStoppedSpeaking);
+    expect(RTVI_EVENTS.botStartedSpeaking).toBe(RTVIEvent.BotStartedSpeaking);
+    expect(RTVI_EVENTS.botStoppedSpeaking).toBe(RTVIEvent.BotStoppedSpeaking);
+  });
+});
+
+describe("AvatarClient authority resolver", () => {
+  function attached() {
+    const listeners = new Map<string, (...args: any[]) => void>();
+    const pc = {
+      on(event: string, listener: (...args: any[]) => void) { listeners.set(event, listener); },
+      off(event: string) { listeners.delete(event); },
+    };
+    const fake = createFakeAvatar();
+    const adapter = new AvatarClient(fake.api);
+    adapter.attach(pc as never);
+    const emit = (event: string, data?: unknown) => listeners.get(event)?.(data);
+    return { ...fake, adapter, emit };
+  }
+
+  it("uses Pipecat user speech for listening and server claims for the lower states", () => {
+    const { calls, emit } = attached();
+
+    emit(RTVI_EVENTS.userStartedSpeaking);
+    emit(RTVI_EVENTS.userStoppedSpeaking);
+
+    expect(calls.setUserSpeaking).toEqual([true, false]);
+    expect(calls.setState.map((call) => call.name)).toEqual(["LISTENING"]);
+  });
+
+  it("makes bot speech win over user VAD and all server claims", () => {
+    const { calls, emit, adapter } = attached();
+
+    adapter.dispatch({ type: "avatar", cmd: "claim", state: "WORKING" });
+    emit(RTVI_EVENTS.botStartedSpeaking);
+    emit(RTVI_EVENTS.userStartedSpeaking);
+
+    expect(calls.setState.map((call) => call.name)).toEqual(["TYPING", "SPEAKING"]);
+  });
+
+  it("uses bot playout as a mouth safety stop and returns to listening", () => {
+    const { calls, emit, adapter } = attached();
+
+    emit(RTVI_EVENTS.botStartedSpeaking);
+    adapter.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [] });
+    emit(RTVI_EVENTS.botStoppedSpeaking);
+    expect(calls.stopSpeaking).toBe(1);
+    expect(adapter.turnCtx).toBeNull();
+    expect(calls.setState.at(-1)?.name).toBe("LISTENING");
+  });
+
+  it("waits for playout to stop before starting a server-confirmed interruption action", () => {
+    const { calls, emit, adapter } = attached();
+
+    emit(RTVI_EVENTS.botStartedSpeaking);
+    adapter.dispatch({ type: "avatar", cmd: "cues", ctx: "cut-1", from_ms: 0, cues: [] });
+    adapter.dispatch({ type: "avatar", cmd: "action", id: "RESPONSE_INTERRUPTED" });
+    emit(RTVI_EVENTS.userStartedSpeaking);
+    expect(calls.action).toEqual([]);
+    emit(RTVI_EVENTS.botStoppedSpeaking);
+
+    expect(calls.stopSpeaking).toBe(1);
+    expect(calls.setState.at(-1)?.name).toBe("LISTENING");
+    expect(calls.action).toEqual([{ id: "RESPONSE_INTERRUPTED" }]);
+  });
+
+  it("drops prefetched visemes that belonged to interrupted audio", () => {
+    const { calls, emit, adapter } = attached();
+
+    adapter.dispatch({ type: "avatar", cmd: "cues", ctx: "active", from_ms: 0, cues: [] });
+    adapter.dispatch({ type: "avatar", cmd: "cues", ctx: "discard", from_ms: 0, cues: [] });
+    emit(RTVI_EVENTS.botStartedSpeaking);
+    adapter.dispatch({ type: "avatar", cmd: "action", id: "RESPONSE_INTERRUPTED" });
+    emit(RTVI_EVENTS.botStoppedSpeaking);
+    emit(RTVI_EVENTS.botStartedSpeaking);
+
+    expect(calls.speak).toHaveLength(1);
+    expect(adapter.turnCtx).toBeNull();
+  });
+
+  it("enters client-owned idle only after a sustained quiet listening interval", () => {
+    vi.useFakeTimers();
+    const fake = createFakeAvatar();
+    const adapter = new AvatarClient(fake.api, { idleDelayMs: 600 });
+    const listeners = new Map<string, (...args: any[]) => void>();
+    adapter.attach({ on(event: string, listener: (...args: any[]) => void) { listeners.set(event, listener); }, off() {} } as never);
+    const emit = (event: string) => listeners.get(event)?.();
+
+    emit(RTVI_EVENTS.userStartedSpeaking);
+    emit(RTVI_EVENTS.userStoppedSpeaking);
+    expect(fake.calls.setState.at(-1)?.name).toBe("LISTENING");
+
+    vi.advanceTimersByTime(600);
+    expect(fake.calls.setState.at(-1)?.name).toBe("IDLE");
+    vi.useRealTimers();
+  });
+
+  it("plays an acknowledgement only when the backend sends its explicit action", () => {
+    const { calls, adapter } = attached();
+    adapter.dispatch({ type: "avatar", cmd: "action", id: "ACK_NOD" });
+
+    expect(calls.action).toEqual([{ id: "ACK_NOD" }]);
   });
 });

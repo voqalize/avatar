@@ -3,7 +3,7 @@
  *
  * A performance is the server's choreography: timed verbs `{t, do, ...}` fired
  * against a clock, where every verb resolves to one of the widget's own enums —
- * states, emotions, gaze targets, interjections, hand gestures. The vocabulary is deliberately
+ * states, emotions, gaze targets, and semantic actions. The vocabulary is deliberately
  * closed: the backend sequences what the rig already does well, it cannot
  * invent motion. That constraint is what makes the wire format assemblable by
  * a dialogue manager and reviewable by a human.
@@ -14,25 +14,23 @@
  * tab is backgrounded. One deliberate difference: beat times fire *verbatim*,
  * with no LEAD_MS. Visemes lead the sound because phoneme sync is
  * frame-critical; a gesture arrives through its channels' own smoothing lag,
- * and any deliberate lead (CLAIM_FLOOR starts ~350ms before the first sample)
- * is authored into the times by the composer, not imposed here.
+ * and any deliberate lead is authored into the times by the composer, not
+ * imposed here.
  *
  * Seeking the audio backward does not re-fire earlier actions: verbs have side
  * effects, and replaying a nod is worse than missing one.
  */
 
-const VERBS = new Set(['state', 'emotion', 'gaze', 'interject', 'gesture']);
-// The verbs addressed by `id` rather than `name`. Both id verbs name a clip the
-// widget already owns; both name-verbs name an enum value.
-const ID_VERBS = new Set(['interject', 'gesture']);
+const VERBS = new Set(['state', 'emotion', 'gaze', 'action']);
+// `action` is addressed by id; the remaining verbs name an enum value.
+const ID_VERBS = new Set(['action']);
 
 /**
  * Shape hygiene for action arrays, in the spirit of normalizeCues: sort by
  * time, drop what cannot possibly fire — no finite `t`, an unknown verb, a
  * missing `name`/`id` — each with a console warning, never a throw.
  *
- * This checks *shape* only. Enum values (is "THINKING" a state? is "NOD_UP"
- * an interjection?) are checked when the verb fires, by the dispatcher in
+ * This checks *shape* only. Enum values are checked when the verb fires, by the dispatcher in
  * avatar.js — deliberately, and not just because importing the enums here
  * would be a dependency cycle: a track half-composed against a newer widget
  * should lose the verbs the widget doesn't know, not the whole performance.

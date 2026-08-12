@@ -94,6 +94,8 @@ def flatten(message: AvatarMessage | dict[str, Any]) -> str:
     cmd = wire["cmd"]
     salient = {
         "state": "name",
+        "claim": "state",
+        "action": "id",
         "interject": "id",
         "speech": "event",
         "user": "speaking",

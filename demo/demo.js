@@ -2,9 +2,7 @@
  * Demo harness. Stands in for the server: every control here corresponds to
  * something the call backend would send.
  */
-import { createAvatar, STATE_NAMES, AVATAR_NAMES, DEFAULT_AVATAR } from '../src/avatar.js';
-import { INTERJECTIONS, INTERJECTION_IDS } from '../src/interjections.js';
-import { HAND_GESTURES, HAND_GESTURE_IDS } from '../src/hand.js';
+import { createAvatar, ACTIONS, ACTION_IDS, STATE_NAMES, AVATAR_NAMES, DEFAULT_AVATAR } from '../src/avatar.js';
 import { GAZE_NAMES } from '../src/gaze.js';
 import { EMOTION_NAMES } from '../src/emotions.js';
 import { VISEME_LETTERS, textToCues, shapeFor } from '../src/visemes.js';
@@ -42,31 +40,14 @@ for (const name of AVATAR_NAMES) {
   pick.appendChild(b);
 }
 
-// --- interjections ----------------------------------------------------------
-const ORDER = [
-  'MM_HMM', 'OKAY', 'YES', 'SURE', 'RIGHT', 'GOT_IT', 'I_SEE', 'GO_ON',
-  'ONE_MOMENT', 'TAKE_YOUR_TIME', 'SORRY', 'HMM',
-  'NOD_SMALL', 'NOD_SLOW', 'BROW_ACK', 'HEAD_SHAKE',
-];
+// --- semantic actions -------------------------------------------------------
 const ij = $('#interjections');
-for (const id of ORDER.concat(INTERJECTION_IDS.filter((k) => !ORDER.includes(k)))) {
-  const c = INTERJECTIONS[id];
-  const b = mk('button', c.text ? 'big warm' : 'chip', c.label);
+for (const id of ACTION_IDS) {
+  const c = ACTIONS[id];
+  const b = mk('button', 'big warm', c.label);
   b.title = `${id} · ${c.duration}ms`;
-  b.onclick = () => avatar.interject(id);
+  b.onclick = () => avatar.action(id);
   ij.appendChild(b);
-}
-
-// --- hand gestures ----------------------------------------------------------
-// A separate group because it is a separate verb: `gesture(id)` plays the hand
-// AND the interjection above it, which is exactly what the wire does.
-const gs = $('#gestures');
-for (const id of HAND_GESTURE_IDS) {
-  const g = HAND_GESTURES[id];
-  const b = mk('button', 'big warm', g.label);
-  b.title = `${id} · ${g.dur}ms`;
-  b.onclick = () => avatar.gesture(id);
-  gs.appendChild(b);
 }
 
 // --- speak ------------------------------------------------------------------
