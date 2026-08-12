@@ -93,6 +93,13 @@ export interface AvatarClientOptions {
   /** Timer seams keep lifecycle behavior deterministic in tests. */
   setTimeout?: typeof setTimeout;
   clearTimeout?: typeof clearTimeout;
+  /** Read-only projection for surrounding call UI. It never changes avatar
+   * authority: Pipecat facts and server claims still resolve the face. */
+  onPresenceChange?: (state: AvatarPresenceState) => void;
+  /** The active remote speaker's gain (0…1), emitted only while Pipecat says
+   * the bot is speaking. This is presentation data for a meter/waveform, not
+   * a substitute for the bot-speaking lifecycle fact. */
+  onRemoteAudioLevel?: (level: number) => void;
 }
 
 /**
@@ -120,9 +127,12 @@ export const RTVI_EVENTS = {
   userStoppedSpeaking: "userStoppedSpeaking",
   botStartedSpeaking: "botStartedSpeaking",
   botStoppedSpeaking: "botStoppedSpeaking",
+  remoteAudioLevel: "remoteAudioLevel",
 } as const satisfies Record<string, string>;
 
-type LifecycleState = "IDLE" | "LISTENING" | "THINKING" | "WORKING" | "SPEAKING" | "DEGRADED" | "OFFLINE";
+/** The resolved, factual presence state a host may render around the avatar. */
+export type AvatarPresenceState = "IDLE" | "LISTENING" | "THINKING" | "WORKING" | "SPEAKING" | "DEGRADED" | "OFFLINE";
+type LifecycleState = AvatarPresenceState;
 type ServerClaim = "THINKING" | "WORKING" | null;
 
 /** Defensive unwrap for the `RTVIEvent.ServerMessage` `{ data }` quirk: some
@@ -148,7 +158,9 @@ export class AvatarClient {
   private userSpeaking = false;
   private botSpeaking = false;
   private listening = false;
-  private idle = true;
+  // Idle is earned after a connected, quiet listening interval. A newly
+  // mounted avatar is available, not already "stepped aside".
+  private idle = false;
   private failure: "DEGRADED" | "OFFLINE" | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingInterruptedAction = false;
@@ -156,6 +168,7 @@ export class AvatarClient {
   private readonly idleDelayMs: number;
   private readonly setTimer: typeof setTimeout;
   private readonly clearTimer: typeof clearTimeout;
+  private remoteAudioLevel = 0;
 
   constructor(avatar: AvatarApi, opts: AvatarClientOptions = {}) {
     this.avatar = avatar;
@@ -175,6 +188,27 @@ export class AvatarClient {
   /** The active turn's canonical (already-spliced) cue track. For tests and telemetry. */
   get turnCues(): AvatarCue[] {
     return this.turn ? [...this.turn.cues] : [];
+  }
+
+  /** Current resolved presentation state. Before the first lifecycle fact the
+   * renderer is simply at its ready rest pose, so `LISTENING` is the safe
+   * value for a host that needs one. Hosts that distinguish an unstarted session
+   * should wait for `onPresenceChange` rather than treating this as a session
+   * status. */
+  get presenceState(): AvatarPresenceState {
+    return this.projected ?? "LISTENING";
+  }
+
+  /** Most recently observed active bot remote-audio gain, normalized 0…1. */
+  get botAudioLevel(): number {
+    return this.remoteAudioLevel;
+  }
+
+  /** Re-apply the currently resolved factual projection after an embedding
+   * tool has temporarily used raw renderer controls. This does not invent a
+   * lifecycle event or cancel a finite action. */
+  restoreProjection(): void {
+    this.applyProjection(true);
   }
 
   /** Dispatch one server message. Anything that isn't in the avatar envelope
@@ -296,6 +330,7 @@ export class AvatarClient {
     if (force || this.projected !== state) {
       this.behavior.setState(state);
       this.projected = state;
+      this.opts.onPresenceChange?.(state);
     }
   }
 
@@ -367,6 +402,7 @@ export class AvatarClient {
     this.botSpeaking = true;
     this.clearClaimForTurnBoundary();
     this.idle = false;
+    this.setRemoteAudioLevel(0);
     this.clearIdleTimer();
     this.applyProjection();
     this.activateNextTurn();
@@ -374,6 +410,7 @@ export class AvatarClient {
 
   private onBotStoppedSpeaking = (): void => {
     this.botSpeaking = false;
+    this.setRemoteAudioLevel(0);
     // Playout truth releases the only active mouth track. A late cue chunk for
     // this context is ignored rather than reviving a silent mouth.
     if (this.turn) {
@@ -398,13 +435,34 @@ export class AvatarClient {
 
   private onDisconnected = (): void => {
     this.failure = "OFFLINE";
+    this.setRemoteAudioLevel(0);
     this.clearIdleTimer();
     this.applyProjection();
   };
 
   private onConnectedOrReady = (): void => {
     if (this.failure === "OFFLINE") this.failure = null;
+    // Pipecat has established a session. Until a factual speech event says
+    // otherwise, the avatar is available to listen; it earns IDLE only after
+    // the regular quiet timer expires.
+    this.listening = true;
+    this.idle = false;
     this.applyProjection();
+    this.armIdleIfEligible();
+  };
+
+  private setRemoteAudioLevel(level: number): void {
+    const next = Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0;
+    if (next === this.remoteAudioLevel) return;
+    this.remoteAudioLevel = next;
+    this.opts.onRemoteAudioLevel?.(next);
+  }
+
+  private onRemoteAudioLevel = (level: number): void => {
+    // Audio level is deliberately decorative. There can be other remote
+    // participants; a level event is not permission to change the avatar's
+    // face or speaking state.
+    if (this.botSpeaking) this.setRemoteAudioLevel(level);
   };
 
   /**
@@ -427,6 +485,7 @@ export class AvatarClient {
       [RTVI_EVENTS.userStoppedSpeaking, this.onUserStoppedSpeaking],
       [RTVI_EVENTS.botStartedSpeaking, this.onBotStartedSpeaking],
       [RTVI_EVENTS.botStoppedSpeaking, this.onBotStoppedSpeaking],
+      [RTVI_EVENTS.remoteAudioLevel, this.onRemoteAudioLevel],
     ];
     for (const [event, listener] of subscriptions) client.on(event as RTVIEvent, listener as never);
     return () => {
@@ -438,6 +497,7 @@ export class AvatarClient {
   /** Dispose controller-owned timers when its mounted avatar is destroyed. */
   destroy(): void {
     this.clearIdleTimer();
+    this.setRemoteAudioLevel(0);
     this.behavior.destroy();
   }
 }

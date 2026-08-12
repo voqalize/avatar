@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PipecatClient } from "@pipecat-ai/client-js";
 import { createAvatar, type AvatarApi } from "../../src/avatar.js";
-import { AvatarClient } from "./AvatarClient.js";
+import { AvatarClient, type AvatarPresenceState } from "./AvatarClient.js";
 
 export interface UseAvatarOptions {
   /** Which face. Omit for the widget's own default. */
@@ -21,6 +21,10 @@ export interface UseAvatarOptions {
    * before connect. `useAvatar` (dis)connects the subscription as this
    * changes; it does not create or own the client. */
   client?: PipecatClient | null;
+  /** A host-facing notification for call chrome such as a state label. */
+  onPresenceChange?: (state: AvatarPresenceState) => void;
+  /** Active bot remote-audio level for a decorative waveform or meter. */
+  onRemoteAudioLevel?: (level: number) => void;
 }
 
 /**
@@ -41,11 +45,17 @@ export interface UseAvatarHandle {
   containerRef: AvatarMountRef;
   /** The live widget instance once mounted, else `null`. */
   avatar: AvatarApi | null;
+  /** The last resolved state, or `null` until Pipecat supplies a fact. */
+  presence: AvatarPresenceState | null;
+  /** The most recent bot audio gain (0…1). */
+  botAudioLevel: number;
 }
 
 export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
   const containerRef = useRef<HTMLDivElement>(null);
   const [avatar, setAvatar] = useState<AvatarApi | null>(null);
+  const [presence, setPresence] = useState<AvatarPresenceState | null>(null);
+  const [botAudioLevel, setBotAudioLevel] = useState(0);
   const avatarClientRef = useRef<AvatarClient | null>(null);
 
   // Latest-options ref, so the mount effect (which runs once) still reads the
@@ -57,7 +67,16 @@ export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
     const mount = containerRef.current;
     if (!mount) return;
     const instance = createAvatar({ mount, avatar: optionsRef.current.avatar });
-    avatarClientRef.current = new AvatarClient(instance);
+    avatarClientRef.current = new AvatarClient(instance, {
+      onPresenceChange: (state) => {
+        setPresence(state);
+        optionsRef.current.onPresenceChange?.(state);
+      },
+      onRemoteAudioLevel: (level) => {
+        setBotAudioLevel(level);
+        optionsRef.current.onRemoteAudioLevel?.(level);
+      },
+    });
     setAvatar(instance);
 
     return () => {
@@ -65,6 +84,8 @@ export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
       instance.destroy();
       avatarClientRef.current = null;
       setAvatar(null);
+      setPresence(null);
+      setBotAudioLevel(0);
     };
     // Mount once. `avatar` is read at mount time only — the widget has no
     // hot-swap-avatar API (`createFace` runs once per mount), so changing it
@@ -82,5 +103,5 @@ export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatar, options.client]);
 
-  return { containerRef, avatar };
+  return { containerRef, avatar, presence, botAudioLevel };
 }

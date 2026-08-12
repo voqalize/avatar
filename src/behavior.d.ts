@@ -8,7 +8,7 @@ export type BehaviorStateId =
   | "WANTS_IN" | "YIELDED";
 
 export type BehaviorActionId =
-  | "ack.continue" | "ack.receive" | "ack.realize" | "ack.empathy" | "ack.nod"
+  | "ack.receive" | "ack.nod"
   | "turn.interrupted"
   | "gesture.greet" | "gesture.farewell" | "gesture.approve" | "gesture.wait";
 

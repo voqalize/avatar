@@ -65,8 +65,12 @@ import { Avatar } from '@voqalize/avatar';    // peers: react >= 18, @pipecat-ai
 
 `client` is the live `PipecatClient` (or `null` before connect); `avatar` picks
 a face and is read once, at mount. Everything else is forwarded to the mount
-`<div>`, so it sizes and styles like the tile it lives in. There is nothing to
-configure because the server already says all of it.
+`<div>`, so it sizes and styles like the tile it lives in. The binding also
+surfaces factual presentation data without prescribing a product UI:
+`data-avatar-state`, `onPresenceChange(state)`, and
+`onRemoteAudioLevel(level)` let a host add a shared status label or speaking
+waveform around any avatar. See `docs/pipecat-lifecycle-protocol.md` for the
+authority boundary.
 
 Server side, the whole integration is one processor between your TTS and your
 output transport — see `py/` and `docs/contract-protocol.md`:

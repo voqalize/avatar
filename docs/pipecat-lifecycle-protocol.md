@@ -10,7 +10,9 @@ message received. Its precedence is fixed:
 3. `OFFLINE` / `DEGRADED` when no observed speech pre-empts that presentation.
 4. Server claim `WORKING`.
 5. Server claim `THINKING`.
-6. Client `LISTENING`, then client-owned `IDLE` after 12 seconds of quiet.
+6. Client `LISTENING`, then client-owned `IDLE` after 12 seconds of quiet in
+   an established Pipecat session. A newly mounted avatar begins available,
+   never already "stepped aside".
 
 Connection failure is lower than observed speech. A new user turn and real bot
 playout both retire any prior server claim, so it cannot reappear stale after speech.
@@ -64,9 +66,35 @@ application extension hooks in this version.
 | `UserStoppedSpeaking` | `setUserSpeaking(false)` and hold `LISTENING`; the server may then claim `THINKING`. No acknowledgement is emitted. |
 | `BotStartedSpeaking` | `SPEAKING`; it pre-empts and consumes any lower-priority server claim. |
 | `BotStoppedSpeaking` | Stop any still-open viseme track immediately, then return to `LISTENING`. |
+| `RemoteAudioLevel` | Decorative active-bot waveform only; never changes projection or mouth state. |
 | `Error` | `DEGRADED`, or `OFFLINE` when `data.fatal` is true. |
 | `Disconnected` | `OFFLINE`. |
 | `Connected` / `BotReady` | Clear a prior offline presentation and resume normal projection. |
+
+## Presence chrome and audio activity
+
+The resolved state is also presentation data. The React binding exposes it as
+`data-avatar-state` on `<Avatar>` and offers `onPresenceChange` for the call
+application's status label. This is deliberately **not** part of the rig: a
+video, WebGL, or SVG avatar should all present the same factual call status.
+
+Pipecat also emits `RemoteAudioLevel` (0–1). The binding forwards it through
+`onRemoteAudioLevel` only while `BotStartedSpeaking` is active, and resets it
+to zero at bot stop/disconnect. It is appropriate for a decorative speaking
+waveform, but it has no state authority: remote gain may come from another
+participant and cannot start or stop the avatar's mouth.
+
+The package keeps this data surface unstyled. The product host owns placement,
+theme, labels, and whether an idle avatar becomes a small camera-off/muted
+thumbnail. Avatar Studio is the reference presentation: a shared state pill,
+speech waveform, and compact idle tile demonstrate that product layer without
+baking a conferencing UI into every avatar.
+
+In Studio, the compact idle tile belongs only to the runtime routes (Wire Lab,
+Fixtures, Connection). Rig and behavior routes mount their own author previews
+and cannot alter the runtime projection. Studio uses a four-second quiet timer
+solely to make the enter/exit behavior reviewable; the client runtime default
+remains twelve seconds.
 
 The server owns `THINKING` and `WORKING` because function-event reporting at
 the browser is optional. It claims `WORKING` for active calls and clears it

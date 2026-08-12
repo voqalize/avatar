@@ -244,6 +244,29 @@ describe("RTVI_EVENTS", () => {
     expect(RTVI_EVENTS.userStoppedSpeaking).toBe(RTVIEvent.UserStoppedSpeaking);
     expect(RTVI_EVENTS.botStartedSpeaking).toBe(RTVIEvent.BotStartedSpeaking);
     expect(RTVI_EVENTS.botStoppedSpeaking).toBe(RTVIEvent.BotStoppedSpeaking);
+    expect(RTVI_EVENTS.remoteAudioLevel).toBe(RTVIEvent.RemoteAudioLevel);
+  });
+});
+
+describe("AvatarClient presentation data", () => {
+  it("reports resolved presence and decorates a waveform only during bot speech", () => {
+    const fake = createFakeAvatar();
+    const presence: string[] = [];
+    const levels: number[] = [];
+    const adapter = new AvatarClient(fake.api, { onPresenceChange: (state) => presence.push(state), onRemoteAudioLevel: (level) => levels.push(level) });
+    const listeners = new Map<string, (...args: any[]) => void>();
+    adapter.attach({ on(event: string, listener: (...args: any[]) => void) { listeners.set(event, listener); }, off() {} } as never);
+
+    listeners.get(RTVI_EVENTS.remoteAudioLevel)?.(.9);
+    expect(levels).toEqual([]);
+    listeners.get(RTVI_EVENTS.botStartedSpeaking)?.();
+    listeners.get(RTVI_EVENTS.remoteAudioLevel)?.(.9);
+    listeners.get(RTVI_EVENTS.botStoppedSpeaking)?.();
+
+    expect(presence).toContain("SPEAKING");
+    expect(levels).toEqual([.9, 0]);
+    expect(adapter.presenceState).toBe("LISTENING");
+    expect(adapter.botAudioLevel).toBe(0);
   });
 });
 
@@ -287,9 +310,10 @@ describe("AvatarClient authority resolver", () => {
     emit(RTVI_EVENTS.error, { data: { fatal: false } });
     emit(RTVI_EVENTS.botStartedSpeaking);
 
-    // Starting playout clears a recoverable failure first; the important
-    // precedence invariant is the final SPEAKING projection.
-    expect(calls.setState.map((call) => call.name)).toEqual(["DEGRADED", "IDLE", "SPEAKING"]);
+    // Starting playout clears a recoverable failure first; before any session
+    // activity the safe baseline is available/listening, not stepped aside.
+    // The important precedence invariant is the final SPEAKING projection.
+    expect(calls.setState.map((call) => call.name)).toEqual(["DEGRADED", "LISTENING", "SPEAKING"]);
   });
 
   it("uses bot playout as a mouth safety stop and returns to listening", () => {
@@ -346,6 +370,24 @@ describe("AvatarClient authority resolver", () => {
 
     vi.advanceTimersByTime(600);
     expect(fake.calls.setState.at(-1)?.name).toBe("IDLE");
+    vi.useRealTimers();
+  });
+
+  it("starts available and earns idle only after a connected quiet interval", () => {
+    vi.useFakeTimers();
+    const fake = createFakeAvatar();
+    const adapter = new AvatarClient(fake.api, { idleDelayMs: 600 });
+    const listeners = new Map<string, (...args: any[]) => void>();
+    adapter.attach({ on(event: string, listener: (...args: any[]) => void) { listeners.set(event, listener); }, off() {} } as never);
+
+    expect(adapter.presenceState).toBe("LISTENING");
+    expect(fake.calls.setState).toEqual([]);
+    listeners.get(RTVI_EVENTS.connected)?.();
+    expect(fake.calls.setState.at(-1)?.name).toBe("LISTENING");
+    vi.advanceTimersByTime(599);
+    expect(adapter.presenceState).toBe("LISTENING");
+    vi.advanceTimersByTime(1);
+    expect(adapter.presenceState).toBe("IDLE");
     vi.useRealTimers();
   });
 

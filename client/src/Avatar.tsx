@@ -19,15 +19,20 @@
 import type { HTMLAttributes } from "react";
 import type { PipecatClient } from "@pipecat-ai/client-js";
 import { useAvatar } from "./useAvatar.js";
+import type { AvatarPresenceState } from "./AvatarClient.js";
 
 export interface AvatarProps extends HTMLAttributes<HTMLDivElement> {
   /** The live `PipecatClient`, or `null` before connect. */
   client?: PipecatClient | null;
   /** Which face. Omit for the default. Read at mount only — see above. */
   avatar?: string;
+  /** Presentation data for surrounding product UI; never affects behavior. */
+  onPresenceChange?: (state: AvatarPresenceState) => void;
+  /** Active bot remote-audio gain (0…1), useful for a decorative waveform. */
+  onRemoteAudioLevel?: (level: number) => void;
 }
 
-export function Avatar({ client, avatar, ...rest }: AvatarProps) {
-  const { containerRef } = useAvatar({ client, avatar });
-  return <div role="img" aria-label="avatar" {...rest} ref={containerRef} />;
+export function Avatar({ client, avatar, onPresenceChange, onRemoteAudioLevel, ...rest }: AvatarProps) {
+  const { containerRef, presence } = useAvatar({ client, avatar, onPresenceChange, onRemoteAudioLevel });
+  return <div role="img" aria-label={presence ? `avatar, ${presence.toLowerCase()}` : "avatar"} data-avatar-state={presence ?? undefined} {...rest} ref={containerRef} />;
 }

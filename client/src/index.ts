@@ -20,3 +20,4 @@
  */
 
 export { Avatar, type AvatarProps } from "./Avatar.js";
+export type { AvatarPresenceState } from "./AvatarClient.js";

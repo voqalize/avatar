@@ -1,57 +1,71 @@
 # Avatar Studio
 
-The local authoring and integration workbench for avatar runtimes. SVG is the
-current built-in renderer, not a requirement of the Studio or its contracts.
+Avatar Studio is the local review environment for avatar authors and library
+developers. It is renderer-neutral: SVG is only the current built-in rig
+implementation.
 
 ```sh
 npm install
 npm run dev
-# or, from the repository root:
+# or from the repository root
 pm2 start ecosystem.config.cjs
 ```
 
-Open <http://127.0.0.1:4173/#/rig/review>.
+Open <http://127.0.0.1:4173/#/rig>.
 
-Studio has review routes at each ownership layer, plus integration routes:
+## The review model
 
-- `#/rig/review` — inspect raw pose extremes and renderer conformance.
-- `#/rig/visemes` — inspect individual visemes and curated transitions.
-- `#/rig/gestures` — inspect deterministic hand/face filmstrips for every
-  visible gesture, including entry and exit frames.
-- `#/behavior` — exercise durable client states and finite library actions.
-- `#/wire` — send the production avatar envelope and emulate factual Pipecat lifecycle events.
-- `#/connection` — persist a backend connection profile locally and attach an actual Pipecat client supplied by the host.
-- `#/fixtures` — play checked-in WAV/cue pairs through the same lifecycle path as a real response.
+Studio is arranged around the ownership boundary of each decision, not around
+a grab-bag of runtime buttons:
 
-Fixtures are shared evidence: avatar authors use them to assess articulation,
-while wire developers use them to assess real cue/lifecycle alignment.
+1. **Rig** — raw controls only. Review pose extremes, individual visemes, and
+   hand gesture clips without lifecycle or wire semantics.
+2. **Behavior** — compose durable client states and finite actions, assuming
+   the selected rig has passed review. An action is short and self-completing;
+   a state remains until explicitly replaced.
+3. **Runtime** — replay a deterministic factual Pipecat/server trace from
+   time zero. The playhead reconstructs the avatar instead of mutating a
+   long-lived test surface, so there are no compensating reset buttons.
+4. **Connect** — attach a real, host-created Pipecat client to the same
+   production `AvatarClient` binding.
 
-## Authoring workflow
+Every workspace uses the same stable composition:
 
-The Studio is ordered by the layer that owns a decision. Start at the renderer,
-then move upward only after the lower layer is sound:
+- **Library**: choose the thing under review.
+- **Review canvas**: one deliberately sized avatar tile.
+- **Inspector**: ownership, resolved state, and test context.
+- **Timeline**: the output or input sequence being judged.
 
-1. **Rig review** is a deterministic contact sheet of the shared raw pose
-   controls. Select a card to inspect the same frame in the live stage. A card
-   should have a distinct silhouette at normal tile size; if it does not, fix
-   the renderer rather than adding behavior-layer compensation.
-2. **Rig visemes** is the corresponding mouth sheet plus the transition
-   sequences that reveal closure failures and shape bleed. The review-sheet
-   cards are fixed frames; the transition controls exercise the live smoother.
-3. **Gesture review** verifies the hand and matching face timeline as a
-   sequence. A final pose is not sufficient evidence: entry, readable hold,
-   and exit must all survive at normal tile size.
-4. **Behavior** evaluates durable client states and finite actions, assuming
-   the selected avatar has passed its lower-level review.
-5. **Wire Lab** exercises only the narrow production envelope and Pipecat
-   lifecycle facts. **Fixtures** is the end-to-end audio/cue check.
+## Runtime traces and fixtures
+
+Runtime’s stock traces cover a quiet listener, a normal reply, server-owned
+working, and a response interruption. Selecting a trace or moving its
+playhead reconstructs it from time zero. Quiet idle is therefore observable at
+any playhead after its four-second quiet interval, not only after waiting in
+real time.
+
+The **Audio fixtures** collection is drawn from the checked-in WAV/cue pairs
+in `demo/eval-clips.json`. Selecting a fixture creates an equivalent trace;
+playing it drives the real cue/lifecycle path and plays its audio. This is the
+shared articulation evidence for both rig and wire work.
 
 ## Real Pipecat connections
 
-`@pipecat-ai/client-js` is client/transport neutral: a URL alone does not define a transport. Studio therefore does not guess whether a deployment uses Daily, WebSocket, or a custom transport. It stores the endpoint and credentials locally for the deployment, and an integration can attach its constructed `PipecatClient` in the browser console or a host adapter:
+Studio intentionally does not turn a URL, token, or transport-specific
+configuration into a Pipecat client. Stock Pipecat is transport-neutral; the
+host/deployment creates the client and owns its credentials. Once constructed,
+attach it in the browser:
 
 ```js
 window.avatarStudio.attachPipecat(pipecatClient)
 ```
 
-The attached client supplies standard Pipecat lifecycle events; server messages use the production avatar wire envelope described in `../docs/contract-protocol.md`.
+Studio binds the client’s standard factual lifecycle events plus `serverMessage`
+to the production `AvatarClient`. To detach it:
+
+```js
+window.avatarStudio.detachPipecat()
+```
+
+Studio does not persist secrets. The narrow avatar wire envelope remains
+documented in `../docs/contract-protocol.md`.
