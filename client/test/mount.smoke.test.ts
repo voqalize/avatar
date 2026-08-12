@@ -86,4 +86,31 @@ describe("createAvatar mount (jsdom)", () => {
       document.body.removeChild(mount);
     }
   });
+
+  it("adapts a renderer-neutral rig without SVG metadata", async () => {
+    const { createAvatar } = await import("../../src/avatar.js");
+    const mount = document.createElement("div");
+    document.body.appendChild(mount);
+    const frames: unknown[] = [];
+    let destroyed = false;
+
+    const avatar = createAvatar({
+      mount,
+      manual: true,
+      rig: () => ({
+        apply(frame) { frames.push(frame); },
+        destroy() { destroyed = true; },
+      }),
+    });
+    avatar.step(1 / 60);
+    avatar.action("GESTURE_GREET").step(1 / 60);
+
+    expect(frames).toHaveLength(2);
+    expect((frames[1] as { hand?: { gesture: string } }).hand?.gesture).toBe("greet");
+    expect(avatar.svg).toBeNull();
+    expect(avatar.meta).toBeNull();
+    avatar.destroy();
+    expect(destroyed).toBe(true);
+    document.body.removeChild(mount);
+  });
 });

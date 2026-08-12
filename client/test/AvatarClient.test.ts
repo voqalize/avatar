@@ -281,6 +281,17 @@ describe("AvatarClient authority resolver", () => {
     expect(calls.setState.map((call) => call.name)).toEqual(["TYPING", "SPEAKING"]);
   });
 
+  it("keeps observed speech above a concurrent recoverable failure", () => {
+    const { calls, emit } = attached();
+
+    emit(RTVI_EVENTS.error, { data: { fatal: false } });
+    emit(RTVI_EVENTS.botStartedSpeaking);
+
+    // Starting playout clears a recoverable failure first; the important
+    // precedence invariant is the final SPEAKING projection.
+    expect(calls.setState.map((call) => call.name)).toEqual(["DEGRADED", "IDLE", "SPEAKING"]);
+  });
+
   it("uses bot playout as a mouth safety stop and returns to listening", () => {
     const { calls, emit, adapter } = attached();
 

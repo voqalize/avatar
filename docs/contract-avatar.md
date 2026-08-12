@@ -1,4 +1,10 @@
-# Contract B — mixer ↔ face (the avatar contract)
+# Legacy SVG implementation contract
+
+> The renderer-agnostic binding contract is now
+> [contract-rig.md](contract-rig.md). This document remains the implementation
+> guide for the existing SVG adapters—`createFace`, SVG `META`, and the static
+> pages that have not yet moved to Studio. New SVG work should satisfy the rig
+> contract first and use these details only inside its adapter.
 
 *Living document. Describes the code as of `src/face*.js` on `main`; the
 [Direction](#direction) section flags what is about to change. The counterpart

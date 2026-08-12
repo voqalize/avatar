@@ -170,10 +170,13 @@ export interface AvatarApi {
   readonly speaking: boolean;
   readonly performing: boolean;
   readonly clip: string | null;
+  /** Semantic hand action in flight, including for a non-SVG custom rig. */
+  readonly gesturing: string | null;
   readonly params: Record<string, number>;
   readonly userSpeaking: boolean;
-  readonly svg: SVGSVGElement;
-  readonly meta: AvatarMeta;
+  /** Legacy SVG inspection fields; null for a renderer-neutral AvatarRig. */
+  readonly svg: SVGSVGElement | null;
+  readonly meta: AvatarMeta | null;
   destroy(): void;
 }
 
@@ -197,13 +200,16 @@ export interface CreateAvatarOptions {
   /** A bare face factory, for an avatar the registry doesn't know about.
    * `meta` then falls back to the svg's own viewBox. */
   face?: FaceFactory;
+  /** Renderer-neutral rig factory. It replaces the SVG face implementation;
+   * no SVG or metadata is required. See docs/contract-rig.md. */
+  rig?: import("./rig.js").AvatarRigFactory;
+  rigOptions?: unknown;
   theme?: unknown;
   mouthGain?: number;
   gestureGain?: number;
   motionGain?: number;
-  /** Withhold the frame-edge hand entirely — for a face drawn in some other
-   * idiom, or a tile too small to spend the pixels. A `GESTURE_*` action then degrades
-   * to the gesture's face half. Default true. */
+  /** Disable only the bundled SVG hand renderer. A custom rig still receives
+   * first-class `frame.hand` controls for every gesture action. Default true. */
   hand?: boolean;
   /** Which hand the character gestures with: +1 the viewer's right. */
   handSide?: number;

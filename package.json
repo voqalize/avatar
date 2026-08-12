@@ -50,6 +50,9 @@
     "build": "tsc -p client/tsconfig.json",
     "typecheck": "tsc -p client/tsconfig.json --noEmit",
     "test": "vitest run",
+    "studio:dev": "npm --prefix studio run dev",
+    "studio:build": "npm --prefix studio run build",
+    "studio:typecheck": "npm --prefix studio run typecheck",
     "prepare": "tsc -p client/tsconfig.json"
   },
   "peerDependencies": {

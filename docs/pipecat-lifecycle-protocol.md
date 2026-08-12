@@ -7,12 +7,13 @@ message received. Its precedence is fixed:
 
 1. `SPEAKING` while Pipecat reports bot playout.
 2. `LISTENING` while Pipecat reports user speech.
-3. Server claim `WORKING` (rendered by the current rig as `TYPING`).
-4. Server claim `THINKING`.
-5. Client `LISTENING`, then client-owned `IDLE` after 12 seconds of quiet.
+3. `OFFLINE` / `DEGRADED` when no observed speech pre-empts that presentation.
+4. Server claim `WORKING`.
+5. Server claim `THINKING`.
+6. Client `LISTENING`, then client-owned `IDLE` after 12 seconds of quiet.
 
-Connection failure is a terminal overlay. A new user turn and real bot playout
-both retire any prior server claim, so it cannot reappear stale after speech.
+Connection failure is lower than observed speech. A new user turn and real bot
+playout both retire any prior server claim, so it cannot reappear stale after speech.
 The browser never uses microphone VAD to interrupt bot speech: if audio is
 playing, the avatar is speaking and its mouth is viseme-driven.
 
@@ -69,9 +70,10 @@ application extension hooks in this version.
 
 The server owns `THINKING` and `WORKING` because function-event reporting at
 the browser is optional. It claims `WORKING` for active calls and clears it
-after the last one. Tool-specific behaviour, DOM-aware gaze and custom compound
-motion are deferred until there is evidence for a stable JavaScript extension
-API.
+after the last one. The client behavior library owns how `WORKING` is rendered:
+today its work program selects typing; future notes/screen activities need no
+wire change. Tool-specific behaviour, DOM-aware gaze and custom compound motion
+remain deferred until there is evidence for a stable JavaScript extension API.
 
 ## Verification lab
 
@@ -144,9 +146,9 @@ the cue clock then, and closes it at `BotStoppedSpeaking`. It passes
 The client resolves effective state in this order:
 
 ```text
-OFFLINE / DEGRADED
-  > bot speech
+bot speech
   > user speech
+  > OFFLINE / DEGRADED
   > server WORKING claim
   > server THINKING claim
   > listening

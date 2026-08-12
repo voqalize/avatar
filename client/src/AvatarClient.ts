@@ -52,6 +52,7 @@
 
 import type { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
 import type { AvatarApi } from "../../src/avatar.js";
+import { BehaviorController } from "../../src/behavior.js";
 import {
   isAvatarMessage,
   type AvatarCommand,
@@ -121,7 +122,7 @@ export const RTVI_EVENTS = {
   botStoppedSpeaking: "botStoppedSpeaking",
 } as const satisfies Record<string, string>;
 
-type LifecycleState = "IDLE" | "LISTENING" | "THINKING" | "TYPING" | "SPEAKING" | "DEGRADED" | "OFFLINE";
+type LifecycleState = "IDLE" | "LISTENING" | "THINKING" | "WORKING" | "SPEAKING" | "DEGRADED" | "OFFLINE";
 type ServerClaim = "THINKING" | "WORKING" | null;
 
 /** Defensive unwrap for the `RTVIEvent.ServerMessage` `{ data }` quirk: some
@@ -134,6 +135,8 @@ function unwrapServerMessage(raw: unknown): Record<string, unknown> {
 
 export class AvatarClient {
   private readonly avatar: AvatarApi;
+  /** Maps factual/wire intent into the broader client behavior catalog. */
+  private readonly behavior: BehaviorController;
   private readonly opts: AvatarClientOptions;
   private readonly now: () => number;
   private turn: Turn | null = null;
@@ -156,6 +159,7 @@ export class AvatarClient {
 
   constructor(avatar: AvatarApi, opts: AvatarClientOptions = {}) {
     this.avatar = avatar;
+    this.behavior = new BehaviorController(avatar);
     this.opts = opts;
     this.now = opts.now ?? (() => performance.now());
     this.idleDelayMs = opts.idleDelayMs ?? 12_000;
@@ -223,7 +227,7 @@ export class AvatarClient {
   }
 
   private playAction(id: string): void {
-    this.avatar.action(id);
+    this.behavior.wireAction(id);
   }
 
   private ensureTurn(ctx: string): Turn {
@@ -276,12 +280,12 @@ export class AvatarClient {
   }
 
   private lifecycleState(): LifecycleState {
-    if (this.failure) return this.failure;
     // Audio truth is the P0 invariant: no lower claim or microphone event may
     // put the face in a non-speaking pose while bot speech is audible.
     if (this.botSpeaking) return "SPEAKING";
     if (this.userSpeaking) return "LISTENING";
-    if (this.serverClaim === "WORKING") return "TYPING";
+    if (this.failure) return this.failure;
+    if (this.serverClaim === "WORKING") return "WORKING";
     if (this.serverClaim === "THINKING") return "THINKING";
     if (this.idle) return "IDLE";
     return "LISTENING";
@@ -290,7 +294,7 @@ export class AvatarClient {
   private applyProjection(force = false): void {
     const state = this.lifecycleState();
     if (force || this.projected !== state) {
-      this.avatar.setState(state);
+      this.behavior.setState(state);
       this.projected = state;
     }
   }
@@ -429,5 +433,11 @@ export class AvatarClient {
       this.clearIdleTimer();
       for (const [event, listener] of subscriptions) client.off(event as RTVIEvent, listener as never);
     };
+  }
+
+  /** Dispose controller-owned timers when its mounted avatar is destroyed. */
+  destroy(): void {
+    this.clearIdleTimer();
+    this.behavior.destroy();
   }
 }

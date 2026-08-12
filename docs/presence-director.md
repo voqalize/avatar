@@ -1,5 +1,11 @@
 # Presence director
 
+> **Legacy experimental helper.** The behavior controller described in
+> [contract-behavior.md](contract-behavior.md) is the runtime authority. This
+> director is retained as a reference reel while its useful work program and
+> action choreography migrate into the behavior catalog; do not add new host
+> integrations to it.
+
 `createPresenceDirector(avatar)` is an optional, application-level conductor
 for the existing SVG avatar API. It does not add SVG parts, introduce a new
 wire protocol, or require per-avatar state art. Its job is to turn meaningful

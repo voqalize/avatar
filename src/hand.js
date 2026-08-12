@@ -482,6 +482,22 @@ export const HAND_GESTURES = {
 
 export const HAND_GESTURE_IDS = Object.keys(HAND_GESTURES);
 
+/** Public renderer-frame gesture names → current SVG timelines. */
+const FRAME_GESTURES = Object.freeze({
+  greet: 'GESTURE_GREET',
+  farewell: 'GESTURE_GOODBYE',
+  approve: 'GESTURE_APPROVE',
+  wait: 'GESTURE_WAIT',
+});
+const GESTURE_TO_FRAME = Object.freeze(Object.fromEntries(
+  Object.entries(FRAME_GESTURES).map(([name, id]) => [id, name]),
+));
+
+/** Stable SVG-action names → renderer-neutral hand controls. */
+export const HAND_ACTION_TO_FRAME_GESTURE = Object.freeze({
+  ...GESTURE_TO_FRAME,
+});
+
 // GO_ON is deliberately absent, and this is the reasoning rather than an
 // oversight. It was drawn as a low splayed open palm rocking at the wrist; the
 // stakeholder's verdict was "go on doesn't work for me" and the review was
@@ -589,11 +605,40 @@ export function createHand(svg, theme, meta, opts = {}) {
     for (const s of Object.values(shapes)) s.style.display = 'none';
     place(fr.cx, fr.bottom + HIDE, 0, 1);
   }
+  function show(def) {
+    for (const [k, s] of Object.entries(shapes)) s.style.display = k === def.shape ? '' : 'none';
+  }
+  function applyFrame(frame) {
+    if (!frame) { park(); return; }
+    const id = FRAME_GESTURES[frame.gesture];
+    const def = HAND_GESTURES[id];
+    if (!def) { park(); return; }
+    dir = frame.side === 'left' ? -1 : 1;
+    show(def);
+    const local = Math.max(0, Math.min(1, frame.progress)) * def.dur;
+    place(
+      fr.cx + dir * sample(def.out, local),
+      fr.bottom + sample(def.dy, local),
+      sample(def.rot, local),
+      def.sc || 1,
+    );
+  }
   park();
 
   return {
     get playing() { return !!current; },
     get id() { return current ? current.def.id : null; },
+    /** The semantic hand control for the current animation frame, or null. */
+    get frame() {
+      if (!current) return null;
+      return {
+        gesture: GESTURE_TO_FRAME[current.def.id],
+        progress: Math.max(0, Math.min(1, (lastT - current.start) / current.def.dur)),
+        side: dir === -1 ? 'left' : 'right',
+      };
+    },
+    /** Render a first-class AvatarFrame hand control. */
+    applyFrame,
     setDir(d) { dir = d === -1 ? -1 : 1; if (!current) park(); },
     /** @param {string} id  @param {number} [atMs] start time on the layer's clock */
     play(id, atMs, { queue: shouldQueue = false } = {}) {
@@ -603,9 +648,7 @@ export function createHand(svg, theme, meta, opts = {}) {
         if (current.def.id !== id && !queue.some((item) => item.id === id)) queue.push({ id, def });
         return def;
       }
-      for (const [k, s] of Object.entries(shapes)) {
-        s.style.display = k === def.shape ? '' : 'none';
-      }
+      show(def);
       current = { def, start: atMs !== undefined ? atMs : lastT };
       return def;
     },
@@ -619,20 +662,13 @@ export function createHand(svg, theme, meta, opts = {}) {
         const done = def;
         const next = queue.shift();
         if (next) {
-          for (const [k, s] of Object.entries(shapes)) s.style.display = k === next.def.shape ? '' : 'none';
+          show(next.def);
           current = { def: next.def, start: tMs };
         } else {
           current = null;
-          park();
         }
         return done;
       }
-      place(
-        fr.cx + dir * sample(def.out, local),
-        fr.bottom + sample(def.dy, local),
-        sample(def.rot, local),
-        def.sc || 1
-      );
     },
     stop() { current = null; queue.length = 0; park(); },
     destroy() { if (g.parentNode) g.parentNode.removeChild(g); },

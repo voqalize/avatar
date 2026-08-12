@@ -53,5 +53,6 @@ Pipecat lifecycle back as avatar messages, avoiding two competing sources for
 the same pose.
 
 There are no lifecycle extension hooks in this release. The default active
-function-call behaviour is `TYPING`; tool-specific and DOM-aware behaviour will
+function-call behavior is the durable client `WORKING` state; its initial
+client-owned program selects typing. Tool-specific and DOM-aware behavior will
 be designed after we have production evidence for the right JavaScript seam.

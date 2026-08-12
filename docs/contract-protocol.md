@@ -5,12 +5,12 @@
 contract — what a face module owes the mixer — is
 [contract-avatar.md](contract-avatar.md).*
 
-The server is the source of truth. It decides what the agent is doing, feeling,
-saying and looking at, and tells the widget; the widget's only job is to look
-right while rendering that. Nothing in this contract lets the client decide
-call content, and nothing in it requires the server to know what a face looks
-like. The whole protocol is: **a state enum, an emotion enum, a gaze enum, an
-interjection id, a hand-gesture id, and a stream of timed viseme letters.**
+This is the legacy SVG API reference. The binding runtime contract is now split
+into [contract-wire.md](contract-wire.md) and
+[contract-behavior.md](contract-behavior.md): Pipecat supplies local facts,
+the server supplies claims/actions/cues, and the client resolves behavior. The
+API below remains useful for legacy SVG implementation and local behavior
+authoring; it is not the server wire vocabulary.
 
 Everything below is reachable from one import:
 
@@ -26,10 +26,12 @@ unknown emotion falls back to `neutral` silently; unknown gaze falls back to
 
 ## States — `setState(name, { emotion?, intensity?, gaze?, keepGaze? })`
 
-> Runtime wire note: application code may still use this SVG API directly, but
-> the Pipecat wire does **not** send arbitrary states. It sends lower-priority
-> `claim` values (`THINKING`, `WORKING`, or `null`) and self-completing
-> `action` ids. The browser resolves factual speech states from Pipecat first.
+> Runtime wire note: application code may still use this legacy SVG API
+> directly, but the Pipecat wire does **not** send arbitrary states. It sends
+> lower-priority `claim` values (`THINKING`, `WORKING`, or `null`) and
+> self-completing `action` ids. The browser resolves factual speech states from
+> Pipecat first; `WORKING` is a behavior state whose current client program
+> selects the legacy `TYPING` renderer pose.
 
 A state is a *condition*, not an event: it holds until replaced. Each state
 bundles a default gaze, emotion and idle-energy level. Passing `emotion`/`gaze`

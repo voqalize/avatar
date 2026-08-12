@@ -36,7 +36,8 @@ import { ClipPlayer } from './clips.js';
 import { ACTIONS, INTERNAL_CLIPS } from './interjections.js';
 import { VisemeTrack, shapeFor, SILENT } from './visemes.js';
 import { PerformTrack } from './perform.js';
-import { createHand, HAND_GESTURES } from './hand.js';
+import { createHand, HAND_GESTURES, HAND_ACTION_TO_FRAME_GESTURE } from './hand.js';
+import { avatarFrame, createSvgRig } from './rig.js';
 
 // Each state's `idle` is a profile for the liveness layer (see DEFAULT_PROFILE
 // in idle.js). Blink gaps come from docs/research-biomechanics.md §5: the rate
@@ -276,15 +277,18 @@ export function createAvatar(opts = {}) {
   // `opts.avatar` names one from AVATARS; `opts.face` passes a factory directly,
   // so a host can supply an avatar the rig has never heard of. A bare factory
   // has no descriptor, so meta falls back to what the svg itself declares.
-  const entry = opts.face ? { create: opts.face } : AVATARS[opts.avatar || DEFAULT_AVATAR];
-  if (!entry) {
+  const entry = opts.rig ? null : (opts.face ? { create: opts.face } : AVATARS[opts.avatar || DEFAULT_AVATAR]);
+  if (!opts.rig && !entry) {
     throw new Error(`createAvatar: unknown avatar "${opts.avatar}" (have: ${AVATAR_NAMES.join(', ')})`);
   }
-  const face = entry.create(mount, opts.theme);
-  const meta = entry.meta || (() => {
+  const face = entry ? entry.create(mount, opts.theme) : null;
+  // A renderer-neutral rig needs no SVG descriptor. `meta` remains a legacy
+  // compatibility detail for current SVG hosts and tools, never a requirement
+  // of the AvatarRig contract.
+  const meta = face && (entry.meta || (() => {
     const vb = (face.svg.getAttribute('viewBox') || '0 0 1 1').split(/[\s,]+/).map(Number);
     return { viewBox: { x: vb[0], y: vb[1], w: vb[2], h: vb[3] } };
-  })();
+  })());
   const gaze = new GazeLayer();
   const idle = new IdleLayer();
   const speech = new VisemeTrack();
@@ -296,12 +300,14 @@ export function createAvatar(opts = {}) {
   });
   const engagement = new ListeningEngine();
   const performTrack = new PerformTrack();
-  // The hand is a sibling of the mixer, not a layer inside it: it writes SVG
-  // directly rather than parameter channels, because a hand at the frame edge is
-  // not part of the rig's body (see hand.js, and CLAUDE.md constraint 9 for the
-  // arm chain this replaces). `hand: false` opts out — for a face drawn in some
-  // other idiom, or a tile too small to spend the pixels.
-  const hand = opts.hand === false ? null : createHand(face.svg, face.theme, meta, { dir: opts.handSide });
+  // The current SVG hand is a renderer adapter for the first-class `frame.hand`
+  // control. `hand: false` only disables its SVG rendering; gesture actions
+  // still emit the semantic hand frame for a supplied custom rig.
+  const hand = face && opts.hand !== false ? createHand(face.svg, face.theme, meta, { dir: opts.handSide }) : null;
+  // The existing SVG face and hand are one migration adapter implementing the
+  // renderer-agnostic AvatarRig contract. New renderers never need face SVG
+  // coordinates or the hand layer's private geometry.
+  const rig = opts.rig ? opts.rig(mount, opts.rigOptions) : createSvgRig(face, hand);
 
   gaze.onLargeShift = () => idle.blink();
 
@@ -329,6 +335,9 @@ export function createAvatar(opts = {}) {
   // excursion changes. Values above ~1.5 saturate the open vowels against the
   // channel clamp, which is the intended ceiling rather than a bug.
   let mouthGain = opts.mouthGain ?? 1;
+  let handSide = opts.handSide === -1 ? 'left' : 'right';
+  let handAction = null;
+  const handQueue = [];
   // Gesture gain, same idea for the clip layer. A nod is ballistic — NOD_SMALL
   // peaks at 149ms — but the head smooths at a 160ms time constant, so barely
   // 60% of an authored peak is ever rendered. The keyframes were written against
@@ -521,17 +530,11 @@ export function createAvatar(opts = {}) {
     // 8. smooth toward the target — this is where co-articulation happens
     for (const c of CHANNELS) cur[c] = approach(cur[c], target[c], TAU[c], dt);
 
-    face.apply(cur);
-
-    // 9. the hand, outside all of the above. It writes a transform on its own
-    //    group rather than parameter channels, so it neither smooths nor
-    //    composes — its timelines are authored as delivered motion, not as
-    //    targets to chase. `elapsed` is the mixer's own clock, so a manual
-    //    stepper gets a reproducible gesture for free.
-    if (hand) {
-      const done = hand.update(elapsed * 1000);
-      if (done) emit('gestureEnd', done.id);
-    }
+    // 9. First-class hand control. The semantic frame is generated here, above
+    // every renderer, so SVG, WebGL, and video rigs receive exactly the same
+    // gesture/progress information. A handless rig simply ignores `frame.hand`.
+    const handFrame = updateHandAction(elapsed * 1000);
+    rig.apply(avatarFrame(cur, handFrame || undefined));
   }
 
   const REST_SHAPE = shapeFor(SILENT, 1);
@@ -569,8 +572,12 @@ export function createAvatar(opts = {}) {
     // fire a stale timestamp immediately.
     glanceUntil = 0;
     glanceAt = elapsed + (st.glance ? st.glance.every[0] + Math.random() * (st.glance.every[1] - st.glance.every[0]) : 0);
-    face.svg.style.filter = st.filter || '';
-    face.svg.style.transition = 'filter .5s ease';
+    // SVG's desaturation filter is a legacy renderer detail. A generic rig
+    // receives the same state pose and may express degradation its own way.
+    if (face) {
+      face.svg.style.filter = st.filter || '';
+      face.svg.style.transition = 'filter .5s ease';
+    }
     if (changed) { idle.blink(); emit('state', name); }
     return api;
   }
@@ -678,7 +685,7 @@ export function createAvatar(opts = {}) {
   function action(id) {
     const handDef = HAND_GESTURES[id];
     if (handDef) {
-      if (hand) hand.play(id, elapsed * 1000, { queue: true });
+      startHandAction(id, handDef);
       if (handDef.face) {
         const faceClip = ACTIONS[handDef.face];
         if (faceClip) clip.play(faceClip, faceClip.audioEl, { queue: true });
@@ -689,6 +696,31 @@ export function createAvatar(opts = {}) {
     if (!faceClip) throw new Error(`unknown action: ${id}`);
     clip.play(faceClip, faceClip.audioEl, { queue: true });
     return api;
+  }
+
+  function startHandAction(id, def) {
+    const gesture = HAND_ACTION_TO_FRAME_GESTURE[id];
+    if (!gesture) return;
+    if (handAction) {
+      if (handAction.id !== id && !handQueue.some((item) => item.id === id)) {
+        handQueue.push({ id, def, gesture });
+      }
+      return;
+    }
+    handAction = { id, def, gesture, start: elapsed * 1000 };
+  }
+
+  function updateHandAction(nowMs) {
+    if (!handAction) return null;
+    const progress = (nowMs - handAction.start) / handAction.def.dur;
+    if (progress >= 1) {
+      const done = handAction;
+      const next = handQueue.shift();
+      handAction = next ? { ...next, start: nowMs } : null;
+      emit('gestureEnd', done.id);
+      return handAction ? { gesture: handAction.gesture, progress: 0, side: handSide } : null;
+    }
+    return { gesture: handAction.gesture, progress: Math.max(0, progress), side: handSide };
   }
 
   /**
@@ -754,7 +786,7 @@ export function createAvatar(opts = {}) {
     /** Which hand the character gestures with: +1 the viewer's right (its own
      *  left), -1 the other. Both are anatomically real — the thumb splays away
      *  from the body either way — so this is a character choice, not a fix. */
-    setHandSide: (d) => { if (hand) hand.setDir(d); return api; },
+    setHandSide: (d) => { handSide = d === -1 ? 'left' : 'right'; return api; },
     setUserSpeaking,
     /** Articulation gain: 1 is the VISEME_SHAPES table as authored. */
     setMouthGain: (g) => { mouthGain = g; return api; },
@@ -778,21 +810,22 @@ export function createAvatar(opts = {}) {
     get speaking() { return speech.playing; },
     get performing() { return performTrack.playing; },
     get clip() { return clip.id; },
-    /** The hand gesture in flight, or null. `null` forever if `hand: false`. */
-    get gesturing() { return hand ? hand.id : null; },
+    /** Semantic hand gesture in flight, independent of renderer capability. */
+    get gesturing() { return handAction ? handAction.id : null; },
     get params() { return cur; },
     get userSpeaking() { return engagement.speaking; },
-    svg: face.svg,
-    meta,
+    // Legacy SVG inspection fields. New AvatarRig implementations should not
+    // rely on or provide them; the renderer-neutral contract is apply/destroy.
+    svg: face?.svg || null,
+    meta: meta || null,
     /** The mounted rig's palette, merged with any `opts.theme` overrides. A
      *  host that has to paint anything *around* the widget — a tile margin, a
      *  page behind a transparent mount — needs the same colours the drawing
      *  used, and guessing them per avatar is how the two drift apart. */
-    theme: face.theme,
+    theme: face?.theme,
     destroy() {
       cancelAnimationFrame(raf);
-      if (hand) hand.destroy();
-      face.destroy();
+      rig.destroy();
     },
   };
 

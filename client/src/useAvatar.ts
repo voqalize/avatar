@@ -61,6 +61,7 @@ export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
     setAvatar(instance);
 
     return () => {
+      avatarClientRef.current?.destroy();
       instance.destroy();
       avatarClientRef.current = null;
       setAvatar(null);

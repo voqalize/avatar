@@ -5,6 +5,7 @@ node_modules/
 # Built by `npm run build` / `prepare`. The widget in src/ has no build step;
 # only the TypeScript client does.
 client/dist/
+studio/dist/
 # Staged by py/scripts/stage_native.py just before a wheel build: the aligner
 # binary and its 56 MB model tree. It is a build input, never a source file —
 # the canonical copies are produced by .github/workflows/native.yml.

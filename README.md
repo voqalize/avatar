@@ -86,7 +86,29 @@ States that depend on what your application is *doing* — a tool call that
 should read as *reviewing the screen* rather than *thinking* — are signalled
 explicitly with `AvatarControlFrame`.
 
-## Running the demo
+## Running Avatar Studio
+
+The local front door for authoring and integration testing is the Vite + React
+workbench. It deliberately drives the same `AvatarClient` and protocol as the
+shipped component, so fixture playback and lifecycle tests do not become a
+second implementation of the avatar.
+
+```sh
+npm install
+cd studio && npm install && cd ..
+pm2 start ecosystem.config.cjs
+open http://127.0.0.1:4173/#/rig/review
+```
+
+Studio's routes are `#/rig/review` and `#/rig/visemes` (avatar authoring),
+`#/behavior` (library states/actions), `#/wire` (production messages plus
+Pipecat lifecycle), and `#/connection` (browser-local service profiles and
+externally attached real Pipecat clients). See
+[`studio/README.md`](studio/README.md) for the connection boundary: a URL does
+not itself specify a Pipecat transport. `#/fixtures` holds the shared WAV/cue
+evidence used by both rig and wire review.
+
+## Legacy static demos
 
 ES modules will not load over `file://`. Serve the directory:
 
@@ -101,7 +123,7 @@ quietly stop revalidating modules you have edited; `serve.py` is the same server
 with `Cache-Control: no-store`. Do not work around a stale module with a `?v=`
 query string either — that puts two copies of it in the graph and fails worse.
 
-`demo/call.html` is the page to start with: a two-tile call with mic VAD,
+`demo/call.html` is a retained reference: a two-tile call with mic VAD,
 turn-taking and a log of every token the server would have sent. Hold `Space` to
 be the human side of the call if you have no microphone.
 
@@ -112,7 +134,8 @@ index.html?avatar=NAME           every control maps to a server token; exposes
                                  window.avatar, so the console is a live REPL
 ```
 
-Those two are the entry points. Everything else is rig tooling — for the
+Studio is the entry point. The static pages below remain as focused reference
+tools while their useful modes are absorbed into Studio. Everything else is rig tooling — for the
 occasions when you are *building or repairing an avatar*, which is a different
 job — and it lives behind one index:
 
