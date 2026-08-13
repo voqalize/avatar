@@ -384,13 +384,7 @@ downloaded `.riv` character through the 30 pose channels, selectable in Studio
 as `rive-bob`, with `docs/rive-proof.md` reporting what it found and
 `@rive-app/canvas` as a Studio dependency.
 
-**Why it went (0.3):** two reasons, and the second is the one that mattered.
-
-The mundane one: `demo/rive/bob.riv` was a community file with no recorded
-licence or provenance, sitting in a public AGPL-3.0 repository. That is not a
-thing to leave lying around whatever it proves.
-
-The real one: **it was plugged into the wrong seam.** It implemented
+**Why it went (0.3): it was plugged into the wrong seam.** It implemented
 [contract-rig.md](contract-rig.md), the SVG mixer's internal parameter model,
 and so spent its code undoing the wire — thresholding `mouthOpen`/`mouthPress`/
 `mouthTuck` back into a Rhubarb letter the `cues` command had already stated,
@@ -404,9 +398,21 @@ conclusion is load-bearing.
 **Instead:** a non-SVG avatar is its own `createAvatar`, published as its own
 module, reading the wire. Nothing about it goes through our mixer.
 
+**On the asset.** `demo/rive/bob.riv` was
+`28111-53105-bob-lip-sync-character-system-in-rive.riv`, a Rive community file
+under **CC BY 4.0**. That licence is not the reason it went — CC BY permits
+redistribution and modification, including in a public AGPL-3.0 repository, and
+an earlier draft of this entry saying otherwise was wrong. What was missing was
+the thing CC BY actually asks for: no author credit, no licence notice, no
+source URL, anywhere in the repo. `rive-proof.md` also described the file as
+"only a symlink to the Downloads copy" — it was not. It was committed as a real
+169,578-byte blob in `79511aa`, which is on `origin/main`, so it remains
+downloadable from history and stays that way short of a rewrite.
+
 **Recover:** `git checkout 79511aa -- studio/src/rive-bob.ts docs/rive-proof.md`
-and re-add `@rive-app/canvas` to `studio/package.json`. Find your own character
-file; do not restore `demo/rive/bob.riv`.
+and re-add `@rive-app/canvas` to `studio/package.json`. Restoring any `.riv`
+means redistributing it again: carry its attribution — author, title, source
+URL, licence, and a note of modifications — in the tree beside it.
 
 ---
 
