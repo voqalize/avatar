@@ -28,11 +28,11 @@ const CLIPS = ['NOD_SMALL', 'SHRUG'];
 const server = await startServer();
 const browser = await launchBrowser();
 try {
-  // Ask the registry itself which avatars exist.
+  // Ask the face table itself which faces exist.
   const probe = await openSettled(browser, server.port, 'demo/rig/index.html');
   const names = await probe.page.evaluate(async () => {
-    const mod = await import('/src/avatar.js');
-    return mod.AVATAR_NAMES;
+    const mod = await import('/src/faces.js');
+    return mod.FACE_NAMES;
   });
   await probe.page.close();
 

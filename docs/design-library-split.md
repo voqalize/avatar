@@ -33,7 +33,7 @@ application's, not the library's.
 
 | artifact | registry | contents | deps |
 |---|---|---|---|
-| `@voqalize/avatar` | npm | `<Avatar>`, the dispatcher and the widget behind it | optional peers: react, `@pipecat-ai/client-js` |
+| `@voqalize/avatar` | npm | `createAvatar` (`.`), `<Avatar>` (`./react`), the widget (`./internal`) | optional peers: react, `@pipecat-ai/client-js` |
 | `voqalize-avatar` | pypi | processor, state machine, wire, viseme engine, `avatarsync` runtime | `pipecat-ai>=1.4,<2` |
 | `native/avatarsync` | *inside the pypi wheel* | the C++ fork, its build, the model tree | — |
 | — | — | `docs/` contracts, binding for all of them | — |
@@ -256,7 +256,7 @@ path. The backend material arrived as siblings:
 src/                    the widget — published, not exported
   avatar.d.ts           its types, hand-maintained next to the code
 client/                 AvatarClient (splice, clock anchor) + React binding
-                        -> @voqalize/avatar, whose one export is <Avatar>
+                        -> @voqalize/avatar, whose one export is createAvatar
 py/                     voqalize-avatar: pyproject + src/voqalize_avatar/ + tests
 native/avatarsync/      the rhubarb fork: patch, src, build.sh, binaries
 docs/                   the contracts, binding for both packages

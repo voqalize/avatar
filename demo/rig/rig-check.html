@@ -42,18 +42,19 @@
 
 <script type="module">
 import {
-  createAvatar, AVATAR_NAMES, STATE_NAMES, EMOTION_NAMES, GAZE_NAMES,
+  createAvatar, STATE_NAMES, EMOTION_NAMES, GAZE_NAMES,
   ACTION_IDS, checkHandFraming, textToCues,
 } from '../../src/avatar.js';
+import { FACES, FACE_NAMES } from '../../src/faces.js';
 
 const stage = document.getElementById('stage');
 const bar = document.getElementById('bar');
 const log = document.getElementById('log');
-document.getElementById('names').textContent = AVATAR_NAMES.join(' · ');
+document.getElementById('names').textContent = FACE_NAMES.join(' · ');
 
 // One rig per avatar. Same options otherwise — the avatar name is the only
 // variable in the experiment.
-const rigs = AVATAR_NAMES.map((name) => {
+const rigs = FACE_NAMES.map((name) => {
   const pane = document.createElement('div');
   pane.className = 'pane';
   pane.innerHTML = `<h2>${name}</h2>`;
@@ -61,7 +62,7 @@ const rigs = AVATAR_NAMES.map((name) => {
   mount.className = 'mount';
   pane.append(mount);
   stage.append(pane);
-  const avatar = createAvatar({ mount, avatar: name });
+  const avatar = createAvatar({ mount, face: FACES[name] });
   const vb = avatar.meta.viewBox;
   mount.style.width = `${375 * (vb.w / vb.h)}px`;
   return { name, avatar };

@@ -27,10 +27,11 @@ these, link to it — do not re-explain it here.
 |---|---|---|---|
 | wire | `claim` / `action` / `cues`, nothing else | `client/src/AvatarClient.ts` | [contract-wire.md](docs/contract-wire.md) |
 | lifecycle | effective-state precedence, cue-clock anchor, FIFO ctx bind | `client/src/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
-| behavior | states, actions, state programs, wire→library mapping | `src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
-| rig | `apply({pose, hand})` / `destroy()`, the 30 pose channels | `src/rig.js` | [contract-rig.md](docs/contract-rig.md) |
+| avatar | `createAvatar({mount, client}) -> {destroy()}` — the only public seam | `client/src/createAvatar.ts` | [design-avatar-interface.md](docs/design-avatar-interface.md) |
+| behavior | states, actions, wire→library mapping | `src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
+| rig | `apply({pose, hand})` / `destroy()`, the 30 pose channels — **internal to the SVG renderer, not a seam to implement** | `src/rig.js` | [contract-rig.md](docs/contract-rig.md) |
 | mixer | layer order, per-channel smoothing, gaze, idle, clips | `src/avatar.js` | [contract-protocol.md](docs/contract-protocol.md) |
-| SVG faces | the drawings; `createFace` / `META`, `face-core.js`, the pitch rig | `src/face-*.js`, `line-art.js` | [contract-avatar.md](docs/contract-avatar.md) |
+| SVG faces | the drawings; `createFace` / `META`, exported as a `{create, meta}` value per module — never resolved by name | `src/face-*.js`, `line-art.js`, `src/faces.js` (tooling only) | [contract-avatar.md](docs/contract-avatar.md) |
 | backend | state inference from stock frames, the viseme legs | `py/src/voqalize_avatar/` | [contract-protocol.md](docs/contract-protocol.md) |
 
 Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
@@ -39,10 +40,15 @@ Design narrative: [README.md § Design](README.md). Motion constants cite
 [research-perception.md](docs/research-perception.md) (how it is *read*) in a
 comment where they are derived from one.
 
-**The public surface is `<Avatar client avatar>` and a zero-argument
-`AvatarProcessor()`.** A new prop, option or wire command needs a real consumer
-asking, not a plausible one. The two extension seams are `AvatarControlFrame`
-and subclassing `AvatarStateMachine`. Everything 0.2 cut, and how to recover it
+**The public surface is `createAvatar({mount, client}) -> {destroy()}` and a
+zero-argument `AvatarProcessor()`.** The avatar is an embodiment of
+`PipecatClient`; there is no avatar state beyond what `PipecatClient` exposes
+and the caller does not get to read it. You add an avatar by publishing a module
+that exports `createAvatar` — no registry, no loader
+([design-avatar-interface.md](docs/design-avatar-interface.md)). A new prop,
+option or wire command needs a real consumer asking, not a plausible one. The
+backend extension seams are `AvatarControlFrame` and subclassing
+`AvatarStateMachine`. Everything 0.2 cut, and how to recover it
 from `v0.1.0`: [docs/removed.md](docs/removed.md) — **read it before re-adding a
 knob**; most entries also say what to do instead.
 
@@ -73,7 +79,7 @@ Non-obvious, and recorded nowhere else.
   forearm, no parameter channel, no per-face geometry, one drawing placed from
   the rig window. **A channel only one avatar can render is the shape of the
   mistake**, whatever the body part.
-- **`peep` is `DEFAULT_AVATAR` and the rig to author against;** confirm on the
+- **`peep` is `DEFAULT_FACE` and the rig to author against;** confirm on the
   others, don't chase parity. The avatars are separate drawings, not renderings
   of one drawing — a fix that reads on one often means nothing on another.
   Corollary: **a minimal line face swallows small deltas.** Peep's ink moves
@@ -145,17 +151,18 @@ Two things no suite will tell you:
 ## In flight
 
 - **The rig contract is new; the SVG faces are still behind an adapter.**
-  `createSvgRig` (`src/rig.js`) is the migration shim.
-  `studio/src/rive-bob.ts` implements `AvatarRig` directly — feasibility proof
-  for a non-SVG renderer, not visual parity
-  ([rive-proof.md](docs/rive-proof.md)).
+  `createSvgRig` (`src/rig.js`) is the migration shim. There is no second
+  renderer, deliberately: the one that existed implemented the rig contract
+  instead of the wire and is why that page now opens with a warning box
+  ([removed.md § The Rive proof](docs/removed.md)).
 - **Studio is absorbing the static rig pages.** `demo/rig/*` and `index.html`
   stay as reference tools until the matching Studio route reaches parity.
   Studio always drives production behavior and wire adapters — never a
   demo-only state machine.
-- **`src/behavior.js` still carries render-state aliases** (`TYPING`,
-  `CANT_HEAR`, `WANTS_IN`, …) for the legacy SVG mixer and local tooling. Wire
-  and lifecycle code addresses only the seven core state IDs.
+- **The vocabulary is the seven core states, everywhere above the mixer.** The
+  render-state pass-throughs (`TYPING`, `CANT_HEAR`, `WANTS_IN`, …) are gone
+  from `src/behavior.js`; `CANT_HEAR` and friends are still real states *in*
+  `src/avatar.js`, reached with `avatar.setState`, which is whose state it is.
 - **Animation quality is the open avatar work.** `myna` is stakeholder-approved
   as a *static* character (2026-08-07); an animation expert found the motion not
   up to the mark. From the graded 2026-08 review: adopted ballistic head-follow

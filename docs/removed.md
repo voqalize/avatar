@@ -191,7 +191,71 @@ three-event `RTVI_EVENTS`, the option fields) and
 
 ---
 
+## Presence and audio-level callbacks
+
+**Was:** `onPresenceChange(state)` and `onRemoteAudioLevel(level)` on
+`AvatarProps`, `UseAvatarOptions` and `AvatarClientOptions`, plus
+`data-avatar-state` / a state-derived `aria-label` on the mount div,
+`AvatarClient.presenceState` and `.botAudioLevel` as public getters, and the
+`AvatarPresenceState` type export.
+
+**Why they went (0.3):** *"Avatar is an embodiment of PipecatClient, and reacts
+to PipecatClient. There is no Avatar state beyond what PipecatClient exposes.
+Client does not get to read the Avatars internal state. I don't want to commit
+to any such behaviour."* The deeper problem is that **a callback is a
+contract**: once `createAvatar` is the seam anyone can implement, an emitted
+presence obliges every third-party avatar to produce those seven names with our
+precedence rules — silently reintroducing the second public contract the design
+exists to avoid ([design-avatar-interface.md](design-avatar-interface.md)).
+
+`onRemoteAudioLevel` was worse than redundant. Nothing internal read it; it was
+a pure relay, and it cost an RTVI subscription on a per-frame event so a host
+could draw a waveform from a gain that might belong to a different participant.
+
+**Instead:** the host owns the same `PipecatClient`. Subscribe to it directly —
+`botStartedSpeaking`, `userStartedSpeaking`, `remoteAudioLevel` — and apply
+whatever precedence its chrome wants. If several hosts converge on the same
+rules, a standalone `observePresence(client)` helper is the shape to add, not a
+callback on the avatar.
+
+`onPresenceChange` survives on the **internal** `AvatarClientOptions` for
+Studio's inspector. It is not exported and must not be published.
+
+**Recover:** `git show v0.2.2:client/src/AvatarClient.ts` (the field, getter,
+`setRemoteAudioLevel`, `onRemoteAudioLevel`, the `remoteAudioLevel` entry in
+`RTVI_EVENTS` and its subscription) and `git show v0.2.2:client/src/Avatar.tsx`.
+
+---
+
+## State programs
+
+**Was:** `STATE_PROGRAMS` and `BEHAVIOR_ACTIVITIES` in `src/behavior.js`, and
+the timer in `BehaviorController` that drove them. `WORKING` started a program
+that re-selected an activity every 2.2–3.2 s; `work.review_notes` and
+`work.secondary_screen` were reserved but never selectable.
+
+**Why they went (0.3):** the table had one activity, so the timer re-issued the
+same `setState('TYPING')` forever — and that projection is what carried the
+leak: a renderer asked to be `WORKING` was told to be `TYPING`, a behaviour
+named after one rendering of it. Closing the leak left a scheduler with one
+choice.
+
+**Instead:** `WORKING` is a state in the SVG mixer like any other. Cycling among
+work activities is a *renderer's* decision — the same call that a Rive state
+machine would make internally — so it belongs in `src/avatar.js`, below the
+seam, whenever the notes and secondary-screen timelines are actually authored.
+
+**Recover:** `git show v0.2.2:src/behavior.js` for both tables, `_startProgram`
+and `_stopProgram`.
+
+---
+
 ## The `/pipecat` and `/react` subpaths
+
+> Partly reversed in 0.3. `./react` is back, and `./internal` is new, because
+> `createAvatar` became the public seam and had to be reachable without React.
+> The entry stands for what `./pipecat` was and why one entrypoint was right
+> while `<Avatar>` was the whole surface.
 
 **Was:** three npm entrypoints — the bare widget at `.` (`createAvatar`,
 `AvatarApi`), the framework-free dispatcher at `./pipecat` (`AvatarClient`,
@@ -310,3 +374,102 @@ hold that keeps the state until the *last* parallel call returns. Override
 `on_frame` to say more.
 
 **Recover:** `git show v0.1.0:py/src/voqalize_avatar/state_machine.py`.
+
+---
+
+## The Rive proof (`bob.riv`, `rive-bob.ts`, `rive-proof.md`)
+
+**Was:** `studio/src/rive-bob.ts` — an `AvatarRig` implementation driving a
+downloaded `.riv` character through the 30 pose channels, selectable in Studio
+as `rive-bob`, with `docs/rive-proof.md` reporting what it found and
+`@rive-app/canvas` as a Studio dependency.
+
+**Why it went (0.3):** two reasons, and the second is the one that mattered.
+
+The mundane one: `demo/rive/bob.riv` was a community file with no recorded
+licence or provenance, sitting in a public AGPL-3.0 repository. That is not a
+thing to leave lying around whatever it proves.
+
+The real one: **it was plugged into the wrong seam.** It implemented
+[contract-rig.md](contract-rig.md), the SVG mixer's internal parameter model,
+and so spent its code undoing the wire — thresholding `mouthOpen`/`mouthPress`/
+`mouthTuck` back into a Rhubarb letter the `cues` command had already stated,
+and reverse-engineering `CANT_HEAR` out of brow floats. A renderer that is not
+ours takes `claim` / `action` / `cues` and never sees a pose channel. That
+finding is now the standing argument in
+[design-avatar-interface.md § Why there is no renderer interface](design-avatar-interface.md)
+and the warning box at the top of contract-rig.md — the proof is gone, its
+conclusion is load-bearing.
+
+**Instead:** a non-SVG avatar is its own `createAvatar`, published as its own
+module, reading the wire. Nothing about it goes through our mixer.
+
+**Recover:** `git checkout 79511aa -- studio/src/rive-bob.ts docs/rive-proof.md`
+and re-add `@rive-app/canvas` to `studio/package.json`. Find your own character
+file; do not restore `demo/rive/bob.riv`.
+
+---
+
+## The `AVATARS` registry and `avatar: 'name'`
+
+**Was:** `AVATARS`, `AVATAR_NAMES` and `DEFAULT_AVATAR` in `src/avatar.js`, and
+`createAvatar({ avatar: 'peep' })` — a face resolved by string through a table
+the mixer imported all three faces to build.
+
+**Why it went (0.3):** `AVATARS[opts.avatar || DEFAULT_AVATAR]` is a dynamic
+index. No bundler can prove which arm is taken, so every consumer shipped three
+hand-drawn faces to render one. Lazy `import()` was not an option: it would
+make `createAvatar` async and break the synchronous `{ destroy() }` contract.
+
+It was also the last stringly-typed thing on the public surface. Passing a
+`Face` **value** fixes both at once — the option gets a real type, and importing
+`@voqalize/avatar/faces/wren` costs exactly one drawing. Alongside it,
+`theme?: unknown` became `FaceTheme` (`Readonly<Record<string, string>>`).
+
+**Instead:** `import { wren } from '@voqalize/avatar/faces/wren'` and pass
+`face: wren`. `src/faces.js` still holds the all-three table for tooling that
+compares faces against each other — `rig-check`, the contact sheet, `sweep`,
+Studio. It is deliberately not on the package export map.
+
+**Recover:** `git show 02b0dad:src/avatar.js`, search `AVATARS`.
+
+---
+
+## The behavior-state aliases
+
+**Was:** `BEHAVIOR_STATES` carried seventeen ids — the seven core states plus
+`TYPING`, `CANT_HEAR`, `REVIEWING_SCREEN`, `SEARCHING_SCREEN` and the rest of
+the SVG mixer's render states, passed straight through to the renderer. Plus
+`STATES.TYPING = STATES.WORKING` in the mixer, and `"TYPING"` in
+`AvatarStateName`.
+
+**Why they went (0.3):** *"We shouldn't be adding aliases — make sure everyone
+is using the right types."* The pass-throughs made the mixer's private state
+list look like part of the behaviour vocabulary, which is exactly the confusion
+that produced `TYPING` on the wire in the first place. Only `TYPING` was a true
+alias; the other names are still real, distinct render states in `src/avatar.js`
+— what went is their duplication one layer up.
+
+**Instead:** the behaviour vocabulary is the seven core states, and nothing
+else. Tooling that wants a render state calls `avatar.setState` on the mixer,
+which is whose state it is.
+
+**Recover:** `git show 02b0dad:src/behavior.js`.
+
+---
+
+## A `face` without `meta`
+
+**Was:** `createAvatar({ face: createFaceFn })` — a bare factory with no
+descriptor. The mixer re-read `viewBox` off the produced `<svg>` and left
+`meta.mouthCrop` absent.
+
+**Why it went (0.3):** a face could ship half a descriptor and nothing would say
+so — the contact sheet's viseme-detail row would simply have no mouth crop to
+frame with. `Face` is `{ create, meta }`, both required, so the fallback was
+unreachable from any typed caller and only reachable from a mistake.
+
+**Instead:** export the record: `export const myFace = { create: createFace, meta: META }`.
+[contract-avatar.md](contract-avatar.md) says what META must contain.
+
+**Recover:** `git show 02b0dad:src/avatar.js`, search `mouthCrop`.

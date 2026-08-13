@@ -36,7 +36,7 @@ META = { viewBox: {x, y, w, h}, mouthCrop: {x, y, w, h} }
   minimal — a landmark joins META when a second consumer needs it, not before.
 
 **A face must be callable standalone.** Three rig-tooling pages call
-`AVATARS[name].create(mount)` directly with no mixer and drive `apply()` from
+`FACES[name].create(mount)` directly with no mixer and drive `apply()` from
 a raw vector; a face that only works under `createAvatar` is broken.
 
 Nothing above the face knows what a face looks like; nothing in the face knows
@@ -168,24 +168,29 @@ unit-independent, which is why `shrugTiltDeg` never takes the `units` factor.
 `viewBox` is not a rig constant. Hosts derive aspect from `META.viewBox` (or
 `api.meta.viewBox`); the demos do.
 
-## Registration
+## Shipping a face
 
-`src/avatar.js` holds the registry — `{ create, meta }` records:
+Each face module exports its own `{ create, meta }` record, named after the
+face. That record *is* how a face is passed — there is no registry to join and
+no name to resolve:
 
 ```js
-export const AVATARS = {
-  peep: { create, meta },
-  wren: { create, meta },
-  myna: { create, meta },
-};
-export const DEFAULT_AVATAR = 'peep';
-createAvatar({ avatar: 'peep' })      // by name
-createAvatar({ face: myCreateFace })  // any factory, never registered
+// src/face-peep.js
+export const peep = { create: createFace, meta: META };
+
+// a consumer
+import { peep } from '@voqalize/avatar/faces/peep';
+createAvatar({ mount, client, face: peep });
 ```
 
-A bare `face:` factory has no descriptor; `createAvatar` then derives
-`meta.viewBox` from the produced svg and `meta.mouthCrop` is absent — registry
-avatars always carry the full META.
+`src/faces.js` is the all-three table (`FACES`, `FACE_NAMES`, `DEFAULT_FACE`)
+and costs all three drawings, which is the right trade for `rig-check`, the
+contact sheet, `sweep` and Studio — tools whose whole job is comparing faces
+against each other. It is deliberately not on the package export map.
+
+Both halves are required. `create` without `meta` used to be tolerated, with
+`viewBox` re-read off the produced svg — a face could ship half a descriptor
+and nothing would say so ([removed.md](removed.md)).
 
 Palettes: there is no barrel `THEME` export — each face module owns its
 palette, and `api.theme` returns the mounted avatar's. A host needs it

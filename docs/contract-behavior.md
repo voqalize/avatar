@@ -12,15 +12,17 @@ against other candidate states. It remains active until those facts change; it
 does not complete on a timer.
 
 Core states are `IDLE`, `LISTENING`, `THINKING`, `WORKING`, `SPEAKING`,
-`DEGRADED`, and `OFFLINE`. A state supplies sustained pose, gaze policy,
-idle/liveness profile, and optionally a **state program**. A program schedules
-actions while its state remains effective. It stops scheduling immediately on
-exit; an action already in flight still lands normally.
+`DEGRADED`, and `OFFLINE`. These seven are the whole vocabulary an avatar
+implementation receives; a state supplies sustained pose, gaze policy, and an
+idle/liveness profile.
 
-`WORKING` is the canonical example. Its current program selects `work.type`.
-It may later cycle among `work.type`, `work.review_notes`, and
-`work.secondary_screen` without a server-wire change. The mapping from
-`WORKING` to typing is explicit client-library policy, not a server detail.
+**A state names what is happening, never how to draw it.** `WORKING` is the
+canonical case: our SVG rig renders it as typing at a screen, another avatar
+may render it as anything at all, and the word on the wire stays `WORKING`
+either way. It used to arrive at the renderer as `TYPING` — one rendering's
+name promoted to a behaviour's — which is the shape of the mistake even when
+the picture is right. Choosing among several work activities is a renderer's
+business, and lives there ([removed.md](removed.md) § State programs).
 
 ## Action
 
@@ -40,9 +42,8 @@ then its held mouth can communicate the cut.
 
 Examples: `ack.continue`, `ack.receive`, `ack.realize`, `ack.empathy`,
 `ack.nod`, `turn.interrupted`, `gesture.greet`, `gesture.farewell`,
-`gesture.approve`, `gesture.wait`, `work.type`, `work.review_notes`, and
-`work.secondary_screen`. These are library vocabulary and may be broader than
-the current server profile.
+`gesture.approve`, and `gesture.wait`. These are library vocabulary and may be
+broader than the current server profile.
 
 ## Effective-state precedence
 

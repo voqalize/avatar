@@ -1,34 +1,34 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AVATAR_NAMES, VISEME_LETTERS, createAvatar } from "../../src/avatar.js";
+import { VISEME_LETTERS, VISEME_SHAPES, createAvatar } from "../../src/avatar.js";
+import { FACES, FACE_NAMES, type FaceName } from "../../src/faces.js";
 import { BehaviorController, BEHAVIOR_ACTION_IDS, type BehaviorStateId } from "../../src/behavior.js";
 import { AvatarClient, RTVI_EVENTS, type AvatarPresenceState } from "../../client/src/AvatarClient.js";
-import { createBobRiveRig, type ContractReport } from "./rive-bob";
-import type { AvatarApi } from "../../src/avatar.js";
+import type { AvatarActionId, AvatarApi, Cue, CreateAvatarOptions, PoseOverrides, VisemeLetter } from "../../src/avatar.js";
+import type { AvatarClaimCmd } from "../../client/src/types.js";
 
 type Workspace = "rig" | "behavior" | "runtime" | "connection";
 type EventName = (typeof RTVI_EVENTS)[keyof typeof RTVI_EVENTS];
 type Listener = (...args: unknown[]) => void;
-type Cue = { t: number; v: string; i?: number };
-type TraceEvent = { at: number; kind: "fact" | "claim" | "action" | "cues"; value: string | null | Cue[]; label: string };
+/**
+ * One scripted moment in a trace. The union is per-`kind` so a fixture cannot
+ * name a claim, action or letter the wire does not have — Studio drives the
+ * production adapters, so a trace that typechecks is a trace the server could
+ * actually send.
+ */
+type TraceEvent = { at: number; label: string } & (
+  | { kind: "fact"; value: EventName }
+  | { kind: "claim"; value: AvatarClaimCmd["state"] }
+  | { kind: "action"; value: AvatarActionId }
+  | { kind: "cues"; value: Cue[] }
+);
 type Trace = { id: string; name: string; description: string; duration: number; events: TraceEvent[]; audio?: string };
 type Fixture = { id: string; text: string; voice: string; kind: string; ms: number; audio: string; tracks: Record<string, Cue[]> };
 type PipecatLike = { on(event: string, listener: Listener): void; off(event: string, listener: Listener): void };
 
-const RIVE_AVATAR = "rive-bob";
-const AVATARS = [...AVATAR_NAMES, RIVE_AVATAR];
 const cueSample: Cue[] = [{ t: 0, v: "X" }, { t: 120, v: "C", i: .8 }, { t: 300, v: "B" }, { t: 520, v: "D" }, { t: 780, v: "X" }];
 
-const VISemeShapes: Record<string, Record<string, number>> = {
-  X: { mouthOpen: .02, mouthWidth: .42, mouthRound: .1, mouthPress: .15, mouthTuck: 0, teethUpper: 0, tongue: 0, jaw: .014 },
-  A: { mouthOpen: 0, mouthWidth: .4, mouthRound: .18, mouthPress: .55, mouthTuck: 0, teethUpper: 0, tongue: 0, jaw: 0 },
-  B: { mouthOpen: .16, mouthWidth: .54, mouthRound: .05, mouthPress: .1, mouthTuck: 0, teethUpper: .75, tongue: 0, jaw: .112 },
-  C: { mouthOpen: .45, mouthWidth: .58, mouthRound: .05, mouthPress: 0, mouthTuck: 0, teethUpper: .45, tongue: 0, jaw: .315 },
-  D: { mouthOpen: .85, mouthWidth: .52, mouthRound: .02, mouthPress: 0, mouthTuck: 0, teethUpper: .25, tongue: .15, jaw: .595 },
-  E: { mouthOpen: .34, mouthWidth: .28, mouthRound: .55, mouthPress: 0, mouthTuck: 0, teethUpper: .15, tongue: 0, jaw: .238 },
-  F: { mouthOpen: .22, mouthWidth: .1, mouthRound: .95, mouthPress: .1, mouthTuck: 0, teethUpper: 0, tongue: 0, jaw: .154 },
-  G: { mouthOpen: .2, mouthWidth: .46, mouthRound: .1, mouthPress: .4, mouthTuck: 1, teethUpper: 1, tongue: 0, jaw: .14 },
-  H: { mouthOpen: .4, mouthWidth: .48, mouthRound: .05, mouthPress: 0, mouthTuck: 0, teethUpper: .35, tongue: .9, jaw: .28 },
-};
+// Viseme shapes come from the mixer, not from a copy here. Studio exists to
+// review what ships; a second table would be reviewing the copy.
 
 declare global {
   interface Window {
@@ -64,12 +64,17 @@ const traces: Trace[] = [
   ] },
 ];
 
-const poseOptions: Array<{ id: string; label: string; pose: Record<string, number> }> = [
+const poseOptions: Array<{ id: string; label: string; pose: PoseOverrides }> = [
   { id: "rest", label: "Rest", pose: {} }, { id: "lids", label: "Lids closed", pose: { lidL: 1, lidR: 1 } },
   { id: "brows-up", label: "Brows up", pose: { browRaiseL: 1, browRaiseR: 1 } }, { id: "brows-down", label: "Brows down", pose: { browRaiseL: -1, browRaiseR: -1 } },
   { id: "yaw-left", label: "Yaw left", pose: { headYaw: -1 } }, { id: "yaw-right", label: "Yaw right", pose: { headYaw: 1 } },
   { id: "smile", label: "Smile", pose: { mouthCornerL: 1, mouthCornerR: 1, mouthWidth: .9 } }, { id: "frown", label: "Frown", pose: { mouthCornerL: -1, mouthCornerR: -1 } },
   { id: "open", label: "Open mouth", pose: { mouthOpen: .85, jaw: .6 } }, { id: "tongue", label: "Tongue", pose: { mouthOpen: .6, tongue: 1 } },
+];
+
+/** The hand clips, with review labels. Ids are wire action ids, not free text. */
+const gestureClips: ReadonlyArray<readonly [AvatarActionId, string]> = [
+  ["GESTURE_GREET", "Greet"], ["GESTURE_GOODBYE", "Farewell"], ["GESTURE_APPROVE", "Approve"], ["GESTURE_WAIT", "Wait"],
 ];
 
 class EventBus {
@@ -79,9 +84,11 @@ class EventBus {
   emit(event: string, ...args: unknown[]) { this.listeners.get(event)?.forEach((listener) => listener(...args)); }
 }
 
-function createStudioAvatar(mount: HTMLElement, avatarName: string, options: Record<string, unknown> = {}) {
-  if (avatarName === RIVE_AVATAR) return createAvatar({ ...options, mount, rig: createBobRiveRig, rigOptions: { onContract: (report: ContractReport) => console.info("Rive Bob contract", report) } });
-  return createAvatar({ ...options, mount, avatar: avatarName });
+/** The DOM hands back a `string`; this is where it becomes a face again. */
+const isFaceName = (value: string): value is FaceName => (FACE_NAMES as readonly string[]).includes(value);
+
+function createStudioAvatar(mount: HTMLElement, faceName: FaceName, options: Partial<CreateAvatarOptions> = {}) {
+  return createAvatar({ ...options, mount, face: FACES[faceName] });
 }
 
 function workspaceFromHash(): Workspace {
@@ -99,7 +106,7 @@ function useWorkspace(): [Workspace, (next: Workspace) => void] {
   return [workspace, navigate];
 }
 
-function AvatarViewport({ avatarName, className = "", onReady }: { avatarName: string; className?: string; onReady: (avatar: AvatarApi | null) => void }) {
+function AvatarViewport({ avatarName, className = "", onReady }: { avatarName: FaceName; className?: string; onReady: (avatar: AvatarApi | null) => void }) {
   const mount = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const avatar = createStudioAvatar(mount.current!, avatarName, { hand: true, gestureGain: 1.15, mouthGain: 1.08 });
@@ -130,31 +137,30 @@ function Library({ title, children }: { title: string; children: React.ReactNode
 function Inspector({ title, children }: { title: string; children: React.ReactNode }) { return <aside className="lab-inspector"><h2>{title}</h2>{children}</aside>; }
 function ButtonList({ children }: { children: React.ReactNode }) { return <div className="button-list">{children}</div>; }
 
-function RigWorkspace({ avatarName }: { avatarName: string }) {
+function RigWorkspace({ avatarName }: { avatarName: FaceName }) {
   const [avatar, setAvatar] = useState<AvatarApi | null>(null);
   const [pose, setPose] = useState(poseOptions[0]);
-  const [gesture, setGesture] = useState<string | null>(null);
-  const [viseme, setViseme] = useState("X");
+  const [gesture, setGesture] = useState<AvatarActionId | null>(null);
+  const [viseme, setViseme] = useState<VisemeLetter>("X");
   const [mode, setMode] = useState<"pose" | "viseme" | "gesture">("pose");
-  useEffect(() => { if (!avatar) return; avatar.setOverrides(mode === "pose" ? (Object.keys(pose.pose).length ? pose.pose : null) : mode === "viseme" ? VISemeShapes[viseme] : null); }, [avatar, mode, pose, viseme]);
-  const runGesture = (id: string) => { setMode("gesture"); setGesture(id); avatar?.setOverrides(null); avatar?.action(id); };
+  useEffect(() => { if (!avatar) return; avatar.setOverrides(mode === "pose" ? (Object.keys(pose.pose).length ? pose.pose : null) : mode === "viseme" ? VISEME_SHAPES[viseme] : null); }, [avatar, mode, pose, viseme]);
+  const runGesture = (id: AvatarActionId) => { setMode("gesture"); setGesture(id); avatar?.setOverrides(null); avatar?.action(id); };
   const title = mode === "pose" ? pose.label : mode === "viseme" ? `Viseme ${viseme}` : gesture?.replace("GESTURE_", "").toLowerCase() ?? "Gesture";
-  return <LabFrame workspace="Rig review" subtitle="Direct renderer controls. A selected item is an inspection target, never hidden persistent application state." library={<><div className="library-section"><h3>Review mode</h3><ButtonList>{(["pose", "viseme", "gesture"] as const).map((item) => <button className={mode === item ? "selected" : ""} onClick={() => setMode(item)} key={item}>{item === "pose" ? "Pose extremes" : item === "viseme" ? "Visemes" : "Hand gestures"}</button>)}</ButtonList></div><div className="library-section"><h3>{mode === "pose" ? "Pose controls" : mode === "viseme" ? "Mouth alphabet" : "Gesture clips"}</h3><ButtonList>{mode === "pose" && poseOptions.map((item) => <button className={pose.id === item.id ? "selected" : ""} onClick={() => { setMode("pose"); setPose(item); }} key={item.id}>{item.label}</button>)}{mode === "viseme" && VISEME_LETTERS.map((item) => <button className={viseme === item ? "selected" : ""} onClick={() => { setMode("viseme"); setViseme(item); }} key={item}>{item}</button>)}{mode === "gesture" && [["GESTURE_GREET", "Greet"], ["GESTURE_GOODBYE", "Farewell"], ["GESTURE_APPROVE", "Approve"], ["GESTURE_WAIT", "Wait"]].map(([id, label]) => <button className={gesture === id ? "selected" : ""} onClick={() => runGesture(id)} key={id}>{label}</button>)}</ButtonList></div></>} inspector={<><p className="eyebrow">Inspection target</p><strong className="inspector-title">{title}</strong><p>{mode === "gesture" ? "Finite clip. It naturally returns to the selected neutral pose." : "Static, deterministic renderer frame. Select another target to compare."}</p><dl><dt>Authority</dt><dd>Rig adapter</dd><dt>Scope</dt><dd>Local preview only</dd><dt>Export</dt><dd>Review capture (next)</dd></dl></>}><AvatarViewport avatarName={avatarName} onReady={setAvatar} /><Timeline duration={1_400} cursor={mode === "gesture" && gesture ? 650 : 0} tracks={[{ label: "Inspection", start: 0, end: mode === "gesture" ? 1_200 : 1_400, tone: mode === "gesture" ? "amber" : "blue" }]} /></LabFrame>;
+  return <LabFrame workspace="Rig review" subtitle="Direct renderer controls. A selected item is an inspection target, never hidden persistent application state." library={<><div className="library-section"><h3>Review mode</h3><ButtonList>{(["pose", "viseme", "gesture"] as const).map((item) => <button className={mode === item ? "selected" : ""} onClick={() => setMode(item)} key={item}>{item === "pose" ? "Pose extremes" : item === "viseme" ? "Visemes" : "Hand gestures"}</button>)}</ButtonList></div><div className="library-section"><h3>{mode === "pose" ? "Pose controls" : mode === "viseme" ? "Mouth alphabet" : "Gesture clips"}</h3><ButtonList>{mode === "pose" && poseOptions.map((item) => <button className={pose.id === item.id ? "selected" : ""} onClick={() => { setMode("pose"); setPose(item); }} key={item.id}>{item.label}</button>)}{mode === "viseme" && VISEME_LETTERS.map((item) => <button className={viseme === item ? "selected" : ""} onClick={() => { setMode("viseme"); setViseme(item); }} key={item}>{item}</button>)}{mode === "gesture" && gestureClips.map(([id, label]) => <button className={gesture === id ? "selected" : ""} onClick={() => runGesture(id)} key={id}>{label}</button>)}</ButtonList></div></>} inspector={<><p className="eyebrow">Inspection target</p><strong className="inspector-title">{title}</strong><p>{mode === "gesture" ? "Finite clip. It naturally returns to the selected neutral pose." : "Static, deterministic renderer frame. Select another target to compare."}</p><dl><dt>Authority</dt><dd>Rig adapter</dd><dt>Scope</dt><dd>Local preview only</dd><dt>Export</dt><dd>Review capture (next)</dd></dl></>}><AvatarViewport avatarName={avatarName} onReady={setAvatar} /><Timeline duration={1_400} cursor={mode === "gesture" && gesture ? 650 : 0} tracks={[{ label: "Inspection", start: 0, end: mode === "gesture" ? 1_200 : 1_400, tone: mode === "gesture" ? "amber" : "blue" }]} /></LabFrame>;
 }
 
-function BehaviorWorkspace({ avatarName }: { avatarName: string }) {
+function BehaviorWorkspace({ avatarName }: { avatarName: FaceName }) {
   const [avatar, setAvatar] = useState<AvatarApi | null>(null);
   const controller = useRef<BehaviorController | null>(null);
   const [base, setBase] = useState<BehaviorStateId>("LISTENING");
   const [action, setAction] = useState<string | null>(null);
-  useEffect(() => { if (!avatar) return; const next = new BehaviorController(avatar, { random: () => 0 }); controller.current = next; next.setState(base); return () => { next.destroy(); controller.current = null; }; }, [avatar]);
+  useEffect(() => { if (!avatar) return; const next = new BehaviorController(avatar); controller.current = next; next.setState(base); return () => { next.destroy(); controller.current = null; }; }, [avatar]);
   useEffect(() => { controller.current?.setState(base); }, [base]);
   const playAction = (id: (typeof BEHAVIOR_ACTION_IDS)[number]) => { setAction(id); controller.current?.action(id); window.setTimeout(() => setAction(null), 1_700); };
-  const workTrack = base === "WORKING" ? [{ label: "Work program", start: 0, end: 2_300, tone: "amber" }] : [];
-  return <LabFrame workspace="Behavior composition" subtitle="States define the base track. Actions are finite clips layered above it; neither is a disguised runtime fact." library={<><div className="library-section"><h3>Base state</h3><ButtonList>{(["IDLE", "LISTENING", "THINKING", "WORKING", "SPEAKING", "DEGRADED", "OFFLINE"] as BehaviorStateId[]).map((id) => <button key={id} className={base === id ? "selected" : ""} onClick={() => setBase(id)}>{id}</button>)}</ButtonList></div><div className="library-section"><h3>Finite action</h3><ButtonList>{BEHAVIOR_ACTION_IDS.map((id) => <button key={id} onClick={() => playAction(id)}>{id}</button>)}</ButtonList></div></>} inspector={<><p className="eyebrow">Resolved behavior</p><strong className="inspector-title">{base}</strong><p>{base === "WORKING" ? "Program selection currently resolves to typing. Its next activity is visible as a timed program block." : "This is the durable base state. Select another base state to replace it at time zero."}</p><dl><dt>Base owner</dt><dd>Behavior library</dd><dt>Action in flight</dt><dd>{action ?? "None"}</dd><dt>Runtime wire</dt><dd>{base === "THINKING" || base === "WORKING" ? "Claim-compatible" : "Derived locally"}</dd></dl></>}><AvatarViewport avatarName={avatarName} onReady={setAvatar} /><Timeline duration={3_000} cursor={action ? 700 : 0} tracks={[{ label: "Base state", start: 0, end: 3_000, tone: "blue" }, ...workTrack, ...(action ? [{ label: "Action", start: 120, end: 1_500, tone: "amber" }] : [])]} /></LabFrame>;
+  return <LabFrame workspace="Behavior composition" subtitle="States define the base track. Actions are finite clips layered above it; neither is a disguised runtime fact." library={<><div className="library-section"><h3>Base state</h3><ButtonList>{(["IDLE", "LISTENING", "THINKING", "WORKING", "SPEAKING", "DEGRADED", "OFFLINE"] as BehaviorStateId[]).map((id) => <button key={id} className={base === id ? "selected" : ""} onClick={() => setBase(id)}>{id}</button>)}</ButtonList></div><div className="library-section"><h3>Finite action</h3><ButtonList>{BEHAVIOR_ACTION_IDS.map((id) => <button key={id} onClick={() => playAction(id)}>{id}</button>)}</ButtonList></div></>} inspector={<><p className="eyebrow">Resolved behavior</p><strong className="inspector-title">{base}</strong><p>{"This is the durable base state. Select another base state to replace it at time zero."}</p><dl><dt>Base owner</dt><dd>Behavior library</dd><dt>Action in flight</dt><dd>{action ?? "None"}</dd><dt>Runtime wire</dt><dd>{base === "THINKING" || base === "WORKING" ? "Claim-compatible" : "Derived locally"}</dd></dl></>}><AvatarViewport avatarName={avatarName} onReady={setAvatar} /><Timeline duration={3_000} cursor={action ? 700 : 0} tracks={[{ label: "Base state", start: 0, end: 3_000, tone: "blue" }, ...(action ? [{ label: "Action", start: 120, end: 1_500, tone: "amber" }] : [])]} /></LabFrame>;
 }
 
-function RuntimeAvatar({ avatarName, trace, startAt, playing, onPresence, onEvent, onDone }: { avatarName: string; trace: Trace; startAt: number; playing: boolean; onPresence: (state: AvatarPresenceState) => void; onEvent: (event: TraceEvent) => void; onDone: () => void }) {
+function RuntimeAvatar({ avatarName, trace, startAt, playing, onPresence, onEvent, onDone }: { avatarName: FaceName; trace: Trace; startAt: number; playing: boolean; onPresence: (state: AvatarPresenceState) => void; onEvent: (event: TraceEvent) => void; onDone: () => void }) {
   const mount = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const bus = new EventBus();
@@ -196,7 +202,7 @@ function RuntimeAvatar({ avatarName, trace, startAt, playing, onPresence, onEven
     };
     const apply = (event: TraceEvent, report = false) => {
       fireThrough(event.at);
-      if (event.kind === "fact") bus.emit(event.value as EventName);
+      if (event.kind === "fact") bus.emit(event.value);
       if (event.kind === "claim") client.dispatch({ type: "avatar", cmd: "claim", state: event.value });
       if (event.kind === "action") client.dispatch({ type: "avatar", cmd: "action", id: event.value });
       if (event.kind === "cues") client.dispatch({ type: "avatar", cmd: "cues", ctx: `studio-${trace.id}`, from_ms: 0, cues: event.value, final: true });
@@ -225,7 +231,7 @@ function RuntimeAvatar({ avatarName, trace, startAt, playing, onPresence, onEven
   return <div className="avatar-viewport runtime-avatar"><div ref={mount} /></div>;
 }
 
-function RuntimeWorkspace({ avatarName }: { avatarName: string }) {
+function RuntimeWorkspace({ avatarName }: { avatarName: FaceName }) {
   const [traceId, setTraceId] = useState(traces[1].id);
   const [fixtureTrace, setFixtureTrace] = useState<Trace | null>(null);
   const trace = fixtureTrace?.id === traceId ? fixtureTrace : traces.find((item) => item.id === traceId) ?? traces[0];
@@ -278,7 +284,7 @@ function RuntimeWorkspace({ avatarName }: { avatarName: string }) {
   );
 }
 
-function LiveAvatar({ avatarName, onAttached }: { avatarName: string; onAttached: (attached: boolean) => void }) {
+function LiveAvatar({ avatarName, onAttached }: { avatarName: FaceName; onAttached: (attached: boolean) => void }) {
   const mount = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const avatar = createStudioAvatar(mount.current!, avatarName, { hand: true, gestureGain: 1.15, mouthGain: 1.08 });
@@ -291,7 +297,7 @@ function LiveAvatar({ avatarName, onAttached }: { avatarName: string; onAttached
   return <div className="avatar-viewport runtime-avatar"><div ref={mount} /></div>;
 }
 
-function ConnectionWorkspace({ avatarName }: { avatarName: string }) {
+function ConnectionWorkspace({ avatarName }: { avatarName: FaceName }) {
   const [attached, setAttached] = useState(false);
   return (
     <LabFrame
@@ -320,6 +326,6 @@ function LabFrame({ workspace, subtitle, library, inspector, children }: { works
 
 export function App() {
   const [workspace, navigate] = useWorkspace();
-  const [avatarName, setAvatarName] = useState(AVATARS[0]);
-  return <div className="studio-app"><header className="studio-header"><div className="brand"><strong>Avatar Studio</strong><span>Animation review and runtime trace lab</span></div><nav aria-label="Workspace">{(["rig", "behavior", "runtime", "connection"] as Workspace[]).map((item) => <button className={workspace === item ? "active" : ""} key={item} onClick={() => navigate(item)}>{item === "rig" ? "Rig" : item === "behavior" ? "Behavior" : item === "runtime" ? "Runtime" : "Connect"}</button>)}</nav><label className="avatar-picker"><span>Avatar</span><select value={avatarName} onChange={(event) => setAvatarName(event.target.value)}>{AVATARS.map((item) => <option key={item}>{item}</option>)}</select></label></header>{workspace === "rig" && <RigWorkspace avatarName={avatarName} />}{workspace === "behavior" && <BehaviorWorkspace avatarName={avatarName} />}{workspace === "runtime" && <RuntimeWorkspace avatarName={avatarName} />}{workspace === "connection" && <ConnectionWorkspace avatarName={avatarName} />}</div>;
+  const [avatarName, setAvatarName] = useState(FACE_NAMES[0]);
+  return <div className="studio-app"><header className="studio-header"><div className="brand"><strong>Avatar Studio</strong><span>Animation review and runtime trace lab</span></div><nav aria-label="Workspace">{(["rig", "behavior", "runtime", "connection"] as Workspace[]).map((item) => <button className={workspace === item ? "active" : ""} key={item} onClick={() => navigate(item)}>{item === "rig" ? "Rig" : item === "behavior" ? "Behavior" : item === "runtime" ? "Runtime" : "Connect"}</button>)}</nav><label className="avatar-picker"><span>Avatar</span><select value={avatarName} onChange={(event) => { if (isFaceName(event.target.value)) setAvatarName(event.target.value); }}>{FACE_NAMES.map((item) => <option key={item}>{item}</option>)}</select></label></header>{workspace === "rig" && <RigWorkspace avatarName={avatarName} />}{workspace === "behavior" && <BehaviorWorkspace avatarName={avatarName} />}{workspace === "runtime" && <RuntimeWorkspace avatarName={avatarName} />}{workspace === "connection" && <ConnectionWorkspace avatarName={avatarName} />}</div>;
 }

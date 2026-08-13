@@ -1,8 +1,12 @@
 /**
- * The avatar — a programmable talking head.
+ * The mixer — a programmable talking head.
  *
- * The public surface. Everything the server drives goes through here:
+ * Not the public surface: that is `createAvatar({ mount, client })` in
+ * `client/src/createAvatar.ts`, and this is what it drives. Everything below is
+ * addressed by our own runtime, our tooling, and an avatar author who chose to
+ * build on the SVG renderer (`@voqalize/avatar/internal`, no semver promise).
  *
+ *   const avatar = createAvatar({ mount, face: peep })   // faces.js, or a face module
  *   avatar.setState('LISTENING', { emotion: 'warm' })
  *   avatar.setGaze('SCREEN_LEFT')
  *   avatar.speak({ audio, cues })        // cues are {t, v, i?} in ms
@@ -26,9 +30,6 @@
  */
 
 import { REST, CHANNELS, TAU, RANGE, GROUPS, clamp, approach } from './params.js';
-import { createFace as createPeepFace, META as peepMeta } from './face-peep.js';
-import { createFace as createWrenFace, META as wrenMeta } from './face-wren.js';
-import { createFace as createMynaFace, META as mynaMeta } from './face-myna.js';
 import { emotionPose } from './emotions.js';
 import { GazeLayer, GAZE_TARGETS, AVERSION } from './gaze.js';
 import { IdleLayer, ListeningEngine } from './idle.js';
@@ -113,7 +114,7 @@ export const STATES = {
   // is what says activity rather than rocking — and, the important one, a
   // brief glance back up to the user every few seconds. The glance is the tell
   // that the user has not been forgotten; without it, busy is just absent.
-  TYPING: {
+  WORKING: {
     // SCREEN_WORK, not NOTES: on a steep down target the gaze layer's lid
     // follow seals the eyes, and at tile size shut eyes read as asleep, not
     // busy. A mild down-left with the head pitched into it keeps the iris in
@@ -233,66 +234,26 @@ export const STATES = {
 
 export const STATE_NAMES = Object.keys(STATES);
 
-/**
- * The avatars this rig can wear: `{ create, meta }` records.
- *
- * `create` is `createFace(mount, theme) -> { svg, apply, theme, destroy }`,
- * callable standalone — the rig tooling drives faces with no mixer attached.
- * That behavioural contract is still the whole of what the *rig* needs:
- * everything else — visemes, emotions, gaze, idle, clips, the mixer — works
- * in parameter space and never learns which face it is driving.
- *
- * `meta` is the avatar descriptor (viewBox, mouthCrop — see META in any face
- * module): the things a HOST or a TOOL needs to frame a face without opening
- * it. This registry was once factories-only, on the argument that a schema
- * guessed from two faces would be wrong; the third face settled it. Every rig
- * needed exactly a framing rect and a mouth rect to stop the tooling from
- * hard-coding per-avatar tables, and nothing else — so that is all meta
- * carries.
- *
- * The key is the avatar's name, not its rank. It used to be possible to read
- * rank into it — the original rig was keyed `default`, which became a lie the
- * moment it stopped being the one we ship. DEFAULT_AVATAR below is the only
- * place the choice is made.
- *
- * Two earlier rigs, `classic` and `blue-shirt`, were removed on 2026-08-06:
- * stakeholders accepted the line-art pair and rejected both of the others, so
- * carrying them was maintenance against art nobody wanted. What they taught
- * the abstraction survives them — `face-core.js` exists because all three of
- * the first rigs wrote the same apply(), and META exists because all three
- * needed the same two rects. Their code is in git history if a lesson ever
- * needs re-reading.
- */
-export const AVATARS = {
-  peep: { create: createPeepFace, meta: peepMeta },
-  wren: { create: createWrenFace, meta: wrenMeta },
-  myna: { create: createMynaFace, meta: mynaMeta },
-};
-
-export const AVATAR_NAMES = Object.keys(AVATARS);
-
-/** The avatar a host gets when it does not ask for one. */
-export const DEFAULT_AVATAR = 'peep';
-
 export function createAvatar(opts = {}) {
   const mount = typeof opts.mount === 'string' ? document.querySelector(opts.mount) : opts.mount;
   if (!mount) throw new Error('createAvatar: mount element required');
 
-  // `opts.avatar` names one from AVATARS; `opts.face` passes a factory directly,
-  // so a host can supply an avatar the rig has never heard of. A bare factory
-  // has no descriptor, so meta falls back to what the svg itself declares.
-  const entry = opts.rig ? null : (opts.face ? { create: opts.face } : AVATARS[opts.avatar || DEFAULT_AVATAR]);
+  // `opts.face` is a Face record — `{ create, meta }`, one per face module. It
+  // is passed in rather than named, because a name would need a table, and a
+  // table would need every face imported to answer any lookup: three drawings
+  // in every consumer's bundle to render one. `src/faces.js` still has that
+  // table, for tooling that genuinely wants all of them.
+  const entry = opts.rig ? null : opts.face;
   if (!opts.rig && !entry) {
-    throw new Error(`createAvatar: unknown avatar "${opts.avatar}" (have: ${AVATAR_NAMES.join(', ')})`);
+    throw new Error('createAvatar: a `face` (see src/faces.js) or a `rig` is required');
   }
   const face = entry ? entry.create(mount, opts.theme) : null;
-  // A renderer-neutral rig needs no SVG descriptor. `meta` remains a legacy
-  // compatibility detail for current SVG hosts and tools, never a requirement
-  // of the AvatarRig contract.
-  const meta = face && (entry.meta || (() => {
-    const vb = (face.svg.getAttribute('viewBox') || '0 0 1 1').split(/[\s,]+/).map(Number);
-    return { viewBox: { x: vb[0], y: vb[1], w: vb[2], h: vb[3] } };
-  })());
+  // A renderer-neutral rig needs no SVG descriptor: `meta` is what SVG hosts
+  // and tools frame the drawing with, never a requirement of the rig contract.
+  // A face carries its own — a `{ create }` with no META used to be tolerated
+  // here and the viewBox re-read off the produced svg, which meant a face could
+  // ship half a descriptor and nothing would say so.
+  const meta = face ? entry.meta : null;
   const gaze = new GazeLayer();
   const idle = new IdleLayer();
   const speech = new VisemeTrack();
@@ -843,8 +804,13 @@ export { GAZE_NAMES, GAZE_TARGETS } from './gaze.js';
 export { normalizeActions } from './perform.js';
 export { checkHandFraming } from './hand.js';
 export { EMOTION_NAMES } from './emotions.js';
+// The mouth clock travels with the rest of it. Someone has to turn a cue array
+// plus a clock into "which letter is on screen right now", every renderer needs
+// exactly that, and none of them should write it twice — so it is a plain class
+// to construct, not a contract to implement.
 export {
-  VISEME_LETTERS, VISEME_SHAPES, normalizeCues, textToCues,
+  VISEME_LETTERS, VISEME_SHAPES, VisemeTrack, shapeFor, SILENT,
+  normalizeCues, textToCues,
   ARPABET_TO_VISEME, AZURE_VISEME_TO_LETTER, LEAD_MS,
 } from './visemes.js';
 // No THEME re-export: each face module owns its palette, and `api.theme` is

@@ -3,26 +3,31 @@ import { BehaviorController } from "../../src/behavior.js";
 import { createFakeAvatar } from "./fakeAvatar.js";
 
 describe("BehaviorController", () => {
-  it("keeps WORKING as client policy while selecting the current typing activity", () => {
+  // The wire word has to reach the renderer intact. WORKING used to project
+  // as TYPING — a behaviour named after one rendering of it — which meant an
+  // implementation was told what to *draw* rather than what was happening.
+  it("projects the behavior state, not a renderer's name for it", () => {
     const { api, calls } = createFakeAvatar();
-    const controller = new BehaviorController(api, { random: () => 0 });
+    const controller = new BehaviorController(api);
 
     controller.setState("WORKING");
 
     expect(controller.state).toBe("WORKING");
-    expect(calls.setState).toEqual([{ name: "TYPING", o: undefined }]);
+    expect(calls.setState).toEqual([{ name: "WORKING", o: undefined }]);
     controller.destroy();
   });
 
-  it("stops a state program before projecting the next durable state", () => {
+  // There is no activity program any more, so a durable state must be silent
+  // between transitions rather than re-asserting itself on a timer.
+  it("issues nothing after a state settles", () => {
     vi.useFakeTimers();
     const { api, calls } = createFakeAvatar();
-    const controller = new BehaviorController(api, { random: () => 0 });
+    const controller = new BehaviorController(api);
 
     controller.setState("WORKING").setState("THINKING");
     vi.advanceTimersByTime(10_000);
 
-    expect(calls.setState.map((call) => call.name)).toEqual(["TYPING", "THINKING"]);
+    expect(calls.setState.map((call) => call.name)).toEqual(["WORKING", "THINKING"]);
     controller.destroy();
     vi.useRealTimers();
   });

@@ -44,13 +44,14 @@ Math.random = () => {
 };
 
 const { createAvatar } = await import('../../src/avatar.js');
+const { FACES, DEFAULT_FACE } = await import('../../src/faces.js');
 
 const mount = document.getElementById('m');
 mount.style.width = (Number(q.get('w') || 440)) + 'px';
 
 const avatar = createAvatar({
   mount,
-  avatar: q.get('face') || 'peep',
+  face: FACES[q.get('face') || DEFAULT_FACE],
   manual: true,
   handSide: Number(q.get('side') || 1),
 });

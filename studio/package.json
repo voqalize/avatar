@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@pipecat-ai/client-js": "1.7.0",
-    "@rive-app/canvas": "^2.39.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

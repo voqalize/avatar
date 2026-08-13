@@ -18,12 +18,12 @@
 // rig leaks background from behind the shirt or slides the collar off the neck,
 // and a channel-extremes row on the contact sheet cannot show that.
 import { makeParams } from '../../src/params.js';
-import { AVATARS, DEFAULT_AVATAR } from '../../src/avatar.js';
+import { FACES, DEFAULT_FACE } from '../../src/faces.js';
 
 const qs = new URLSearchParams(location.search);
-const which = qs.get('face') || DEFAULT_AVATAR;
-const entry = AVATARS[which];
-if (!entry) throw new Error(`no avatar "${which}" — have ${Object.keys(AVATARS)}`);
+const which = qs.get('face') || DEFAULT_FACE;
+const entry = FACES[which];
+if (!entry) throw new Error(`no avatar "${which}" — have ${Object.keys(FACES)}`);
 const createFace = entry.create;
 document.title = `Avatar — torso poses (${which})`;
 

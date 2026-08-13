@@ -35,15 +35,15 @@ import { makeParams } from '../../src/params.js';
 import { VISEME_LETTERS, shapeFor } from '../../src/visemes.js';
 import { EMOTION_NAMES, emotionPose } from '../../src/emotions.js';
 import { GAZE_TARGETS, GAZE_NAMES } from '../../src/gaze.js';
-import { AVATARS, DEFAULT_AVATAR } from '../../src/avatar.js';
+import { FACES, DEFAULT_FACE } from '../../src/faces.js';
 
 const qs = new URLSearchParams(location.search);
-const which = qs.get('face') || DEFAULT_AVATAR;
+const which = qs.get('face') || DEFAULT_FACE;
 document.getElementById('which').textContent = which;
 // Resolve through the rig's own registry, so the sheet fails if an avatar is
 // registered but broken — rather than reaching past it to the module.
-const entry = AVATARS[which];
-if (!entry) throw new Error(`no avatar "${which}" — have ${Object.keys(AVATARS)}`);
+const entry = FACES[which];
+if (!entry) throw new Error(`no avatar "${which}" — have ${Object.keys(FACES)}`);
 const mod = { createFace: entry.create };
 
 const out = document.getElementById('out');

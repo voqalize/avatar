@@ -36,6 +36,26 @@
       "types": "./client/dist/index.d.ts",
       "default": "./client/dist/index.js"
     },
+    "./react": {
+      "types": "./client/dist/react.d.ts",
+      "default": "./client/dist/react.js"
+    },
+    "./internal": {
+      "types": "./client/dist/internal.d.ts",
+      "default": "./client/dist/internal.js"
+    },
+    "./faces/peep": {
+      "types": "./src/face-peep.d.ts",
+      "default": "./src/face-peep.js"
+    },
+    "./faces/wren": {
+      "types": "./src/face-wren.d.ts",
+      "default": "./src/face-wren.js"
+    },
+    "./faces/myna": {
+      "types": "./src/face-myna.d.ts",
+      "default": "./src/face-myna.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

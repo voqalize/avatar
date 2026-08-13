@@ -66,29 +66,25 @@ application extension hooks in this version.
 | `UserStoppedSpeaking` | `setUserSpeaking(false)` and hold `LISTENING`; the server may then claim `THINKING`. No acknowledgement is emitted. |
 | `BotStartedSpeaking` | `SPEAKING`; it pre-empts and consumes any lower-priority server claim. |
 | `BotStoppedSpeaking` | Stop any still-open viseme track immediately, then return to `LISTENING`. |
-| `RemoteAudioLevel` | Decorative active-bot waveform only; never changes projection or mouth state. |
 | `Error` | `DEGRADED`, or `OFFLINE` when `data.fatal` is true. |
 | `Disconnected` | `OFFLINE`. |
 | `Connected` / `BotReady` | Clear a prior offline presentation and resume normal projection. |
 
-## Presence chrome and audio activity
+## The resolved state does not leave the avatar
 
-The resolved state is also presentation data. The React binding exposes it as
-`data-avatar-state` on `<Avatar>` and offers `onPresenceChange` for the call
-application's status label. This is deliberately **not** part of the rig: a
-video, WebGL, or SVG avatar should all present the same factual call status.
+There is no presence callback and no `data-avatar-state`. The projection above
+is what the avatar acts on, not something the host reads back — an avatar
+renders its own state if it wants to, and the caller does not get to read the
+avatar's internal state. Publishing that projection would make it a contract:
+every implementation would owe these seven names with this precedence, which is
+the second public contract [design-avatar-interface.md](design-avatar-interface.md)
+exists to avoid.
 
-Pipecat also emits `RemoteAudioLevel` (0–1). The binding forwards it through
-`onRemoteAudioLevel` only while `BotStartedSpeaking` is active, and resets it
-to zero at bot stop/disconnect. It is appropriate for a decorative speaking
-waveform, but it has no state authority: remote gain may come from another
-participant and cannot start or stop the avatar's mouth.
-
-The package keeps this data surface unstyled. The product host owns placement,
-theme, labels, and whether an idle avatar becomes a small camera-off/muted
-thumbnail. Avatar Studio is the reference presentation: a shared state pill,
-speech waveform, and compact idle tile demonstrate that product layer without
-baking a conferencing UI into every avatar.
+A host that genuinely wants a status pill has the same `PipecatClient` and can
+subscribe to it directly — with its own precedence, for its own chrome.
+`RemoteAudioLevel` is not subscribed at all: remote gain may come from another
+participant, so it never had state authority, and relaying it was a
+high-frequency subscription serving decoration ([removed.md](removed.md)).
 
 In Studio, the compact idle tile belongs only to the runtime routes (Wire Lab,
 Fixtures, Connection). Rig and behavior routes mount their own author previews

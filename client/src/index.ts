@@ -1,23 +1,41 @@
 /**
- * `@voqalize/avatar` — the avatar as one React component.
+ * `@voqalize/avatar` — a talking head that embodies a `PipecatClient`.
  *
- *     import { Avatar } from "@voqalize/avatar";
+ *     import { createAvatar } from "@voqalize/avatar";
  *
- *     <Avatar client={pipecatClient} className="avatar-tile" />
+ *     const avatar = createAvatar({ mount: el, client: pipecatClient });
  *
  * That is the whole public surface. Put an `AvatarProcessor` in the pipecat
- * pipeline (`pip install voqalize-avatar`), drop this component into the bot's
- * tile, and the face listens, thinks, claims the floor and lipsyncs what the
- * TTS says.
+ * pipeline (`pip install voqalize-avatar`), mount this in the bot's tile, and
+ * the face listens, thinks, claims the floor and lipsyncs what the TTS says.
  *
- * The widget underneath is framework-free, and the dispatcher between it and
- * the RTVI data channel is plain TypeScript — but neither is exported. Two
- * consumers wanted a call tile, both are React, and a public API is a promise
- * we have to keep across versions. `docs/removed.md` lists what used to be
- * here and how to get it back if a real third case argues for it.
+ * Entry points, and the split is the design rather than packaging taste:
  *
- * Peers: `react >= 18` and `@pipecat-ai/client-js`.
+ * - `@voqalize/avatar` — this one. Framework-free. `@pipecat-ai/client-js` is
+ *   a type-only import, so even that peer is genuinely optional at runtime.
+ *   It carries exactly one drawing: `peep`, the default face.
+ * - `@voqalize/avatar/faces/{peep,wren,myna}` — one drawing each. Import the
+ *   one you want and pass it as `face`; the others never enter your bundle.
+ * - `@voqalize/avatar/react` — `<Avatar>`. Pulls React; nothing here does.
+ * - `@voqalize/avatar/internal` — the SVG widget, the behavior catalog and the
+ *   viseme clock. **No semver promise**: these move in any minor. They are
+ *   exported because an avatar author building on our renderer needs them, not
+ *   because they are an interface.
+ *
+ * To ship your own avatar, publish a module exporting `createAvatar` and import
+ * that instead — see `createAvatar.ts` and docs/design-avatar-interface.md.
+ * `docs/removed.md` lists what used to be here and how to get it back if a real
+ * third case argues for it.
  */
 
-export { Avatar, type AvatarProps } from "./Avatar.js";
-export type { AvatarPresenceState } from "./AvatarClient.js";
+export { createAvatar } from "./createAvatar.js";
+export type {
+  AvatarOptions,
+  AvatarInstance,
+  AvatarFactory,
+  SvgAvatarOptions,
+  Face,
+  FaceTheme,
+  Gain,
+  HandSide,
+} from "./createAvatar.js";

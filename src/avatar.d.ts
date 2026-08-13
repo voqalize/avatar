@@ -8,12 +8,14 @@
  * is only correct next to the code it describes — the previous copy lived in
  * a vendored tree two repos away and went stale the first time an enum grew.
  *
- * It is deliberately not a conversion of the widget to TypeScript. String-keyed
- * enums (state / gaze / emotion / semantic action ids) are literal unions for
- * editor ergonomics, but every setter also accepts plain `string`, because the
- * widget enforces these enums itself at runtime — unknown state and
- * action ids throw, unknown emotion and gaze fall back silently — and a
- * stale `.d.ts` must never claim to be stricter than the code it describes.
+ * It is deliberately not a conversion of the widget to TypeScript. The
+ * string-keyed enums (state / gaze / emotion / semantic action ids) are closed
+ * literal unions, and there is no `| string` escape hatch on any setter: the
+ * widget enforces the same enums at runtime — unknown state and action ids
+ * throw, unknown emotion and gaze fall back silently — so a caller who wants
+ * one of these has a name that is in the union or a bug. Keeping the two in
+ * step is this file's whole job; a stale `.d.ts` must never claim to be
+ * stricter than the code it describes, so widen the runtime first.
  */
 
 /** `STATE_NAMES` — see docs/contract-protocol.md § States. */
@@ -22,9 +24,9 @@ export type AvatarStateName =
   | "LISTENING"
   | "THINKING"
   | "SPEAKING"
+  | "WORKING"
   | "REVIEWING_SCREEN"
   | "WAITING_FOR_USER"
-  | "TYPING"
   | "TYPING_CHAT"
   | "DISTRACTED"
   | "SEARCHING_SCREEN"
@@ -77,9 +79,39 @@ export type VisemeLetter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "X";
 /** One viseme cue: `t` is a ms offset into the utterance, `i` is optional 0..1 loudness. */
 export interface Cue {
   t: number;
-  v: string;
+  v: VisemeLetter;
+  /** 0..1. Absent means full. */
   i?: number;
 }
+
+/** A pose channel from `src/params.js` — see docs/contract-rig.md § The pose channels. */
+export type PoseChannel =
+  | "mouthOpen" | "mouthWidth" | "mouthRound" | "mouthPress" | "mouthTuck"
+  | "mouthCornerL" | "mouthCornerR" | "teethUpper" | "tongue" | "jaw"
+  | "lidL" | "lidR" | "squintL" | "squintR" | "pupilX" | "pupilY"
+  | "browRaiseL" | "browRaiseR" | "browAngleL" | "browAngleR"
+  | "browInnerL" | "browInnerR"
+  | "headYaw" | "headPitch" | "headRoll"
+  | "breath" | "shoulderL" | "shoulderR" | "torsoLean" | "torsoTurn";
+
+/** A partial pose. Channels are clamped to `RANGE`; absent channels keep the mix. */
+export type PoseOverrides = Partial<Record<PoseChannel, number>>;
+
+/** Which hand the character gestures with: `1` the viewer's right (the
+ * character's own left), `-1` the other. */
+export type HandSide = 1 | -1;
+
+/**
+ * A motion scale. `1` is the amplitude the channel was authored at, `0` stills
+ * it, and `2` is the documented ceiling — past that the smoothing constants
+ * stop holding and clips overshoot their range clamp.
+ *
+ * TypeScript cannot say "0..2", so this is a named `number` and the check is at
+ * the door: the public `createAvatar` throws `RangeError`. The live setters
+ * below do not, because they exist for review sliders that already bound
+ * themselves and should not throw mid-drag.
+ */
+export type Gain = number;
 
 /** Normalized-screen-coordinate escape hatch for `setGaze('CUSTOM', custom)`. */
 export interface GazeCustom {
@@ -87,20 +119,23 @@ export interface GazeCustom {
   y: number;
 }
 
-/** A `perform()` timeline action — see docs/contract-protocol.md § Composing behavior. */
-export interface AvatarAction {
-  t: number;
-  do: "state" | "emotion" | "gaze" | "action";
-  name?: string;
-  id?: string;
-  i?: number;
-  keepGaze?: boolean;
-}
+/**
+ * A `perform()` timeline action — see docs/contract-protocol.md § Composing
+ * behavior. `t` is a ms offset into the performance. Discriminated on `do`
+ * because the verbs do not share their payload: only `action` is addressed by
+ * `id`, and only `state` reads `keepGaze`.
+ */
+export type AvatarAction =
+  | { t: number; do: "state"; name: AvatarStateName; keepGaze?: boolean }
+  | { t: number; do: "emotion"; name: AvatarEmotionName; i?: number }
+  | { t: number; do: "gaze"; name: AvatarGazeName }
+  | { t: number; do: "action"; id: AvatarActionId };
 
 export interface SetStateOptions {
-  emotion?: AvatarEmotionName | (string & {});
+  emotion?: AvatarEmotionName;
+  /** 0..1 emotion strength. Default 1. */
   intensity?: number;
-  gaze?: AvatarGazeName | (string & {});
+  gaze?: AvatarGazeName;
   keepGaze?: boolean;
 }
 
@@ -133,30 +168,30 @@ export interface AvatarMeta {
 
 /** The object `createAvatar()` returns — the whole server-facing surface. */
 export interface AvatarApi {
-  setState(name: AvatarStateName | (string & {}), o?: SetStateOptions): AvatarApi;
-  setEmotion(name: AvatarEmotionName | (string & {}), intensity?: number): AvatarApi;
-  setGaze(name: AvatarGazeName | (string & {}), custom?: GazeCustom): AvatarApi;
+  setState(name: AvatarStateName, o?: SetStateOptions): AvatarApi;
+  setEmotion(name: AvatarEmotionName, intensity?: number): AvatarApi;
+  setGaze(name: AvatarGazeName, custom?: GazeCustom): AvatarApi;
   speak(o?: SpeakOptions): AvatarApi;
   pushCues(cues: Cue[]): AvatarApi;
   stopSpeaking(): AvatarApi;
   /** Self-completing action: states resolve underneath while motion lands. */
-  action(id: AvatarActionId | (string & {})): AvatarApi;
-  /** +1 the viewer's right (the character's own left hand), -1 the other. */
-  setHandSide(dir: number): AvatarApi;
+  action(id: AvatarActionId): AvatarApi;
+  setHandSide(dir: HandSide): AvatarApi;
   perform(actions: AvatarAction[], o?: PerformOptions): PerformHandle;
   setUserSpeaking(speaking: boolean | null): AvatarApi;
   /** Hold user gaze for a short interaction window; currently JS-level only. */
   attend(ms?: number): AvatarApi;
-  setMouthGain(g: number): AvatarApi;
-  readonly mouthGain: number;
-  setGestureGain(g: number): AvatarApi;
-  readonly gestureGain: number;
-  setMotionGain(g: number): AvatarApi;
-  readonly motionGain: number;
+  setMouthGain(g: Gain): AvatarApi;
+  readonly mouthGain: Gain;
+  setGestureGain(g: Gain): AvatarApi;
+  readonly gestureGain: Gain;
+  setMotionGain(g: Gain): AvatarApi;
+  readonly motionGain: Gain;
   blink(double?: boolean): AvatarApi;
   /** Advance one frame by hand — only meaningful under `{ manual: true }`. */
   step(dt: number): AvatarApi;
-  setOverrides(o: Record<string, number> | null): AvatarApi;
+  /** Pin channels to fixed values, above the whole mix. `null` releases. */
+  setOverrides(o: PoseOverrides | null): AvatarApi;
   on(event: "state", fn: (name: AvatarStateName) => void): AvatarApi;
   on(event: "speakEnd" | "performEnd", fn: () => void): AvatarApi;
   on(event: "clipEnd" | "gestureEnd", fn: (id: string) => void): AvatarApi;
@@ -166,10 +201,12 @@ export interface AvatarApi {
   readonly gaze: AvatarGazeName;
   readonly speaking: boolean;
   readonly performing: boolean;
+  /** Internal clip id in flight. Not a contract — the clip catalog is private
+   * to this renderer, which is why this is the one open string here. */
   readonly clip: string | null;
   /** Semantic hand action in flight, including for a non-SVG custom rig. */
-  readonly gesturing: string | null;
-  readonly params: Record<string, number>;
+  readonly gesturing: AvatarActionId | null;
+  readonly params: Readonly<Record<PoseChannel, number>>;
   readonly userSpeaking: boolean;
   /** Legacy SVG inspection fields; null for a renderer-neutral AvatarRig. */
   readonly svg: SVGSVGElement | null;
@@ -181,54 +218,59 @@ export interface AvatarApi {
  * docs/contract-avatar.md § Adding a new avatar. */
 export type FaceFactory = (
   mount: Element,
-  theme?: unknown,
+  theme?: FaceTheme,
 ) => {
   svg: SVGSVGElement;
-  apply: (params: Record<string, number>) => void;
-  theme: unknown;
+  apply: (params: Readonly<Record<PoseChannel, number>>) => void;
+  theme: FaceTheme;
   destroy: () => void;
 };
+
+/** A face's palette: CSS colour strings by role. Keys are the face's own
+ * (`THEME` in its module) — a shared key set was tried and each drawing wanted
+ * different roles. See CLAUDE.md on why `peep` has no second palette. */
+export type FaceTheme = Readonly<Record<string, string>>;
+
+/** One drawn face: what to build, and how to frame it. Import one from
+ * `@voqalize/avatar/faces/<name>`; nothing resolves a face by string. */
+export interface Face {
+  readonly create: FaceFactory;
+  readonly meta: AvatarMeta;
+}
 
 export interface CreateAvatarOptions {
   /** Element, or CSS selector resolved via `document.querySelector`. */
   mount: string | Element;
-  /** Name from `AVATAR_NAMES`. Defaults to `DEFAULT_AVATAR`. */
-  avatar?: string;
-  /** A bare face factory, for an avatar the registry doesn't know about.
-   * `meta` then falls back to the svg's own viewBox. */
-  face?: FaceFactory;
+  /** The face to wear. Required unless `rig` replaces the renderer outright. */
+  face?: Face;
   /** Renderer-neutral rig factory. It replaces the SVG face implementation;
    * no SVG or metadata is required. See docs/contract-rig.md. */
   rig?: import("./rig.js").AvatarRigFactory;
+  /** Passed to `rig` verbatim. Opaque here on purpose — it belongs to whoever
+   * wrote the rig, and this file has no way to know its shape. */
   rigOptions?: unknown;
-  theme?: unknown;
-  mouthGain?: number;
-  gestureGain?: number;
-  motionGain?: number;
+  theme?: FaceTheme;
+  mouthGain?: Gain;
+  gestureGain?: Gain;
+  motionGain?: Gain;
   /** Disable only the bundled SVG hand renderer. A custom rig still receives
    * first-class `frame.hand` controls for every gesture action. Default true. */
   hand?: boolean;
-  /** Which hand the character gestures with: +1 the viewer's right. */
-  handSide?: number;
+  handSide?: HandSide;
   /** Withhold the rAF loop so a tool can drive frames itself via `step(dt)`. */
   manual?: boolean;
 }
 
 export function createAvatar(opts: CreateAvatarOptions): AvatarApi;
 
-/** The registry: `{ create, meta }` per avatar. */
-export const AVATARS: Record<string, { create: FaceFactory; meta: AvatarMeta }>;
-export const AVATAR_NAMES: string[];
-export const DEFAULT_AVATAR: string;
-
 /** Per-state base pose + idle profile. Read-only in practice — the mixer owns it. */
-export const STATES: Record<string, Record<string, unknown>>;
-export const STATE_NAMES: AvatarStateName[];
-export const GAZE_NAMES: AvatarGazeName[];
-export const GAZE_TARGETS: Record<string, { x: number; y: number }>;
-export const EMOTION_NAMES: AvatarEmotionName[];
-export const ACTIONS: Record<AvatarActionId, unknown>;
-export const ACTION_IDS: AvatarActionId[];
+export const STATES: Readonly<Record<AvatarStateName, Readonly<Record<string, unknown>>>>;
+export const STATE_NAMES: readonly AvatarStateName[];
+export const GAZE_NAMES: readonly AvatarGazeName[];
+export const GAZE_TARGETS: Readonly<Record<AvatarGazeName, { x: number; y: number }>>;
+export const EMOTION_NAMES: readonly AvatarEmotionName[];
+export const ACTIONS: Readonly<Record<AvatarActionId, unknown>>;
+export const ACTION_IDS: readonly AvatarActionId[];
 /** Asserts the two framing rules against a face's own window. Throws on
  * violation — `tools/sweep.mjs` runs it for every registered avatar. */
 export function checkHandFraming(meta: AvatarMeta): {
@@ -237,12 +279,34 @@ export function checkHandFraming(meta: AvatarMeta): {
   outboardLimit: number;
   worst: Record<string, number>;
 };
-export const VISEME_LETTERS: VisemeLetter[];
-export const VISEME_SHAPES: Record<string, Record<string, number>>;
+export const VISEME_LETTERS: readonly VisemeLetter[];
+export const VISEME_SHAPES: Readonly<Record<VisemeLetter, PoseOverrides>>;
 /** Cues lead the audio by this many ms — perceptual tolerance is asymmetric. */
 export const LEAD_MS: number;
-export const ARPABET_TO_VISEME: Record<string, string>;
-export const AZURE_VISEME_TO_LETTER: Record<number, string>;
+export const ARPABET_TO_VISEME: Readonly<Record<string, VisemeLetter>>;
+export const AZURE_VISEME_TO_LETTER: Readonly<Record<number, VisemeLetter>>;
+
+/** The silent/rest letter, `"X"`. */
+export const SILENT: VisemeLetter;
+/** Pose channels for one letter at `intensity` (0..1), ready to merge into a frame. */
+export function shapeFor(letter: VisemeLetter, intensity?: number): PoseOverrides;
+
+/**
+ * The mouth clock. Someone has to turn a cue array plus a clock into "which
+ * letter is on screen right now"; every renderer needs exactly that and none
+ * should write it twice, so it is a class to construct rather than a contract
+ * to implement. `sample()` returns `null` when the track is done.
+ */
+export class VisemeTrack {
+  /** @param clock elapsed ms of the audio being played. */
+  start(cues: Cue[], clock: () => number): void;
+  /** Streaming top-up: append cues that arrive mid-utterance. */
+  push(cues: Cue[]): void;
+  stop(): void;
+  sample(): { letter: VisemeLetter; intensity: number } | null;
+  onEnd: (() => void) | null;
+  readonly playing: boolean;
+}
 
 export function attachAudio(id: string, url: string): void;
 export function normalizeActions(actions: AvatarAction[]): AvatarAction[];

@@ -53,7 +53,8 @@
   </section>
 </div>
 <script type="module">
-  import { AVATAR_NAMES, createAvatar } from '../../src/avatar.js';
+  import { createAvatar } from '../../src/avatar.js';
+  import { FACES, FACE_NAMES } from '../../src/faces.js';
   import { AvatarClient, RTVI_EVENTS } from '../../client/dist/AvatarClient.js';
 
   class FakePipecatClient {
@@ -81,7 +82,7 @@
     ctx: document.querySelector('#ctx'),
     clip: document.querySelector('#clip'),
   };
-  for (const name of AVATAR_NAMES) select.add(new Option(name, name));
+  for (const name of FACE_NAMES) select.add(new Option(name, name));
 
   let avatar, controller, pipecat, stopAttach, timers = [], startedAt = performance.now();
   const later = (ms, fn) => timers.push(setTimeout(fn, ms));
@@ -120,7 +121,7 @@
     stage.replaceChildren();
     timeline.replaceChildren();
     startedAt = performance.now();
-    avatar = createAvatar({ mount: stage, avatar: select.value });
+    avatar = createAvatar({ mount: stage, face: FACES[select.value] });
     pipecat = new FakePipecatClient();
     controller = new AvatarClient(avatar);
     stopAttach = controller.attach(pipecat);

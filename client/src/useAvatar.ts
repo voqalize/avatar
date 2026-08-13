@@ -1,30 +1,29 @@
 /**
- * useAvatar — mount the widget, wire it to a live session, dispatch its
- * server-messages, and clean up.
+ * useAvatar — mount an avatar into a ref'd element for as long as there is a
+ * client to embody, and tear it down after.
  *
- * Internal: `<Avatar>` is the only thing the package exports. It is a separate
- * module anyway because the two lifecycles genuinely differ — mounting the
- * widget happens once (an avatar swap remounts by design; see the note in the
- * effect), while attaching to the pipecat client re-runs whenever the client
- * identity changes, which a session reconnect makes it do.
+ * Internal; `<Avatar>` is the only thing the React entry exports. The whole
+ * hook is one effect, because the factory takes the client at construction:
+ * there is no separate attach step to keep in its own lifecycle any more.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { PipecatClient } from "@pipecat-ai/client-js";
-import { createAvatar, type AvatarApi } from "../../src/avatar.js";
-import { AvatarClient, type AvatarPresenceState } from "./AvatarClient.js";
+import {
+  createAvatar as createSvgAvatar,
+  type AvatarFactory,
+  type AvatarOptions,
+  type SvgAvatarOptions,
+} from "./createAvatar.js";
 
-export interface UseAvatarOptions {
-  /** Which face. Omit for the widget's own default. */
-  avatar?: string;
-  /** The live `PipecatClient` to dispatch server-messages from, or `null`
-   * before connect. `useAvatar` (dis)connects the subscription as this
-   * changes; it does not create or own the client. */
+export interface UseAvatarOptions<O extends AvatarOptions = SvgAvatarOptions> {
+  /** The live `PipecatClient`, or `null` before connect. Nothing mounts until
+   * this is non-null — an avatar with nothing to embody has nothing to do. */
   client?: PipecatClient | null;
-  /** A host-facing notification for call chrome such as a state label. */
-  onPresenceChange?: (state: AvatarPresenceState) => void;
-  /** Active bot remote-audio level for a decorative waveform or meter. */
-  onRemoteAudioLevel?: (level: number) => void;
+  /** The avatar implementation. Defaults to the bundled SVG faces. */
+  create?: AvatarFactory<O>;
+  /** Implementation options, forwarded verbatim. Read at mount only. */
+  options?: Omit<O, keyof AvatarOptions>;
 }
 
 /**
@@ -43,65 +42,33 @@ export type AvatarMountRef = { current: HTMLDivElement | null };
 export interface UseAvatarHandle {
   /** Attach to the mount element: `<div ref={containerRef} />`. */
   containerRef: AvatarMountRef;
-  /** The live widget instance once mounted, else `null`. */
-  avatar: AvatarApi | null;
-  /** The last resolved state, or `null` until Pipecat supplies a fact. */
-  presence: AvatarPresenceState | null;
-  /** The most recent bot audio gain (0…1). */
-  botAudioLevel: number;
 }
 
-export function useAvatar(options: UseAvatarOptions = {}): UseAvatarHandle {
+export function useAvatar<O extends AvatarOptions = SvgAvatarOptions>(
+  { client, create, options }: UseAvatarOptions<O> = {},
+): UseAvatarHandle {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [avatar, setAvatar] = useState<AvatarApi | null>(null);
-  const [presence, setPresence] = useState<AvatarPresenceState | null>(null);
-  const [botAudioLevel, setBotAudioLevel] = useState(0);
-  const avatarClientRef = useRef<AvatarClient | null>(null);
 
-  // Latest-options ref, so the mount effect (which runs once) still reads the
-  // live props without re-subscribing.
+  // Latest-options ref, so the mount effect reads the live values without
+  // remounting the face every time a caller passes a fresh object literal.
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
   useEffect(() => {
     const mount = containerRef.current;
-    if (!mount) return;
-    const instance = createAvatar({ mount, avatar: optionsRef.current.avatar });
-    avatarClientRef.current = new AvatarClient(instance, {
-      onPresenceChange: (state) => {
-        setPresence(state);
-        optionsRef.current.onPresenceChange?.(state);
-      },
-      onRemoteAudioLevel: (level) => {
-        setBotAudioLevel(level);
-        optionsRef.current.onRemoteAudioLevel?.(level);
-      },
-    });
-    setAvatar(instance);
+    if (!mount || !client) return;
+    const factory = (create ?? createSvgAvatar) as AvatarFactory<O>;
+    // The cast is the seam between "O minus the two we supply" and O. It is
+    // sound by construction and TypeScript cannot see through the spread of a
+    // generic; the two halves are typed at the boundary the caller touches.
+    const instance = factory({ mount, client, ...optionsRef.current } as unknown as O);
+    return () => instance.destroy();
+    // A new client identity is a new thing to embody, so the avatar is rebuilt
+    // rather than re-pointed. Hosts keep one `PipecatClient` across
+    // connect/disconnect cycles, so this does not fire on an ordinary
+    // reconnect; if yours constructs a fresh client per session, expect the
+    // face to remount with it.
+  }, [client, create]);
 
-    return () => {
-      avatarClientRef.current?.destroy();
-      instance.destroy();
-      avatarClientRef.current = null;
-      setAvatar(null);
-      setPresence(null);
-      setBotAudioLevel(0);
-    };
-    // Mount once. `avatar` is read at mount time only — the widget has no
-    // hot-swap-avatar API (`createFace` runs once per mount), so changing it
-    // re-renders nothing here by design; a caller that needs a different face
-    // remounts with a `key` prop (see the component's doc).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const wrapper = avatarClientRef.current;
-    const pipecatClient = options.client;
-    if (!wrapper || !pipecatClient) return;
-    return wrapper.attach(pipecatClient);
-    // Re-subscribe when the widget mounts or the session's client changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avatar, options.client]);
-
-  return { containerRef, avatar, presence, botAudioLevel };
+  return { containerRef };
 }

@@ -218,7 +218,8 @@
 </div>
 
 <script type="module">
-import { createAvatar, AVATAR_NAMES, DEFAULT_AVATAR } from '../src/avatar.js';
+import { createAvatar } from '../src/avatar.js';
+import { FACES, FACE_NAMES, DEFAULT_FACE } from '../src/faces.js';
 import { createVAD } from './vad.js';
 import { Floor } from './floor.js';
 
@@ -234,7 +235,7 @@ const wanted = new URLSearchParams(location.search).get('avatar');
 let avatar = null;
 
 function build(name) {
-  const k = createAvatar({ mount: $('agentMount'), avatar: name });
+  const k = createAvatar({ mount: $('agentMount'), face: FACES[name] });
   // Both tiles are 16:9 in CSS. The rig is portrait, so fitting it leaves a
   // margin either side, and the whole job here is to stop that margin looking
   // like a margin. Two runtime numbers do it, and both come from the rig
@@ -275,8 +276,8 @@ function build(name) {
 }
 
 const sel = $('kAvatar');
-for (const n of AVATAR_NAMES) sel.append(new Option(n, n));
-sel.value = AVATAR_NAMES.includes(wanted) ? wanted : DEFAULT_AVATAR;
+for (const n of FACE_NAMES) sel.append(new Option(n, n));
+sel.value = FACE_NAMES.includes(wanted) ? wanted : DEFAULT_FACE;
 avatar = build(sel.value);
 
 const clips = await (await fetch('perf-clips.json')).json();

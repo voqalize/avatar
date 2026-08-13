@@ -197,6 +197,7 @@
 
 <script type="module">
 import { createAvatar } from '../../src/avatar.js';
+import { peep } from '../../src/face-peep.js';
 
 // The clip sets and their audio stay in demo/ — the call demo plays the
 // same files, and one copy of a hundred wavs is the point. Only the harness
@@ -208,7 +209,7 @@ const SETS = {
 };
 for (const s of Object.values(SETS)) s.clips = await (await fetch(DATA + s.file)).json();
 
-const avatar = createAvatar({ mount: document.getElementById('stage'), avatar: 'peep' });
+const avatar = createAvatar({ mount: document.getElementById('stage'), face: peep });
 const $ = (id) => document.getElementById(id);
 
 let setName = 'perf', i = 0, perfOn = true, track = 'sphinx';

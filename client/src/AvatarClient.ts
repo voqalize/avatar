@@ -51,10 +51,11 @@
  */
 
 import type { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
-import type { AvatarApi } from "../../src/avatar.js";
+import type { AvatarActionId, AvatarApi } from "../../src/avatar.js";
 import { BehaviorController } from "../../src/behavior.js";
 import {
   isAvatarMessage,
+  parseAvatarCommand,
   type AvatarCommand,
   type AvatarCue,
   type AvatarCuesCmd,
@@ -71,8 +72,8 @@ interface Turn {
 }
 
 /**
- * Internal. Not exported from the package — see `index.ts` for the public
- * surface, which is `<Avatar>` and nothing else.
+ * Internal. Not exported from the package — the public surface is
+ * `createAvatar({ mount, client })` and nothing else.
  *
  * There is deliberately no `accept` predicate here any more. Avatar commands
  * travel in one envelope, `{type:"avatar"}`, in both directions and from every
@@ -93,13 +94,16 @@ export interface AvatarClientOptions {
   /** Timer seams keep lifecycle behavior deterministic in tests. */
   setTimeout?: typeof setTimeout;
   clearTimeout?: typeof clearTimeout;
-  /** Read-only projection for surrounding call UI. It never changes avatar
-   * authority: Pipecat facts and server claims still resolve the face. */
+  /**
+   * Internal, for Studio's inspector — the resolved projection, so a developer
+   * tool can show what the lifecycle decided. It is *not* on the public
+   * surface and must not become one: a presence callback is a contract, and
+   * publishing it would oblige every avatar implementation to emit these seven
+   * states with this precedence, which is exactly the second public contract
+   * the design exists to avoid. See docs/removed.md § Presence and audio-level
+   * callbacks.
+   */
   onPresenceChange?: (state: AvatarPresenceState) => void;
-  /** The active remote speaker's gain (0…1), emitted only while Pipecat says
-   * the bot is speaking. This is presentation data for a meter/waveform, not
-   * a substitute for the bot-speaking lifecycle fact. */
-  onRemoteAudioLevel?: (level: number) => void;
 }
 
 /**
@@ -127,7 +131,6 @@ export const RTVI_EVENTS = {
   userStoppedSpeaking: "userStoppedSpeaking",
   botStartedSpeaking: "botStartedSpeaking",
   botStoppedSpeaking: "botStoppedSpeaking",
-  remoteAudioLevel: "remoteAudioLevel",
 } as const satisfies Record<string, string>;
 
 /** The resolved, factual presence state a host may render around the avatar. */
@@ -168,7 +171,6 @@ export class AvatarClient {
   private readonly idleDelayMs: number;
   private readonly setTimer: typeof setTimeout;
   private readonly clearTimer: typeof clearTimeout;
-  private remoteAudioLevel = 0;
 
   constructor(avatar: AvatarApi, opts: AvatarClientOptions = {}) {
     this.avatar = avatar;
@@ -190,18 +192,11 @@ export class AvatarClient {
     return this.turn ? [...this.turn.cues] : [];
   }
 
-  /** Current resolved presentation state. Before the first lifecycle fact the
-   * renderer is simply at its ready rest pose, so `LISTENING` is the safe
-   * value for a host that needs one. Hosts that distinguish an unstarted session
-   * should wait for `onPresenceChange` rather than treating this as a session
-   * status. */
+  /** Current resolved projection. Internal — for tests and Studio's inspector.
+   * Before the first lifecycle fact the renderer is simply at its ready rest
+   * pose, so `LISTENING` is the safe value; it is not a session status. */
   get presenceState(): AvatarPresenceState {
     return this.projected ?? "LISTENING";
-  }
-
-  /** Most recently observed active bot remote-audio gain, normalized 0…1. */
-  get botAudioLevel(): number {
-    return this.remoteAudioLevel;
   }
 
   /** Re-apply the currently resolved factual projection after an embedding
@@ -216,7 +211,8 @@ export class AvatarClient {
    * has never heard of, per the wire protocol's forward-compat rule. */
   dispatch(raw: unknown): void {
     if (!isAvatarMessage(raw)) return;
-    const msg: AvatarCommand = raw;
+    const msg = parseAvatarCommand(raw);
+    if (!msg) return;
     try {
       switch (msg.cmd) {
         case "claim":
@@ -246,7 +242,7 @@ export class AvatarClient {
     this.armIdleIfEligible();
   }
 
-  private handleAction(id: string): void {
+  private handleAction(id: AvatarActionId): void {
     // An interruption is a server-confirmed explanation of a transition, not
     // authority to steal the mouth while bot audio is still playing. Hold it
     // until playout has released the speaking state.
@@ -260,7 +256,7 @@ export class AvatarClient {
     this.playAction(id);
   }
 
-  private playAction(id: string): void {
+  private playAction(id: AvatarActionId): void {
     this.behavior.wireAction(id);
   }
 
@@ -402,7 +398,6 @@ export class AvatarClient {
     this.botSpeaking = true;
     this.clearClaimForTurnBoundary();
     this.idle = false;
-    this.setRemoteAudioLevel(0);
     this.clearIdleTimer();
     this.applyProjection();
     this.activateNextTurn();
@@ -410,7 +405,6 @@ export class AvatarClient {
 
   private onBotStoppedSpeaking = (): void => {
     this.botSpeaking = false;
-    this.setRemoteAudioLevel(0);
     // Playout truth releases the only active mouth track. A late cue chunk for
     // this context is ignored rather than reviving a silent mouth.
     if (this.turn) {
@@ -435,7 +429,6 @@ export class AvatarClient {
 
   private onDisconnected = (): void => {
     this.failure = "OFFLINE";
-    this.setRemoteAudioLevel(0);
     this.clearIdleTimer();
     this.applyProjection();
   };
@@ -449,20 +442,6 @@ export class AvatarClient {
     this.idle = false;
     this.applyProjection();
     this.armIdleIfEligible();
-  };
-
-  private setRemoteAudioLevel(level: number): void {
-    const next = Number.isFinite(level) ? Math.max(0, Math.min(1, level)) : 0;
-    if (next === this.remoteAudioLevel) return;
-    this.remoteAudioLevel = next;
-    this.opts.onRemoteAudioLevel?.(next);
-  }
-
-  private onRemoteAudioLevel = (level: number): void => {
-    // Audio level is deliberately decorative. There can be other remote
-    // participants; a level event is not permission to change the avatar's
-    // face or speaking state.
-    if (this.botSpeaking) this.setRemoteAudioLevel(level);
   };
 
   /**
@@ -485,7 +464,6 @@ export class AvatarClient {
       [RTVI_EVENTS.userStoppedSpeaking, this.onUserStoppedSpeaking],
       [RTVI_EVENTS.botStartedSpeaking, this.onBotStartedSpeaking],
       [RTVI_EVENTS.botStoppedSpeaking, this.onBotStoppedSpeaking],
-      [RTVI_EVENTS.remoteAudioLevel, this.onRemoteAudioLevel],
     ];
     for (const [event, listener] of subscriptions) client.on(event as RTVIEvent, listener as never);
     return () => {
@@ -497,7 +475,6 @@ export class AvatarClient {
   /** Dispose controller-owned timers when its mounted avatar is destroyed. */
   destroy(): void {
     this.clearIdleTimer();
-    this.setRemoteAudioLevel(0);
     this.behavior.destroy();
   }
 }

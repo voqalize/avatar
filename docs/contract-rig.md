@@ -1,8 +1,20 @@
 # Rig contract
 
-This is the contract between an avatar renderer and the behavior library. It
-is deliberately independent of SVG, WebGL, video, and any future rendering
-technology. The rig renders; it does not decide what the avatar is doing.
+> **This is not the seam to implement.** The public interface is
+> `createAvatar({ mount, client })` —
+> [design-avatar-interface.md](design-avatar-interface.md). What follows is the
+> bundled SVG implementation's internal parameter model: the shape the mixer
+> hands its renderer, and the reference an author of *our* faces works against.
+>
+> It reads like the renderer contract, and that heading is what sent a
+> non-SVG experiment (a Rive rig, removed 2026-08-12 — `docs/removed.md`) to the
+> wrong layer: it reconstructed a Rhubarb letter and a `CANT_HEAR` intent out of
+> pose floats that the wire had already stated plainly. A renderer that is not
+> ours should take `claim` / `action` / `cues` and never see this page.
+
+The contract between the mixer and a rig it drives. It is deliberately
+independent of SVG, WebGL, video, and any future rendering technology. The rig
+renders; it does not decide what the avatar is doing.
 
 ```ts
 export type RigChannel = string;

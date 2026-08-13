@@ -12,7 +12,7 @@ describe("AvatarClient dispatch", () => {
     client.dispatch({ type: "avatar", cmd: "claim", state: null });
 
     expect(calls.setState).toHaveLength(3);
-    expect(calls.setState.map(({ name }) => name)).toEqual(["THINKING", "TYPING", "LISTENING"]);
+    expect(calls.setState.map(({ name }) => name)).toEqual(["THINKING", "WORKING", "LISTENING"]);
   });
 
   it("routes all one-shot sequences through action()", () => {
@@ -61,9 +61,28 @@ describe("AvatarClient dispatch", () => {
     const onError = vi.fn();
     const client = new AvatarClient(api, { onError });
 
-    expect(() => client.dispatch({ type: "avatar", cmd: "action", id: "BOGUS" })).not.toThrow();
+    expect(() => client.dispatch({ type: "avatar", cmd: "action", id: "ACK_NOD" })).not.toThrow();
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0][0]).toBeInstanceOf(Error);
+  });
+
+  it("drops a command outside the vocabulary rather than handing it to the widget", () => {
+    const { api, calls } = createFakeAvatar();
+    const client = new AvatarClient(api);
+
+    // A newer server naming an action, a claim or a letter this build does not
+    // have. Each is dropped at the parse boundary — which is what lets every
+    // type below it be a closed union.
+    client.dispatch({ type: "avatar", cmd: "action", id: "BOGUS" });
+    client.dispatch({ type: "avatar", cmd: "claim", state: "BRAINSTORMING" });
+    expect(calls.action).toHaveLength(0);
+    expect(calls.setState).toHaveLength(0);
+
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [] });
+    (client as any).onBotStartedSpeaking();
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [{ t: 0, v: "A" }, { t: 50, v: "Z" }, { t: 100, v: "B" }] });
+    // The unreadable cue drops; the utterance around it survives.
+    expect(client.turnCues).toEqual([{ t: 0, v: "A" }, { t: 100, v: "B" }]);
   });
 
 });
@@ -223,10 +242,10 @@ describe("AvatarClient cue splice", () => {
     client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [] });
     (client as any).onBotStartedSpeaking();
     client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [{ t: 0, v: "A" }, { t: 100, v: "B" }] });
-    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 100, cues: [{ t: 100, v: "Z" }] });
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 100, cues: [{ t: 100, v: "E" }] });
 
-    // t:100/"B" must be discarded (t >= from_ms) and replaced by t:100/"Z".
-    expect(client.turnCues).toEqual([{ t: 0, v: "A" }, { t: 100, v: "Z" }]);
+    // t:100/"B" must be discarded (t >= from_ms) and replaced by t:100/"E".
+    expect(client.turnCues).toEqual([{ t: 0, v: "A" }, { t: 100, v: "E" }]);
   });
 });
 
@@ -244,29 +263,33 @@ describe("RTVI_EVENTS", () => {
     expect(RTVI_EVENTS.userStoppedSpeaking).toBe(RTVIEvent.UserStoppedSpeaking);
     expect(RTVI_EVENTS.botStartedSpeaking).toBe(RTVIEvent.BotStartedSpeaking);
     expect(RTVI_EVENTS.botStoppedSpeaking).toBe(RTVIEvent.BotStoppedSpeaking);
-    expect(RTVI_EVENTS.remoteAudioLevel).toBe(RTVIEvent.RemoteAudioLevel);
+  });
+
+  // `remoteAudioLevel` was subscribed only to relay a gain to a host waveform.
+  // Nothing in the projection ever read it, so the subscription was pure cost
+  // on a high-frequency event. Assert it stays gone.
+  it("does not subscribe to anything the projection does not use", () => {
+    const events = new Set<string>();
+    new AvatarClient(createFakeAvatar().api)
+      .attach({ on(event: string) { events.add(event); }, off() {} } as never);
+
+    expect(events.has("remoteAudioLevel")).toBe(false);
   });
 });
 
-describe("AvatarClient presentation data", () => {
-  it("reports resolved presence and decorates a waveform only during bot speech", () => {
+describe("AvatarClient projection", () => {
+  it("resolves back to listening once playout ends", () => {
     const fake = createFakeAvatar();
     const presence: string[] = [];
-    const levels: number[] = [];
-    const adapter = new AvatarClient(fake.api, { onPresenceChange: (state) => presence.push(state), onRemoteAudioLevel: (level) => levels.push(level) });
+    const adapter = new AvatarClient(fake.api, { onPresenceChange: (state) => presence.push(state) });
     const listeners = new Map<string, (...args: any[]) => void>();
     adapter.attach({ on(event: string, listener: (...args: any[]) => void) { listeners.set(event, listener); }, off() {} } as never);
 
-    listeners.get(RTVI_EVENTS.remoteAudioLevel)?.(.9);
-    expect(levels).toEqual([]);
     listeners.get(RTVI_EVENTS.botStartedSpeaking)?.();
-    listeners.get(RTVI_EVENTS.remoteAudioLevel)?.(.9);
     listeners.get(RTVI_EVENTS.botStoppedSpeaking)?.();
 
     expect(presence).toContain("SPEAKING");
-    expect(levels).toEqual([.9, 0]);
     expect(adapter.presenceState).toBe("LISTENING");
-    expect(adapter.botAudioLevel).toBe(0);
   });
 });
 
@@ -301,7 +324,7 @@ describe("AvatarClient authority resolver", () => {
     emit(RTVI_EVENTS.botStartedSpeaking);
     emit(RTVI_EVENTS.userStartedSpeaking);
 
-    expect(calls.setState.map((call) => call.name)).toEqual(["TYPING", "SPEAKING"]);
+    expect(calls.setState.map((call) => call.name)).toEqual(["WORKING", "SPEAKING"]);
   });
 
   it("keeps observed speech above a concurrent recoverable failure", () => {

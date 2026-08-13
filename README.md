@@ -9,18 +9,32 @@ your client already receives plus one custom RTVI message carrying lipsync
 metadata and semantic cues.
 
 No video track, no per-minute avatar vendor, no second media path. Three SVG
-avatars ship with it, you can author your own, and there is experimental
-support for [Rive](docs/rive-proof.md).
+faces ship with it — one drawing per entry point, so you pay for the one you
+import — and you can author your own.
+
+`createAvatar({ mount, client }) -> { destroy() }` is the entire public
+interface: the avatar is an embodiment of your `PipecatClient` and reacts to it.
+To ship a different one — a Rive rig, a WebGL head, anything — publish a module
+that exports `createAvatar` and import yours instead of ours. There is no
+registry and no plug-in system, and that is the design:
+[design-avatar-interface.md](docs/design-avatar-interface.md).
 
 ```sh
 npm install @voqalize/avatar      # the browser half
 pip install voqalize-avatar       # the pipecat half
 ```
 
-```jsx
-import { Avatar } from '@voqalize/avatar';
+```js
+import { createAvatar } from '@voqalize/avatar';
 
-<Avatar client={pipecatClient} avatar="peep" className="call-tile" />
+const avatar = createAvatar({ mount: el, client: pipecatClient });
+```
+
+```jsx
+import { Avatar } from '@voqalize/avatar/react';
+import { wren } from '@voqalize/avatar/faces/wren';   // `peep` is the default
+
+<Avatar client={pipecatClient} options={{ face: wren }} className="call-tile" />
 ```
 
 ```python
@@ -39,10 +53,11 @@ processor infers what the agent is doing from frames already flowing past it,
 |---|---|---|---|
 | backend | state inference from stock pipecat frames, the viseme legs | [`py/`](py/README.md) | [contract-protocol.md](docs/contract-protocol.md) |
 | aligner | A–H+X letters from text *and* from audio | [`native/avatarsync/`](native/avatarsync/README.md) | its own README |
+| avatar | `createAvatar({mount, client})`, the only public seam | `client/src/createAvatar.ts` | [design-avatar-interface.md](docs/design-avatar-interface.md) |
 | wire | `claim` / `action` / `cues`, nothing else | `client/src/AvatarClient.ts` | [contract-wire.md](docs/contract-wire.md) |
 | lifecycle | effective-state precedence, cue-clock anchor | `client/src/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
-| behavior | states, actions, state programs | `src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
-| rig | `apply({pose, hand})` / `destroy()`, renderer-agnostic | `src/rig.js` | [contract-rig.md](docs/contract-rig.md) |
+| behavior | states, actions | `src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
+| rig | `apply({pose, hand})` / `destroy()`, our SVG renderer's internals | `src/rig.js` | [contract-rig.md](docs/contract-rig.md) |
 | mixer | layer order, per-channel smoothing, gaze, idle, clips | `src/avatar.js` | [contract-protocol.md](docs/contract-protocol.md) |
 
 Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
@@ -113,24 +128,27 @@ Precedence table: [contract-behavior.md § Effective-state precedence](docs/cont
 What the client reads straight off pipecat, and what it deliberately refuses to
 infer: [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md).
 
-## The two frontend contracts
+## The frontend contract
 
-The frontend has two clear boundaries, deliberately at different altitudes.
+There is one, and it is small: `createAvatar({ mount, client }) -> { destroy() }`
+([design-avatar-interface.md](docs/design-avatar-interface.md)). An avatar is an
+embodiment of your `PipecatClient` and reacts to it. No methods to drive it, no
+callbacks to observe it, no state to read back.
 
-**The authoring contract is low level** —
-[contract-rig.md](docs/contract-rig.md), [`src/rig.js`](src/rig.js). Mouth
-shapes, eyelids, eyebrows, head pose, a hand gesture and its progress. Low-level
-control of the avatar behind a well-defined JavaScript contract, so avatar
-developers have a strong protocol to work against — and, more importantly, so
-different avatars can be trusted to work against the same one.
+What an avatar author actually needs to understand is therefore the *wire* —
+[contract-wire.md](docs/contract-wire.md) and
+[contract-behavior.md](docs/contract-behavior.md) — because states, actions and
+cues are all the avatar is ever told. `VisemeTrack` in
+`@voqalize/avatar/internal` turns a cue array plus a clock into the mouth shape
+for the current frame; every renderer needs that and none should write it twice.
 
-**The driving contract is higher level** —
-[contract-behavior.md](docs/contract-behavior.md),
-[`src/behavior.js`](src/behavior.js). States, actions and state programs, so the
-same logic applies across every avatar.
-
-The rig renders; it does not decide. No viewBox, crop, layer name, shader or
-asset handle crosses that seam.
+**There is deliberately no renderer interface.** The 30 pose channels in
+[contract-rig.md](docs/contract-rig.md) are how *our* SVG mixer talks to *our*
+faces. That page reads like the renderer seam, and a Rive experiment implemented
+it — reconstructing a viseme letter and a `CANT_HEAR` intent out of pose floats
+the wire had already stated plainly ([removed.md](docs/removed.md)).
+Designing a second public contract stays premature until a second renderer says
+what it needs.
 
 ## Design
 
@@ -168,33 +186,27 @@ itself a cue. Where the constants come from:
 [research-biomechanics.md](docs/research-biomechanics.md) (how it moves) and
 [research-perception.md](docs/research-perception.md) (how it is read).
 
-## The avatars
-
-An avatar is a small JavaScript interface: a factory that takes a mount
-element, and an `apply()`.
-
-```js
-const myRig = (mount, options) => ({
-  apply({ pose, hand }) { /* render one frame */ },
-  destroy() {},
-});
-
-createAvatar({ mount, rig: myRig });
-```
+## The faces
 
 Three ship today, all hand-authored line art in `src/face-*.js`: **`peep`** (the
-default and the one under active work), **`wren`**, **`myna`**. Our avatars are
-SVG art, but the contract is renderer-neutral — `studio/src/rive-bob.ts` drives
-a Rive file through the same `apply({pose, hand})` and proves it. That is
-integration feasibility, not visual parity ([rive-proof.md](docs/rive-proof.md)).
-Bring your own approach if you need to.
+default and the one under active work), **`wren`**, **`myna`**. Each is its own
+entry point, and you pass the value rather than a name:
 
-The intention is a plug-and-play option for creating new avatars. **The
-interface exists; dynamic registration does not yet** — `AVATARS` in
-`src/avatar.js` is a static registry, and a rig outside it is handed to
-`createAvatar({ rig })` directly.
+```js
+import { myna } from '@voqalize/avatar/faces/myna';
 
-Authoring one is a staged process that starts from a reference image rather
+createAvatar({ mount, client, face: myna });
+```
+
+A name would need a table, and a table is a dynamic index no bundler can shake
+— three drawings in every consumer's bundle to render one. `src/faces.js` still
+has that table, for tooling that genuinely wants all of them.
+
+A whole different rendering technology is not a face; it is a different
+`createAvatar`, published as its own module — that is the design, and why there
+is no registry ([design-avatar-interface.md](docs/design-avatar-interface.md)).
+
+Authoring a face is a staged process that starts from a reference image rather
 than a text brief:
 [contract-avatar.md § Adding a new avatar](docs/contract-avatar.md).
 

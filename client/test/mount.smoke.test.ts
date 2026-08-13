@@ -42,15 +42,15 @@ afterEach(() => {
 });
 
 describe("createAvatar mount (jsdom)", () => {
-  it("mounts the default avatar, accepts every state, and destroys cleanly", async () => {
-    const { createAvatar, STATE_NAMES, DEFAULT_AVATAR } = await import("../../src/avatar.js");
+  it("mounts the default face, accepts every state, and destroys cleanly", async () => {
+    const { createAvatar, STATE_NAMES } = await import("../../src/avatar.js");
+    const { FACES, DEFAULT_FACE } = await import("../../src/faces.js");
 
     const mount = document.createElement("div");
     document.body.appendChild(mount);
 
-    const avatar = createAvatar({ mount });
+    const avatar = createAvatar({ mount, face: FACES[DEFAULT_FACE] });
 
-    expect(DEFAULT_AVATAR).toBeTruthy();
     expect(avatar.svg).toBeTruthy();
     expect(avatar.svg.isConnected).toBe(true);
     expect(avatar.state).toBe("IDLE");
@@ -66,19 +66,19 @@ describe("createAvatar mount (jsdom)", () => {
     document.body.removeChild(mount);
   });
 
-  it("mounts every registered avatar and tears each one down", async () => {
-    // The registry is the thing a consumer picks from by name, so an avatar
-    // that cannot be constructed from its own registry key is a broken public
-    // surface even if `sweep()` in a real browser is the test that judges it.
-    const { createAvatar, AVATAR_NAMES } = await import("../../src/avatar.js");
+  it("mounts every face we ship and tears each one down", async () => {
+    // src/faces.js is the one module that names all three, so it is also the
+    // one place a face can go missing from without anything else noticing.
+    const { createAvatar } = await import("../../src/avatar.js");
+    const { FACES, FACE_NAMES } = await import("../../src/faces.js");
 
-    expect(AVATAR_NAMES.length).toBeGreaterThan(0);
+    expect(FACE_NAMES.length).toBeGreaterThan(0);
 
-    for (const name of AVATAR_NAMES) {
+    for (const name of FACE_NAMES) {
       const mount = document.createElement("div");
       document.body.appendChild(mount);
 
-      const avatar = createAvatar({ mount, avatar: name });
+      const avatar = createAvatar({ mount, face: FACES[name] });
       expect(mount.contains(avatar.svg), `${name} did not mount`).toBe(true);
       expect(avatar.meta.viewBox.w, `${name} has no viewBox width`).toBeGreaterThan(0);
 

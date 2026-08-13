@@ -773,3 +773,10 @@ export function createFace(mount, theme = {}, options = {}) {
 
   return faceApi(mount, svg, apply, t);
 }
+
+/**
+ * This face as a **Face** record — `{ create, meta }`, the shape
+ * `createAvatar({ face })` takes. Importing it costs this drawing and nothing
+ * else; `src/faces.js` is the all-three table, for tooling.
+ */
+export const peep = { create: createFace, meta: META };

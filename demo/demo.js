@@ -2,7 +2,8 @@
  * Demo harness. Stands in for the server: every control here corresponds to
  * something the call backend would send.
  */
-import { createAvatar, ACTIONS, ACTION_IDS, STATE_NAMES, AVATAR_NAMES, DEFAULT_AVATAR } from '../src/avatar.js';
+import { createAvatar, ACTIONS, ACTION_IDS, STATE_NAMES } from '../src/avatar.js';
+import { FACES, FACE_NAMES, DEFAULT_FACE } from '../src/faces.js';
 import { GAZE_NAMES } from '../src/gaze.js';
 import { EMOTION_NAMES } from '../src/emotions.js';
 import { VISEME_LETTERS, textToCues, shapeFor } from '../src/visemes.js';
@@ -10,9 +11,9 @@ import { REST, CHANNELS } from '../src/params.js';
 
 // Which face the rig wears. A real host would pick this once at boot from the
 // host config; here it comes off the query string.
-const avatarName = new URLSearchParams(location.search).get('avatar') || DEFAULT_AVATAR;
+const avatarName = new URLSearchParams(location.search).get('avatar') || DEFAULT_FACE;
 
-const avatar = createAvatar({ mount: '#avatar', avatar: avatarName });
+const avatar = createAvatar({ mount: '#avatar', face: FACES[avatarName] });
 window.avatar = avatar; // poke at it from the console
 
 // Frame the stage to the avatar's own aspect ratio, from its descriptor.
@@ -34,7 +35,7 @@ const mk = (tag, cls, text) => {
 // below closes over the rig, and a live swap would have to rebuild all of them
 // for no gain — the server picks an avatar once per call, not mid-sentence.
 const pick = $('#avatarPick');
-for (const name of AVATAR_NAMES) {
+for (const name of FACE_NAMES) {
   const b = mk('button', name === avatarName ? 'chip on' : 'chip', name);
   b.onclick = () => { location.search = `?avatar=${encodeURIComponent(name)}`; };
   pick.appendChild(b);

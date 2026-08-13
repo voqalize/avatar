@@ -29,12 +29,12 @@
 import { makeParams, REST, CHANNELS, TAU, RANGE, clamp, approach } from '../../src/params.js';
 import { ClipPlayer } from '../../src/clips.js';
 import { INTERNAL_CLIPS } from '../../src/interjections.js';
-import { AVATARS, DEFAULT_AVATAR } from '../../src/avatar.js';
+import { FACES, DEFAULT_FACE } from '../../src/faces.js';
 
 const q = new URLSearchParams(location.search);
-const which = q.get('face') || DEFAULT_AVATAR;
-const entry = AVATARS[which];
-if (!entry) throw new Error(`no avatar "${which}" — have ${Object.keys(AVATARS)}`);
+const which = q.get('face') || DEFAULT_FACE;
+const entry = FACES[which];
+if (!entry) throw new Error(`no avatar "${which}" — have ${Object.keys(FACES)}`);
 const createFace = entry.create;
 const clip = INTERNAL_CLIPS[q.get('clip') || 'SHRUG'];
 const N = Number(q.get('n') || 16);
