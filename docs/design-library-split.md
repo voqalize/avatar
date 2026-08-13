@@ -262,8 +262,14 @@ native/avatarsync/      the rhubarb fork: patch, src, build.sh, binaries
 docs/                   the contracts, binding for both packages
   removed.md            what 0.2 cut from the public surface, and how to undo it
 package.json            @voqalize/avatar, one export
+studio/                 Avatar Studio — vite + React, the review environment
 demo/ tools/            the rig demos and the headless verification tooling
+experiments/            server-side spikes; ships nowhere near the widget
 ```
+
+`studio/` is the second compiled tree and the second exception to "no build
+step" (`client/` is the first). Nothing in `src/` may depend on either — what
+you screenshot in a rig page is what ships.
 
 `py/scripts/fit_durations.py` fits the per-phone weights in
 `duration_table.json`, which the fast viseme leg reads, so it lives beside the

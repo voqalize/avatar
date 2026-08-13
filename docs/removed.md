@@ -40,8 +40,8 @@ longer such a server — `AvatarProcessor` is a `pip install` and a line in the
 pipeline, and it always sends cues. What the fallback actually bought in
 practice was a *worse* mouth that was hard to tell apart from a broken one:
 when lipsync looked wrong, the first question was always "is this the fallback
-or the real track?". Mouth sync is the headline feature (CLAUDE.md constraint
-2), and a second, lower-fidelity mouth path standing behind it is a liability
+or the real track?". Mouth sync is the headline feature (CLAUDE.md
+§ Constraints), and a second, lower-fidelity mouth path standing behind it is a liability
 rather than a safety net.
 
 **Instead:** run the processor. If it cannot start — no aligner for the

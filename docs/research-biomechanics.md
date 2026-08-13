@@ -407,7 +407,7 @@ Note the interaction with our smoothing: a 1.5 Hz nod against `headPitch`'s
 1/√(1+1.51²) = **0.55** and lag is arctan(1.51) = **56°** (≈104 ms). A 1.0 Hz
 nod attenuates to 0.71 and lags 45°. Authored amplitudes must be roughly
 **1.4–1.8× the intended rendered amplitude** in this band — consistent with the
-`NOD_SMALL` note already in CLAUDE.md.
+nod pre-compensation rule in CLAUDE.md § Constraints.
 
 ### 3.5 What makes an artificial listener feel attentive vs. creepy
 

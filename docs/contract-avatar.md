@@ -1,24 +1,26 @@
-# Legacy SVG implementation contract
+# Authoring an SVG avatar
 
-> The renderer-agnostic binding contract is now
-> [contract-rig.md](contract-rig.md). This document remains the implementation
-> guide for the existing SVG adapters—`createFace`, SVG `META`, and the static
-> pages that have not yet moved to Studio. New SVG work should satisfy the rig
-> contract first and use these details only inside its adapter.
+How to build a face for this project. The binding seam is
+[contract-rig.md](contract-rig.md) — `apply(frame)`, `destroy()`, and the 30
+pose channels every rig renders. This document is the layer beneath it: what an
+SVG face module supplies, what `face-core.js` gives it for free, and the staged
+process for adding a new character. A non-SVG renderer needs only the rig
+contract and can ignore everything here.
 
 *Living document. Describes the code as of `src/face*.js` on `main`; the
-[Direction](#direction) section flags what is about to change. The counterpart
-contract — what the server drives — is
-[contract-protocol.md](contract-protocol.md).*
+[Direction](#direction) section flags what is about to change.*
 
 An avatar is a module exporting exactly this, and nothing more:
 
 ```js
-createFace(mount, theme) -> { svg, apply(params), theme, destroy() }
+createFace(mount, theme, options?) -> { svg, apply(params), theme, destroy() }
 META = { viewBox: {x, y, w, h}, mouthCrop: {x, y, w, h} }
 ```
 
 - `mount` — element to render into. `destroy()` empties it.
+- `options` — authoring escape hatches only, never a host surface. The one that
+  exists is `{ pitchRig: false }` on peep, for the comparison lab (see The pitch
+  rig). A face may ignore the argument entirely; wren and myna do.
 - `theme` — optional per-key colour overrides merged over the rig's palette;
   the merged object is returned as `theme`. Theme *keys* are per-avatar
   (peep and wren carry 8 each; the retired rigs shared a ~25-key palette).
@@ -51,64 +53,11 @@ it needs anything outside `src/face*.js`, it's a bug.
   an unchanged channel costs nothing. ~60 calls/s is the budget.
 - **Never write `viewBox`.** Every pose channel is a transform or a path,
   never the camera. Tooling relies on this to crop safely after `apply()`.
-- **Honour the channel's *semantic*, not its plumbing.** The channel value is
-  what an author of `visemes.js`/`emotions.js` — who never sees your rig —
-  thinks they are asking for. The standing example: `mouthOpen` denotes the
-  *visible aperture*. peep initially mapped it to the gap between lip
-  centrelines; the drawn lip band was ~11 units thick, so the mouth stayed
-  visibly shut until 0.25 and two of the nine visemes live below that. The fix
-  was to solve back from aperture to control points, not to re-tune the
-  visemes.
-
-## The parameter vector
-
-30 float channels (`src/params.js`). Rest is the neutral face; range is the
-post-mix clamp; τ is the smoothing time constant the mixer applies (the face
-never does). Sign conventions are from the *viewer's* perspective.
-
-| channel | rest | range | τ (s) | means |
-|---|---|---|---|---|
-| `mouthOpen` | 0.02 | 0..1 | 0.042 | visible vertical aperture |
-| `mouthWidth` | 0.42 | 0..1 | 0.042 | narrow..wide (0.42 neutral) |
-| `mouthRound` | 0.10 | 0..1 | 0.042 | pucker / protrusion |
-| `mouthPress` | 0.15 | 0..1 | 0.042 | lips thinned & pressed |
-| `mouthTuck` | 0 | 0..1 | 0.042 | lower lip under upper teeth (F/V) |
-| `mouthCornerL/R` | 0.10 | −1.4..1.4 | 0.13 | −frown..+smile |
-| `teethUpper` | 0 | 0..1 | 0.042 | upper-teeth reveal |
-| `tongue` | 0 | 0..1 | 0.042 | tongue raised into aperture (L) |
-| `jaw` | 0 | 0..1 | 0.07 | extra chin drop, lags the lips |
-| `lidL/R` | 0.12 | 0..1 | 0.018 | 0 wide open..1 closed; rest grazes the iris |
-| `squintL/R` | 0 | 0..1 | 0.12 | lower lid raised (smile/suspicion) |
-| `pupilX/Y` | 0 / 0.05 | −1..1 | 0.032 | gaze offset, +right / +down |
-| `browRaiseL/R` | 0 | −1..1 | 0.08 | whole-brow lift |
-| `browAngleL/R` | 0 | −1.4..1.4 | 0.08 | outer-end up |
-| `browInnerL/R` | 0 | −1..1 | 0.08 | inner-end lift (AU1, "concern") |
-| `headYaw` | 0 | −1.4..1.4 | 0.16 | + toward viewer's right |
-| `headPitch` | 0 | −1.4..1.4 | 0.16 | + chin down |
-| `headRoll` | 0 | −1.4..1.4 | 0.16 | + tilt toward viewer's right |
-| `breath` | 0 | 0..1 | 0.25 | idle-driven breathing cycle |
-| `shoulderL/R` | 0 | −1..1 | 0.19 | −dropped..+raised |
-| `torsoLean` | 0 | −1..1 | 0.24 | −back..+forward; reads as scale change |
-| `torsoTurn` | 0 | −1..1 | 0.44 | trunk lateral travel, + toward viewer's right |
-
-Groups (`GROUPS`): `mouth`, `smile`, `eyes`, `gaze`, `brows`, `head`, `body`
-(breath + torsoLean + torsoTurn), `shoulders` — clips declare group ownership by
-them.
-
-`torsoTurn`'s time constant is nearly 3× the head's, and that ratio is load-
-bearing rather than taste: the mixer feeds it the *same* target as `headYaw`
-(scaled by `TRUNK_FOLLOW = 0.45` in `avatar.js`), so a sustained head turn is
-chased by a trunk that leaves late and settles late. Follow-through falls out of
-the smoothing the rig already had; there is no second animation system. Shorten
-it toward 0.16 and head and trunk move as one rigid piece, which is the puppet
-read.
-
-A face should consume all 30. One sanctioned exception exists: peep ignores
-`jaw` (its construction has no drawn jaw line to drop — a documented character
-decision, not an oversight).
-
-There are deliberately **no arm or hand channels**; see the note in
-`params.js` before considering any.
+- **Honour the channel's semantic, not its plumbing** — the standing
+  `mouthOpen` example is in
+  [contract-rig.md § The pose channels](contract-rig.md), with the full
+  channel table, rest values, ranges and sign conventions. A face consumes all
+  30 and eases none of them.
 
 ## Invariant vs per-avatar
 
@@ -158,6 +107,51 @@ What legitimately varies per avatar, and stays in the face module:
 
 Do not chase parity between faces: they are separate drawings, not renderings
 of one drawing. A visual improvement lands in one face and stops there.
+
+## The pitch rig — optional, and what makes a nod a nod
+
+A face with one `head` group can only translate it vertically for `headPitch`,
+which reads as a *bob*. A nod needs the neck to stay behind an independently
+movable skull. That is the whole reason this exists; it adds grouping and
+calibration, never per-expression replacement paths.
+
+Split the old `head` group in two — `neck` (fill and contour marks, running
+behind the collar) and `skull` (ears, silhouette, jaw-under mark, head-locked
+hair underlay) — alongside the existing `features`, `hair` and `body`. No paths
+need redrawing for a first migration: the neck must simply run behind the skull
+far enough to stay covered across its pitch range.
+
+Then supply one `pitch` block beside the `POSE` constants — six geometry
+numbers, normally found by putting the hinge at the base of the jaw and
+reviewing a `NOD_SLOW` strip at tile size:
+
+```js
+pitch: {
+  headLayers: ['skull', 'features', 'hair'], neckLayer: 'neck',
+  hinge: { x: CX, y: 620 }, neckBase: { x: CX, y: 720 },
+  headTravel: 1.0, neckTravel: 0.22,
+  foreshorten: 0.040, neckCompress: 0.034,
+}
+```
+
+`face-core.js` does the rest: the head layers move as one surface about the
+hinge and take a small vertical foreshortening, so the silhouette and feature
+spacing change at the nod's arrival; the neck moves a fraction as far and
+compresses toward the collar; the body stays independent, so its existing
+shoulder timing acts as secondary motion. Yaw, roll, lipsync and gaze are
+untouched.
+
+**It is optional.** A face with no `pitch` block keeps the legacy translate, and
+`createFace(mount, theme, { pitchRig: false })` forces that path for A/B review
+(`demo/rig/pitch-rig-lab.html`). `peep` is calibrated; `wren` and `myna` are not.
+
+Accept it when the jaw meets the neck at every sampled `headPitch` with no
+background gap or collar leak, and when at production tile size `NOD_SMALL`
+reads as an acknowledgement and `NOD_SLOW` as a deliberate receipt without the
+face looking squashed. **The helper cannot produce real out-of-plane rotation.**
+If a group-level correction still reads as squash, the next escalation is two
+authored correction shapes (`pitchDown`, `pitchUp`) for skull, lower face and
+neck — not more keyframe tuning.
 
 ## Art units
 

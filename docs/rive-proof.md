@@ -1,38 +1,28 @@
 # Rive rig proof
 
-Studio now has a temporary `rive-bob` avatar option. It uses the downloaded
-`28111-53105-bob-lip-sync-character-system-in-rive.riv` file through the Rive
-canvas runtime and keeps the existing `AvatarRig` contract unchanged:
-
-```ts
-apply({ pose, hand })
-destroy()
-```
-
-The asset was selected from the downloaded set because its embedded names show
-the closest semantic surface to our rig: `Viseme X` and `Viseme A`–`H`,
-`pupils_X/Y`, `Head_Rotation_X/Y`, eyebrow controls, `mouth_mood`, breath, and
-the `Lip Sync`, `Pupils`, and `Poses` state machines. The other candidates are
-primarily timeline/idle/gesture assets or expose less of the speech surface.
-
-The adapter discovers the actual state-machine input names and types after the
-file loads and prints the report as `Rive Bob contract` in the Studio console.
-Unknown controls are safely ignored, so the bridge remains compatible with
-the downloaded asset rather than pretending it has the full SVG channel set.
-
-Run the experiment with:
+Experimental, and a feasibility proof rather than a shipped avatar: Studio has a
+`rive-bob` option that drives a Rive file through the unchanged
+[rig contract](contract-rig.md) — `apply({pose, hand})` and `destroy()`.
+`studio/src/rive-bob.ts` is the whole adapter.
 
 ```sh
-npm run studio:dev
+npm run studio:dev      # choose `rive-bob` in the Studio avatar selector
 ```
 
-Choose `rive-bob` in the Studio avatar selector, then use Rig review, Rig
-visemes, and Gesture review. The adapter maps the existing pose vector to the
-asset's numeric inputs and maps the semantic hand frame to Bob's private pose
-selector. The downloaded file is not modified; `demo/rive/bob.riv` is only a
-symlink to the Downloads copy.
+The asset (`demo/rive/bob.riv`, a checked-in copy of a downloaded community
+file) was picked because its embedded names sit closest to our rig's semantic
+surface: `Viseme X` and `Viseme A`–`H`, `pupils_X/Y`, `Head_Rotation_X/Y`, brow
+controls, `mouth_mood`, breath, and the `Lip Sync`, `Pupils` and `Poses` state
+machines. The other candidates are timeline/idle/gesture assets that expose less
+of the speech surface.
 
-This proves integration feasibility, not visual parity. The immediate next
-authoring pass would be to replace the heuristic viseme selector with exact
-input ranges from the runtime report and decide whether Bob's pose machine can
-provide sufficiently readable hand actions for production.
+The adapter discovers the actual state-machine input names and types after the
+file loads and prints them as `Rive Bob contract` in the Studio console. Unknown
+controls are ignored, so the bridge stays compatible with the asset it was given
+rather than pretending it has the full SVG channel set. The semantic hand frame
+maps onto Bob's private pose selector.
+
+**This proves integration feasibility, not visual parity.** The next authoring
+pass would replace the heuristic viseme selector with exact input ranges from
+the runtime report, and decide whether Bob's pose machine can carry readable
+hand actions at all.

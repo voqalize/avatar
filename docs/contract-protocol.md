@@ -1,16 +1,17 @@
-# Contract A — server ↔ widget (the driving protocol)
+# Mixer contract — the driving API
 
 *Living document. Describes the code as of `src/avatar.js` on `main`; the
-[Direction](#direction) section flags what is about to change. The counterpart
-contract — what a face module owes the mixer — is
-[contract-avatar.md](contract-avatar.md).*
+[Direction](#direction) section flags what is about to change. What a renderer
+owes the mixer is [contract-rig.md](contract-rig.md); how to author an SVG face
+against it is [contract-avatar.md](contract-avatar.md).*
 
-This is the legacy SVG API reference. The binding runtime contract is now split
-into [contract-wire.md](contract-wire.md) and
-[contract-behavior.md](contract-behavior.md): Pipecat supplies local facts,
-the server supplies claims/actions/cues, and the client resolves behavior. The
-API below remains useful for legacy SVG implementation and local behavior
-authoring; it is not the server wire vocabulary.
+**This is not the server wire vocabulary.** That is
+[contract-wire.md](contract-wire.md) (three commands) plus
+[contract-behavior.md](contract-behavior.md) (how the client resolves them):
+Pipecat supplies local facts, the server supplies claims/actions/cues, and the
+client resolves behavior. What follows is the mixer's own driving API — the
+full `setState`/`speak`/`perform` surface underneath that, which local tooling
+and behavior authoring still drive directly.
 
 Everything below is reachable from one import:
 
@@ -26,12 +27,12 @@ unknown emotion falls back to `neutral` silently; unknown gaze falls back to
 
 ## States — `setState(name, { emotion?, intensity?, gaze?, keepGaze? })`
 
-> Runtime wire note: application code may still use this legacy SVG API
-> directly, but the Pipecat wire does **not** send arbitrary states. It sends
-> lower-priority `claim` values (`THINKING`, `WORKING`, or `null`) and
-> self-completing `action` ids. The browser resolves factual speech states from
-> Pipecat first; `WORKING` is a behavior state whose current client program
-> selects the legacy `TYPING` renderer pose.
+> Runtime wire note: application code may drive these directly, but the Pipecat
+> wire does **not** send arbitrary states. It sends lower-priority `claim`
+> values (`THINKING`, `WORKING`, or `null`) and self-completing `action` ids.
+> The browser resolves factual speech states from Pipecat first; `WORKING` is a
+> behavior state whose current client program selects the `TYPING` render
+> pose.
 
 A state is a *condition*, not an event: it holds until replaced. Each state
 bundles a default gaze, emotion and idle-energy level. Passing `emotion`/`gaze`
