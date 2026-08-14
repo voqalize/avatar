@@ -70,6 +70,7 @@
     "build": "tsc -p client/tsconfig.json",
     "typecheck": "tsc -p client/tsconfig.json --noEmit",
     "test": "vitest run",
+    "demo:vendor": "esbuild demo/pipecat/vendor.entry.js --bundle --format=esm --outfile=demo/pipecat/vendor/pipecat.js",
     "studio:dev": "npm --prefix studio run dev",
     "studio:build": "npm --prefix studio run build",
     "studio:typecheck": "npm --prefix studio run typecheck",
@@ -93,8 +94,10 @@
   },
   "devDependencies": {
     "@pipecat-ai/client-js": "1.7.0",
+    "@pipecat-ai/small-webrtc-transport": "^1.10.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "esbuild": "^0.25.0",
     "jsdom": "^25.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

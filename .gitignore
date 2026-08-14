@@ -8,6 +8,10 @@ tmp/
 # only the TypeScript client does.
 client/dist/
 studio/dist/
+# Third-party JS the pipecat demo pre-bundles so a browser can load it
+# (`npm run demo:vendor`). Nothing of ours is in it — see vendor.entry.js.
+demo/pipecat/vendor/
+__pycache__/
 # Staged by py/scripts/stage_native.py just before a wheel build: the aligner
 # binary and its 56 MB model tree. It is a build input, never a source file —
 # the canonical copies are produced by .github/workflows/native.yml.

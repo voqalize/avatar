@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
-# Build the `avatarsync` resident binary from pristine rhubarb-lip-sync 1.14.0
-# plus patches/avatarsync-1.14.0.patch, and materialise the model tree it needs.
+# Build libavatarsync from pristine rhubarb-lip-sync 1.14.0 plus
+# patches/avatarsync-1.14.0.patch, and materialise the model tree it needs.
 #
 #   ./build.sh                 # fetch (cached), patch, compile, install
 #   ./build.sh --res-only      # just materialise res/ from the tarball
 #   ./build.sh --recipe-id     # print the compile-input hash, do nothing else
 #   ./build.sh --clean         # drop .build/ first
 #
-# Outputs, both relative to this directory:
-#   bin/<platform>/avatarsync           the binary for the host platform (committed)
-#   bin/<platform>/avatarsync.recipe    what it was compiled FROM (committed)
-#   res/sphinx/…                        cmudict + phonetic LM + acoustic model
-#                                       (NOT committed — 56 MB, and identical on
-#                                       every platform, so build.sh regenerates it)
+# There is no command-line program here on purpose. The only native artifact is a
+# shared library exposing the C ABI in src/avatarsync.h; the `voqalize-avatar`
+# command that ships on PyPI is Python, and loads this. One artifact means one
+# thing to build, sign and platform-test, and it removes a whole class of bug in
+# which the binary and the library disagree.
+#
+# Outputs, all relative to this directory:
+#   bin/<platform>/libavatarsync.<so|dylib>   the library (committed)
+#   bin/<platform>/avatarsync.recipe          what it was compiled FROM (committed)
+#   res/sphinx/…                              cmudict + phonetic LM + acoustic
+#                                             model (NOT committed — 56 MB, and
+#                                             identical on every platform, so
+#                                             build.sh regenerates it)
 #
 # The upstream source is 85 MB and is NOT vendored in git. It is fetched from
 # GitHub and checked against a pinned sha256; the only upstream bytes we own are
@@ -61,8 +68,8 @@ fi
 # It exists so a committed binary can say what it was built from. build.sh
 # writes it beside the binary after a real compile; build-rhubarb.sh compares it
 # before packaging one, and refuses on a mismatch. Without that, editing
-# avatarsync.cpp and forgetting to rebuild ships the OLD binary under a NEW
-# artifact id — green build, stale behaviour, no error anywhere.
+# core.cpp and forgetting to rebuild ships the OLD library under a NEW artifact
+# id — green build, stale behaviour, no error anywhere.
 #
 # Defined here rather than in build-rhubarb.sh so there is exactly one
 # definition: two copies of a hash that must agree would eventually disagree,
@@ -125,7 +132,9 @@ if [ ! -f "$TREE/.avatarsync-patched" ]; then
 fi
 
 mkdir -p "$TREE/rhubarb/src/avatarsync"
-cp "$HERE/src/avatarsync.cpp" "$TREE/rhubarb/src/avatarsync/avatarsync.cpp"
+cp "$HERE/src/core.h" "$HERE/src/core.cpp" \
+   "$HERE/src/avatarsync.h" "$HERE/src/capi.cpp" \
+   "$TREE/rhubarb/src/avatarsync/"
 
 # --- res ----------------------------------------------------------------------
 # Only what the two legs actually read. Upstream's CMake also copies
@@ -161,12 +170,12 @@ fi
 # toolchain's libstdc++ is newer than the base image's. Costs ~1.5 MB.
 #
 # macOS: pin the deployment target. Clang defaults it to the *host's* OS
-# version, so a binary built on the newest macOS silently refuses to run on
+# version, so a library built on the newest macOS silently refuses to load on
 # anything older — including the machine of the next person to clone this repo.
 case "$PLATFORM" in
-	linux-*)  EXTRA_LINK="-static-libstdc++ -static-libgcc"; EXTRA_OSX="" ;;
-	darwin-*) EXTRA_LINK=""; EXTRA_OSX="-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0" ;;
-	*)        EXTRA_LINK=""; EXTRA_OSX="" ;;
+	linux-*)  EXTRA_LINK="-static-libstdc++ -static-libgcc"; EXTRA_OSX=""; LIBEXT=so ;;
+	darwin-*) EXTRA_LINK=""; EXTRA_OSX="-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"; LIBEXT=dylib ;;
+	*)        echo "unsupported platform: $PLATFORM" >&2; exit 1 ;;
 esac
 
 # --- compile ------------------------------------------------------------------
@@ -184,20 +193,32 @@ cmake -S "$TREE" -B "$TREE/build" \
 	-DCMAKE_BUILD_TYPE=Release \
 	-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
 	$EXTRA_OSX \
+	-DCMAKE_SHARED_LINKER_FLAGS="$EXTRA_LINK" \
 	-DCMAKE_EXE_LINKER_FLAGS="$EXTRA_LINK" \
 	-DCMAKE_C_FLAGS="-ffile-prefix-map=$TREE=." \
 	-DCMAKE_CXX_FLAGS="-ffile-prefix-map=$TREE=." >&2
 
-echo ">> building avatarsync ($PLATFORM)" >&2
+echo ">> building libavatarsync ($PLATFORM)" >&2
 cmake --build "$TREE/build" --target avatarsync -j "$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)" >&2
 
+LIB="libavatarsync.$LIBEXT"
 mkdir -p "$HERE/bin/$PLATFORM"
-cp "$TREE/build/rhubarb/avatarsync" "$HERE/bin/$PLATFORM/avatarsync"
-strip "$HERE/bin/$PLATFORM/avatarsync" 2>/dev/null || true
+cp "$TREE/build/rhubarb/$LIB" "$HERE/bin/$PLATFORM/$LIB"
+
+# Strip local symbols only. A plain `strip` on a shared library removes the
+# global symbol table too, and the result loads but exports nothing — dlsym
+# returns NULL for every avs_* name and the binding fails with a message that
+# says the symbol is missing rather than that the library was mangled after
+# linking. `-x` on macOS, `--strip-unneeded` on GNU binutils, both meaning
+# "keep what a dynamic linker needs".
+case "$PLATFORM" in
+	darwin-*) strip -x "$HERE/bin/$PLATFORM/$LIB" 2>/dev/null || true ;;
+	linux-*)  strip --strip-unneeded "$HERE/bin/$PLATFORM/$LIB" 2>/dev/null || true ;;
+esac
 
 # Stamp what it was built from, right next to it. This is the ONLY thing that
 # writes a .recipe — so a binary carrying one has, by construction, been through
 # this compile. Commit the two together or the guard fires.
 recipe_hash > "$HERE/bin/$PLATFORM/avatarsync.recipe"
 
-echo "$HERE/bin/$PLATFORM/avatarsync"
+echo "$HERE/bin/$PLATFORM/$LIB"

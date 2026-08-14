@@ -36,19 +36,24 @@ halves of the viseme pipeline on the wire, and has since our declared floor:
   (`TTSTextFrame` subclasses it and also sets the flag — those are the
   per-word karaoke frames, and the `not isinstance` guard is what separates them.
   It is the same discriminator pipecat's own sequencer uses.)
+- **The audio itself** is every `TTSAudioRawFrame`, forwarded one at a time. The
+  accurate leg is a live decode, so a frame is worth feeding the moment it
+  exists; nothing here accumulates or waits for a boundary.
 - **That sentence's audio is complete** is `AggregatedTextProgressFrame` with an
   empty `remaining_text` — the last word of the slot. It is derived from the word
   stream, so it is appended to the same per-context audio queue as the samples and
-  arrives strictly *behind* them. That is what makes the cut exact, and it is why
-  the old self-queued `SentenceBoundaryFrame` is gone: the signal now travels the
-  pipeline in position instead of racing it.
-- **The sample rate** is `StartFrame.audio_out_sample_rate`.
+  arrives strictly *behind* them, which is what makes it exact. It is pure
+  bookkeeping now: it tells the engine where a *later* sentence's predicted cues
+  start, and nothing about the audio, which was already fed.
+- **The sample rate** is `TTSAudioRawFrame.sample_rate`, not
+  `StartFrame.audio_out_sample_rate`. The start frame carries what the
+  *transport* wants; a TTS service is free to synthesise at its own rate and let
+  pipecat resample downstream, and taking the pipeline's number there put every
+  cue in such a turn at the wrong time by exactly that ratio.
 
-A TTS service with no word timestamps emits no progress frames; there the cut
-falls back to `TTSStoppedFrame`, so the turn is recognised as one chunk instead
-of sentence by sentence. That costs a little accuracy in the tail of a long turn
-and nothing at the head, which is where it is seen — the early leg still corrects
-the opening (`visemes.py` § Why there is an early leg).
+A TTS service with no word timestamps emits no progress frames. Nothing is lost
+on the accurate leg — it never used them — and the predicted tail keeps its
+estimated sentence offsets, which is what it had before word streams existed.
 
 ## What it does not do
 
@@ -82,7 +87,6 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi.frames import RTVIServerMessageFrame
 
 from .messages import AvatarMessage
-from .sentence_audio import EARLY_PARTIAL_BYTES, SentenceAudioAccumulator
 from .state_machine import AvatarStateMachine
 from .visemes import VisemeEngine, build_viseme_engine, cues_to_wire
 
@@ -123,13 +127,9 @@ class AvatarProcessor(FrameProcessor):
         super().__init__(**kwargs)
         self._machine = self.STATE_MACHINE()
         self._engine: VisemeEngine | None = None
-        self._audio = SentenceAudioAccumulator()
         # Contexts with audio in flight. Usually one; more when a brain runs
         # several inferences inside a single stretch of bot speech.
         self._open_ctxs: list[str] = []
-        # Contexts whose first sentence has already been handed over as a prefix
-        # (see `_accumulate`). One entry per turn, cleared with the turn.
-        self._partial_sent: set[str] = set()
         # Everything said before this processor saw its own StartFrame.
         # `push_frame()` drops frames until then — silently for the caller, and
         # noisily in the log — and the browser's `client-ready` genuinely does
@@ -152,6 +152,8 @@ class AvatarProcessor(FrameProcessor):
             # everything until this processor has seen its own start.
             await self.push_frame(frame, direction)
             self._started = True
+            # The rate here is only the fallback for a turn whose audio frames
+            # never say — the real one rides each `TTSAudioRawFrame`.
             self._start_visemes(frame.audio_out_sample_rate)
             held, self._before_start = list(self._before_start), deque(maxlen=_PRESTART_BUFFER)
             # `start()` first: it is the pipeline's own beginning, and it dedups
@@ -163,20 +165,19 @@ class AvatarProcessor(FrameProcessor):
         if _is_sentence_announcement(frame):
             await self._sentence_queued(frame)
         elif isinstance(frame, TTSAudioRawFrame):
-            await self._accumulate(frame)
+            await self._audio(frame)
         elif isinstance(frame, AggregatedTextProgressFrame):
             if not frame.remaining_text.strip():
                 # The slot's last word. Every sample of *this* sentence is
                 # already behind us in the queue — and only this one: later
                 # sentences may well have been announced already, since text runs
                 # ahead of audio.
-                await self._cut(frame.context_id, sentences=1)
+                await self._sentence_spoken(frame)
         elif isinstance(frame, TTSStoppedFrame):
-            # Generation for this context is over. Cut whatever is left — on a
-            # service with no word timestamps that is the whole turn — and tell
-            # the engine its cue track will not grow again. Playout has not
-            # finished (that is BotStoppedSpeaking, below), so this ends nothing.
-            await self._cut(frame.context_id, sentences=None)
+            # Generation for this context is over: the cue track will not grow
+            # again. Playout has not finished (that is BotStoppedSpeaking,
+            # below), so this ends nothing — it only makes the last emission
+            # final.
             await self._close_context(frame)
         elif isinstance(frame, InterruptionFrame | BotStoppedSpeakingFrame | EndFrame | CancelFrame):
             # A turn ends at playout, cleanly or cut. Either way its remaining
@@ -239,7 +240,15 @@ class AvatarProcessor(FrameProcessor):
             return
         await self._engine.on_sentence_queued(ctx, frame.text)
 
-    async def _accumulate(self, frame: TTSAudioRawFrame) -> None:
+    async def _audio(self, frame: TTSAudioRawFrame) -> None:
+        """One audio frame, straight through to the live decode.
+
+        The rate comes off the frame. It is the only place it is true: a TTS
+        service may synthesise at its own rate and leave the resampling to a
+        processor further down, in which case the pipeline's configured output
+        rate — which is what this used to use — describes audio nobody has
+        produced yet, and every cue in the turn lands off by that ratio.
+        """
         if self._engine is None:
             return
         ctx = self._context_id(frame.context_id, "audio")
@@ -247,41 +256,21 @@ class AvatarProcessor(FrameProcessor):
             return
         if ctx not in self._open_ctxs:
             self._open_ctxs.append(ctx)
-        self._audio.add(ctx, frame.audio)
+        await self._engine.on_audio(ctx, frame.audio, sample_rate=frame.sample_rate)
 
-        # The turn's first sentence is the only one that genuinely plays
-        # predicted cues — generation outruns playout, so by sentence two the
-        # accurate leg is already ahead. Waiting for that sentence's boundary
-        # means the whole of it, however long, is spoken off an estimated
-        # duration. So once enough of it exists, hand the prefix over and let the
-        # engine splice real recognition in behind the playhead.
-        #
-        # At most one partial per context, and only before its first cut:
-        # `take()` resets the buffer at each cut, so without the flag every later
-        # sentence would trip the same threshold, and none of them needs it.
-        if ctx not in self._partial_sent and self._audio.pending(ctx) >= EARLY_PARTIAL_BYTES:
-            self._partial_sent.add(ctx)
-            await self._engine.on_sentence_partial(ctx, self._audio.peek(ctx))
+    async def _sentence_spoken(self, frame: AggregatedTextProgressFrame) -> None:
+        """The oldest un-counted sentence's audio is all behind us.
 
-    async def _cut(self, context_id: str | None, *, sentences: int | None) -> None:
-        """Hand everything accumulated since the last cut to the accurate leg.
-
-        `sentences` is how many predicted sentences these bytes retire — one for
-        a word-stream cut, all of them (`None`) for the end of generation, which
-        is the whole turn on a service with no word timestamps.
+        Bookkeeping only — the samples were fed as they arrived. This tells the
+        engine that the *next* sentence's predicted cues start at the measured
+        boundary rather than an estimated one.
         """
         if self._engine is None:
             return
-        ctx = self._context_id(context_id, "audio cut")
+        ctx = self._context_id(frame.context_id, "sentence boundary")
         if ctx is None:
             return
-        pcm = self._audio.take(ctx)
-        if not pcm:
-            # Nothing new since the last cut: a progress frame for a sentence
-            # whose bytes an interruption already flushed, or a `TTSStoppedFrame`
-            # arriving behind a word stream that cut the last sentence itself.
-            return
-        await self._engine.on_sentence_audio(ctx, pcm, sentences=sentences)
+        await self._engine.on_sentence_spoken(ctx)
 
     async def _close_context(self, frame: TTSStoppedFrame) -> None:
         """No more sentences will be queued on this context — the track is final."""
@@ -307,8 +296,6 @@ class AvatarProcessor(FrameProcessor):
 
     async def _end_turns(self) -> None:
         ctxs, self._open_ctxs = self._open_ctxs, []
-        self._partial_sent.clear()
-        self._audio.clear()
         if self._engine is None:
             return
         for ctx in ctxs:

@@ -9,7 +9,11 @@ the public interface by adding switches / flags. Deleting things is fine — we
 can recover from git."*
 
 It has since become the standing catalogue for anything cut from the public
-surface, so one entry below names a later tag; read the entry, not the heading.
+surface, so several entries below name a later tag; read the entry, not the
+heading. The backend's whole transport was replaced in the 0.3 cycle, and
+because that is one coherent swap rather than a set of independent cuts it has
+its own section at the end — [Removed in 0.3](#removed-in-03--the-backend-transport),
+recovering from **`v0.2.2`**.
 
 This file is the recovery map. Nothing below is lost; **`v0.1.0` is the tag
 where these still work** unless the entry says otherwise, so the general move
@@ -479,3 +483,111 @@ unreachable from any typed caller and only reachable from a mistake.
 [contract-avatar.md](contract-avatar.md) says what META must contain.
 
 **Recover:** `git show 02b0dad:src/avatar.js`, search `mouthCrop`.
+
+---
+
+# Removed in 0.3 — the backend transport
+
+0.3 replaced how Python reaches the aligner. The five constraints the
+replacement had to satisfy are the requester's, verbatim: *some* lip movement
+must play along with the audio; higher-quality visemes must catch up as soon as
+possible; **no binary executable**, and it must play well with asyncio; CPU and
+memory must be bounded; and it must consume the frames pipecat's TTS emits.
+
+Everything below still works at **`v0.2.2`** — so the moves are
+`git show v0.2.2:<path>` and `git checkout v0.2.2 -- <path>`.
+
+---
+
+## The `avatarsync` binary and its JSON-lines pipe
+
+**Was:** `native/avatarsync/src/avatarsync.cpp` built one executable per
+platform (`bin/<platform>/avatarsync`, committed, ~4 MB each) that answered both
+viseme legs over stdin/stdout as JSON lines. `py/src/voqalize_avatar/avatarsync.py`
+was the asyncio driver: `asyncio.create_subprocess_exec`, an `id`-correlated
+request table, a reader task, per-request timeouts that restarted a wedged
+process, and a `RhubarbPool` of two of them so a crash took out half the
+capacity rather than all of it.
+
+**Why it went:** *"I don't want binary executable, and I want something that
+plays well with asyncio."* The pipe also made streaming impossible in the shape
+the mouth needs it — a request/response line protocol answers a whole sentence
+or nothing, so the accurate leg could not begin until the sentence had finished
+generating. And the pool was tied to an event loop: a subprocess belongs to the
+loop that spawned it, which made the shared-across-sessions engine awkward in
+exactly the deployment it existed for.
+
+**Instead:** `libavatarsync.{dylib,so}` through `ctypes`
+(`py/src/voqalize_avatar/_native.py`). ctypes releases the GIL for the duration
+of a foreign call, so `run_in_executor` genuinely parallelises a decode rather
+than merely deferring it — the property the subprocess was bought for, without
+the process. A library handle is not loop-bound, so `shared_engine()` is a plain
+process global. The C++ front end went with the binary: `voqalize-avatar` (the
+`cli.py` in this package) is the by-hand tool now, and it drives the same
+library through the same code path a live pipeline takes, so its timings are
+timings about the shipped thing.
+
+**Recover:** `git checkout v0.2.2 -- native/avatarsync/src/avatarsync.cpp` and
+`git show v0.2.2:py/src/voqalize_avatar/avatarsync.py`. The committed binaries
+are at `git show v0.2.2:native/avatarsync/bin/darwin-arm64/avatarsync`, and
+`build.sh` at that tag builds them.
+
+---
+
+## Batch decode of a finished sentence (`sentence_audio.py`)
+
+**Was:** `py/src/voqalize_avatar/sentence_audio.py` — a per-context buffer that
+accumulated `TTSAudioRawFrame` bytes and cut them at each sentence boundary, so
+the accurate leg could be handed *a sentence's* PCM in one piece. It carried the
+keepalive filter, an `EARLY_SPLICE_MS` prefix heuristic for the first sentence
+of a turn, and the cumulative-count arithmetic that kept the cut exact. Sessions
+reached the batch decoder through `AvatarsyncLease.audio_cues`.
+
+**Why it went:** it waited. A sentence's cues could not exist until the
+sentence's last byte did, which put the accurate leg a whole sentence behind the
+mouth and made the fast leg carry far more of the turn than it was ever meant
+to. `EARLY_SPLICE_MS` was the patch on that, and a heuristic about when a prefix
+is worth recognising is the shape of a design that wants to be streaming.
+
+**Instead:** live streaming decode. The engine opens one `NativeStream` per turn
+and feeds it each audio frame as it arrives, reading cues back to
+`HOLD_BACK_MS = 100` behind the fed edge. Sentence boundaries still matter —
+they are where a rewrite is anchored — but they no longer gate recognition.
+`AvatarsyncEngine.audio_cues` survives for whole-file callers (the CLI, the
+measurement scripts); a *session* has no finished audio and so has no use for
+it, which is why the lease does not expose it.
+
+**Recover:** `git checkout v0.2.2 -- py/src/voqalize_avatar/sentence_audio.py
+py/tests/test_sentence_audio.py`, plus the `_emit_sentence` / `_emit_chunk` path
+in `git show v0.2.2:py/src/voqalize_avatar/visemes.py`.
+
+---
+
+## Small surfaces that had one caller
+
+**Was:** four of them, all removed for the same reason — the only thing reaching
+them was a test, a script, or nothing.
+
+- `visemes.join_audio_chunks` — concatenated a sentence's chunks with the
+  keepalives dropped. Its consumer was `sentence_audio.py`; production now drops
+  keepalives inline in `on_audio`, one frame at a time.
+- `AvatarsyncEngine.running` — a boolean property, asserted only by its own test.
+- `NativeStream.edge_ms` (and the `avs_stream_edge_ms` binding behind it) — the
+  decoder's view of how much audio it holds. The engine takes the edge from what
+  it has *fed*, so that both halves of an emission agree on one number; a second,
+  slightly different edge is an invitation to mix them.
+- `NativeEngine(max_streams=…)` — the pool ceiling as a constructor argument. The
+  library's default has never been overridden. It is still *read* back, and
+  `voqalize-avatar info` now prints it, because a hard memory bound that nothing
+  displays is a bound nobody checks.
+
+**Why they went:** CLAUDE.md's rule, applied to the backend — a knob needs a real
+consumer asking, not a plausible one. A parameter with no caller is a promise the
+library has not been asked to keep and cannot be tested for.
+
+**Instead:** nothing, in every case. If a ceiling ever needs configuring, add the
+argument then, with the caller that wants it.
+
+**Recover:** `git show v0.2.2:py/src/voqalize_avatar/visemes.py` for
+`join_audio_chunks`; the rest were added and removed inside the 0.3 cycle and
+live only in this file's history.

@@ -31,6 +31,12 @@ dependencies = [
     "loguru>=0.7.3",
 ]
 
+[project.scripts]
+# The only command-line tool in the project. `native/avatarsync` builds a shared
+# library and nothing else, so this is what you run by hand — same library, same
+# legs, no second front end to drift out of step with the first.
+voqalize-avatar = "voqalize_avatar.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/voqalize/avatar"
 Repository = "https://github.com/voqalize/avatar"
@@ -46,6 +52,25 @@ build-backend = "hatchling.build"
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+]
+# The live demo, and nothing else, gets to name services. `dependencies` above
+# stays transport- and vendor-free on purpose — this group is how the demo picks
+# its vendors without the library acquiring an opinion. The Google half is
+# reachable with one `gcloud auth application-default login`: STT, TTS and the
+# LLM are all ADC.
+demo = [
+    # `cartesia` is here for vql-speech, which speaks Cartesia's protocol —
+    # `--tts vql-speech` is `CartesiaTTSService` pointed at a different host.
+    "pipecat-ai[google,silero,webrtc,cartesia]>=1.7,<2",
+    # The demo serves its own page rather than pipecat's prebuilt client, so it
+    # owns the web server too. FastAPI is already in the graph — SmallWebRTC's
+    # request handler imports `HTTPException` — but naming it here is what makes
+    # `uvicorn` available and the dependency honest.
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    # vql-speech takes a self-minted RS256 JWT rather than a static key, so the
+    # demo has to sign one. `[crypto]` is the half that can do RS256.
+    "pyjwt[crypto]>=2.8",
 ]
 
 [tool.hatch.build.targets.wheel]

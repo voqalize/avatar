@@ -1,0 +1,139 @@
+"""Serves the demo page and answers its WebRTC offer.
+
+    cd py && uv run --group demo python ../demo/pipecat/server.py
+    open http://localhost:7860
+
+Two jobs, and they are separate on purpose:
+
+- **The page.** Served from this repo's working tree — `src/` and
+  `client/dist/`, plus one pre-bundled copy of pipecat's browser packages, all
+  with `Cache-Control: no-store`. Nothing of ours is bundled: `src/` is
+  dependency-free ES modules by constraint and the browser loads it as-is. Edit
+  a rig file, reload, see it.
+
+  `no-store` is not paranoia. `python3 -m http.server` sends `Last-Modified`
+  with no `Cache-Control`, browsers apply heuristic freshness, and they stop
+  revalidating modules you have edited — that has cost this project three
+  debugging sessions, one of which produced a module error that was a lie. See
+  the repo's `serve.py`, which exists for the same reason.
+
+- **The call.** `POST /api/offer` hands the SDP to pipecat's
+  `SmallWebRTCRequestHandler`, which is also what the JS transport posts to by
+  default. Each new peer connection starts one `run_bot` task; when the browser
+  goes away the transport's disconnect handler cancels it.
+
+Pipecat's own runner (`pipecat.runner.run`) would do the signalling half of this
+in one line, but it serves its prebuilt client UI, and the page *is* what is
+being demonstrated here.
+"""
+
+from __future__ import annotations
+
+import argparse
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+import uvicorn
+from bot import DEFAULT_TTS, TTS_SERVICES, run_bot
+from fastapi import BackgroundTasks, FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from loguru import logger
+from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
+from pipecat.transports.smallwebrtc.request_handler import (
+    SmallWebRTCPatchRequest,
+    SmallWebRTCRequest,
+    SmallWebRTCRequestHandler,
+)
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent.parent
+
+
+class NoStore(StaticFiles):
+    """`StaticFiles` with the cache turned off — see the module docstring."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-store, must-revalidate"
+        return response
+
+
+# Where each URL prefix comes from. `client/dist/*.js` imports `../../src/*.js`
+# by relative path, so the first two mounts have to keep that shape: the browser
+# resolves `/client/dist/createAvatar.js` → `/src/avatar.js` on its own. Both are
+# served from the working tree — edit a rig file, reload, see it.
+#
+# `/vendor` is the exception, and it is third-party only: pipecat's browser
+# packages ship ESM that still contains bare specifiers, so they are pre-bundled
+# by `npm run demo:vendor`. See vendor.entry.js.
+MOUNTS = {
+    "/src": REPO / "src",
+    "/client/dist": REPO / "client" / "dist",
+    "/vendor": HERE / "vendor",
+}
+
+MISSING = {
+    "/src": "the repo looks incomplete",
+    "/client/dist": "run `npm install && npm run build`",
+    "/vendor": "run `npm run demo:vendor`",
+}
+
+
+def build_app(tts_name: str) -> FastAPI:
+    handler = SmallWebRTCRequestHandler()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        await handler.close()
+
+    app = FastAPI(lifespan=lifespan)
+
+    for url, path in MOUNTS.items():
+        if not path.is_dir():
+            raise SystemExit(f"missing {path} — {MISSING[url]} (in {REPO})")
+        app.mount(url, NoStore(directory=path), name=url)
+
+    @app.get("/")
+    async def page():
+        return FileResponse(
+            HERE / "index.html",
+            headers={"Cache-Control": "no-store, must-revalidate"},
+        )
+
+    @app.post("/api/offer")
+    async def offer(request: SmallWebRTCRequest, background: BackgroundTasks):
+        async def start(connection: SmallWebRTCConnection) -> None:
+            # Queued rather than awaited: the SDP answer has to go back on this
+            # request, and the call outlives it by minutes.
+            background.add_task(run_bot, connection, tts_name)
+
+        return await handler.handle_web_request(request, start)
+
+    @app.patch("/api/offer")
+    async def trickle(request: SmallWebRTCPatchRequest):
+        await handler.handle_patch_request(request)
+        return {"status": "success"}
+
+    return app
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--port", type=int, default=7860)
+    parser.add_argument("--host", default="localhost")
+    parser.add_argument(
+        "--tts",
+        choices=sorted(TTS_SERVICES),
+        default=DEFAULT_TTS,
+        help="which text-to-speech service the bot speaks with",
+    )
+    args = parser.parse_args()
+
+    logger.info("avatar demo on http://{}:{} — tts {}", args.host, args.port, args.tts)
+    uvicorn.run(build_app(args.tts), host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()

@@ -86,26 +86,43 @@ jobs:
         with:
           enable-cache: true
 
-      # 56 MB of cmudict, phonetic LM and acoustic model, extracted from an
-      # 85 MB upstream tarball that is deliberately not vendored. The binary
-      # itself is committed; only the model tree is generated.
-      - name: cache the aligner model tree
-        id: res-cache
+      # The library AND its 56 MB model tree, both from the same script. This
+      # runner is Linux and the only committed library is darwin-arm64, so
+      # without the compile every decoder test skips — which is exactly what
+      # happened, silently, behind a green check. `--recipe-id` is the compile's
+      # own input hash, so the cache moves when the patch or the pinned upstream
+      # does and not when an unrelated line of build.sh does.
+      - name: aligner cache key
+        id: recipe
+        run: echo "id=$(native/avatarsync/build.sh --recipe-id)" >> "$GITHUB_OUTPUT"
+
+      - name: cache the aligner library and model tree
+        id: aligner-cache
         uses: actions/cache@v4
         with:
           path: |
+            native/avatarsync/bin
             native/avatarsync/res
             native/avatarsync/.cache
-          key: avatarsync-res-${{ hashFiles('native/avatarsync/build.sh') }}
+          key: avatarsync-${{ runner.os }}-${{ steps.recipe.outputs.id }}
 
-      - name: materialise the aligner model tree
-        if: steps.res-cache.outputs.cache-hit != 'true'
-        run: native/avatarsync/build.sh --res-only
+      - name: install build dependencies
+        if: steps.aligner-cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y libboost-all-dev
+
+      - name: build the aligner
+        if: steps.aligner-cache.outputs.cache-hit != 'true'
+        run: native/avatarsync/build.sh
 
       - name: tests
         working-directory: py
         env:
           UV_RESOLUTION: ${{ matrix.resolution }}
+          # Turns "the aligner is missing" from a skip into a failure. Without
+          # it a green backend job proves only that the pure-Python half works;
+          # the decoder, the pool ceiling and both viseme legs go untested. See
+          # py/tests/conftest.py.
+          AVATAR_REQUIRE_ALIGNER: "1"
         # `--frozen` is wrong here: the whole point of the matrix is to
         # re-resolve at each end of the range rather than replay the lockfile.
         run: uv run --resolution "$UV_RESOLUTION" pytest -q

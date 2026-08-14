@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Avatar — pipecat</title>
+<style>
+  :root {
+    --bg: #16181d;
+    --tile: #23262d;
+    --ink: #e6e8ec;
+    --dim: #8a9099;
+    --line: #2e323a;
+    --live: #7aa2f7;
+    --hot: #f0857d;
+    --ok: #86cf9b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: grid; grid-template-rows: 1fr auto; overflow: hidden;
+  }
+
+  #stage { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+  #tile {
+    margin: 20px; border-radius: 10px; background: var(--tile);
+    position: relative; overflow: hidden; min-height: 0;
+  }
+  /* The widget owns everything inside the mount and fits itself to the box. */
+  #mount { position: absolute; inset: 0; }
+
+  /* The one thing on the page that is not the avatar: a badge that says whether
+     the wire is live, because a still face and a disconnected face look alike. */
+  #badge {
+    position: absolute; left: 12px; top: 12px; z-index: 2;
+    padding: 3px 9px; border-radius: 999px; font-size: 12px;
+    background: rgba(0,0,0,.55); color: var(--dim);
+  }
+  #badge.live { color: var(--ok); }
+  #badge.error { color: var(--hot); }
+
+  /* --- the wire, as it arrives ------------------------------------------- */
+  #side {
+    border-left: 1px solid var(--line); display: grid;
+    grid-template-rows: auto 1fr; min-height: 0;
+  }
+  #side h2 {
+    margin: 0; padding: 14px 16px 10px; font-size: 12px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
+  }
+  #log {
+    margin: 0; padding: 0 16px 16px; overflow-y: auto; min-height: 0;
+    font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    list-style: none; color: var(--dim);
+  }
+  #log li { display: flex; gap: 8px; white-space: nowrap; }
+  #log .t { color: #5b616b; }
+  #log .claim { color: var(--live); }
+  #log .action { color: var(--ok); }
+  #log .cues { color: var(--dim); }
+
+  /* --- controls ---------------------------------------------------------- */
+  #bar {
+    display: flex; gap: 12px; align-items: center; justify-content: center;
+    padding: 14px; border-top: 1px solid var(--line);
+  }
+  button {
+    font: inherit; padding: 9px 20px; border-radius: 999px; border: 0;
+    background: var(--live); color: #11131a; font-weight: 600; cursor: pointer;
+  }
+  button.hang { background: var(--hot); }
+  button:disabled { opacity: .45; cursor: default; }
+  #hint { color: var(--dim); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="tile">
+    <div id="badge">offline</div>
+    <div id="mount"></div>
+  </div>
+  <div id="side">
+    <h2>Avatar wire</h2>
+    <ul id="log"></ul>
+  </div>
+</div>
+
+<div id="bar">
+  <button id="call">Start call</button>
+  <span id="hint">Microphone required. The bot speaks first.</span>
+</div>
+
+<!-- The bot's audio. The transport hands over a MediaStreamTrack and expects
+     the page to play it; the avatar's clock anchors on the lifecycle events,
+     not on this element, so the two stay in step without being wired together. -->
+<audio id="bot-audio" autoplay></audio>
+
+<script type="module">
+// `/client/dist/index.js` and everything it pulls from `/src/` are served
+// straight from the working tree, unbundled — edit a rig file, reload, see it.
+// Only `/vendor/pipecat.js` is built, and it is third-party: pipecat's browser
+// packages ship ESM that still contains bare specifiers. See vendor.entry.js.
+import { PipecatClient, SmallWebRTCTransport } from "/vendor/pipecat.js";
+import { createAvatar } from "/client/dist/index.js";
+
+const badge = document.getElementById("badge");
+const log = document.getElementById("log");
+const button = document.getElementById("call");
+const hint = document.getElementById("hint");
+const botAudio = document.getElementById("bot-audio");
+
+function say(kind, text) {
+  const at = new Date().toLocaleTimeString("en-GB", { hour12: false });
+  const li = document.createElement("li");
+  li.innerHTML = `<span class="t">${at}</span><span class="${kind}">${text}</span>`;
+  log.appendChild(li);
+  // Only follow the tail when the reader is already at it — scrolling back to
+  // read a burst of cues should not fight the incoming ones.
+  const atTail = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+  if (atTail) log.scrollTop = log.scrollHeight;
+  while (log.children.length > 400) log.removeChild(log.firstChild);
+}
+
+/** One line per avatar command, in the vocabulary the wire actually uses.
+ *
+ * The double unwrap is the same one `AvatarClient` does: some server-message
+ * paths deliver the payload bare and some wrap it in a `{ data }` envelope. */
+function logAvatar(raw) {
+  const msg = raw?.type === "avatar" ? raw : raw?.data;
+  if (msg?.type !== "avatar") return;
+  if (msg.cmd === "claim") say("claim", `claim ${msg.state ?? "null"}`);
+  else if (msg.cmd === "action") say("action", `action ${msg.id}`);
+  else if (msg.cmd === "cues") {
+    say("cues", `cues from ${msg.from_ms}ms ×${msg.cues?.length ?? 0}${msg.final ? " final" : ""}`);
+  }
+}
+
+const client = new PipecatClient({
+  transport: new SmallWebRTCTransport(),
+  enableMic: true,
+  enableCam: false,
+  callbacks: {
+    onConnected: () => { badge.textContent = "live"; badge.className = "live"; },
+    onDisconnected: () => { badge.textContent = "offline"; badge.className = ""; },
+    onBotReady: () => say("claim", "bot ready"),
+    onTrackStarted: (track, participant) => {
+      if (participant?.local || track.kind !== "audio") return;
+      botAudio.srcObject = new MediaStream([track]);
+    },
+    onServerMessage: logAvatar,
+    onError: (message) => {
+      badge.textContent = "error"; badge.className = "error";
+      say("action", String(message?.data?.message ?? message));
+    },
+  },
+});
+
+// The avatar is an embodiment of the client, and it is mounted once for the
+// life of the page — not per call. It has an idle, listening, disconnected face
+// too, and remounting it on every connect would throw that away.
+createAvatar({ mount: document.getElementById("mount"), client });
+
+let connected = false;
+
+button.addEventListener("click", async () => {
+  button.disabled = true;
+  try {
+    if (connected) {
+      await client.disconnect();
+      connected = false;
+      button.textContent = "Start call";
+      button.classList.remove("hang");
+      hint.textContent = "Microphone required. The bot speaks first.";
+    } else {
+      await client.initDevices();
+      await client.connect({ webrtcRequestParams: { endpoint: "/api/offer" } });
+      connected = true;
+      button.textContent = "End call";
+      button.classList.add("hang");
+      hint.textContent = "Speak — interrupt it, ask it something long.";
+    }
+  } catch (err) {
+    badge.textContent = "error";
+    badge.className = "error";
+    say("action", String(err?.message ?? err));
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

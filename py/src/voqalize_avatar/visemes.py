@@ -1,56 +1,53 @@
-"""The two-leg viseme engine: fast cues now, accurate cues when the audio lands.
+"""The two-leg viseme engine: predicted cues now, recognised cues as audio arrives.
 
 ## Why two legs
 
-Rhubarb needs a whole clip before it emits anything, so a naive sidecar adds its
-full runtime to time-to-first-audio. But `animate()` — everything Rhubarb knows
-about looking right — is a pure function of a phone timeline, and recognition
-exists only to *discover* that timeline. Given a duration, the timeline can be
-predicted instead.
+Recognition needs audio, and the mouth has to move on the first sample. So:
 
-So:
+- **Fast leg**, the moment a sentence is handed to TTS: predict a phone timeline
+  from the text plus an estimated duration (`durations.py`), animate it, ~0.15 ms.
+  Cues exist before the first audio sample does. This is the guarantee — audio
+  never plays against a still face, whatever else fails.
+- **Accurate leg**, from the first audio frame onward: a live decode fed as the
+  frames arrive, read back mid-utterance, re-emitted every frame. It overwrites
+  the predicted track from wherever recognition has reached.
 
-- **Fast leg**, the moment a sentence is handed to TTS: predict the timeline from
-  text plus an estimated duration (`durations.py`), ~0.4 ms. Cues exist before
-  the first audio sample does.
-- **Accurate leg**, the moment that sentence's audio has fully arrived: real
-  `phonetic` recognition over the PCM, ~15-31 ms, with the *true* duration. It
-  replaces the not-yet-played tail.
-- **Early leg**, once ~1.2 s of the turn's *first* sentence exists: the same
-  recognition over a **prefix**, spliced in at `EARLY_SPLICE_MS`.
+The second leg used to wait for a whole sentence and decode it in one go, which
+made the fast leg's coverage a function of sentence length: a long opening
+sentence played entirely off an estimated duration whose median 8% error read as
+a slip that "caught up" at sentence two. Streaming replaces that with a
+correction that arrives continuously, roughly every 200 ms, from the moment there
+is any audio at all.
 
-Only the first sentence of a turn genuinely plays fast-leg cues. Generation
-outruns playout, so later sentences are usually accurate before their playout
-begins — which is the fortunate shape, because the fast leg is at its best on
-short utterances (86.7% frame agreement under 700 ms) and drifts to parity with
-real recognition by ~2 s.
+## Overwrite, do not merge
 
-## Why there is an early leg
+Every emission from the accurate leg is *the whole track from a point*, never a
+delta: `emit(ctx, from_ms, cues, final)` means discard queued cues at or after
+`from_ms`, then append these. A cue the decoder later revises costs the frames
+already drawn and nothing else.
 
-That fortunate shape has one hole, and it is the one people notice: the *first*
-sentence of a turn is played entirely off an estimated duration, because its
-boundary — the signal that says "this sentence is complete" — cannot arrive
-until its last byte has. A 3 s opener is 3 s of predicted cues, and the estimate
-is wrong by a median 8% (measured over 300 real clips), which is a visible slip
-that then "catches up" at sentence two. That is exactly the artefact this leg
-removes.
+That is deliberate and it is the reason there is no splice bookkeeping left here.
+Merging a correction into a track means reasoning about which cues are the same
+cue, and the answer is genuinely undecidable when a phone boundary moves — the
+old code had a `_reemit_pending` step that existed only to put back the predicted
+cues an accurate splice had knocked out. There may be a perceptible jump at the
+instant recognition disagrees with the estimate. A jump is a bounded, one-frame
+cost; a merge that drifts is unbounded.
 
-Recognition does not need the whole clip — it needs *a* clip. Run it on the
-first 1.2 s and it agrees with the whole-clip result on 85% of frames (vs the
-fast leg's 61%), provided the last ~100 ms is thrown away: `-cmn batch`
-normalises over whatever it is given, and the final phone is half-heard. So the
-early leg keeps `[EARLY_SPLICE_MS, held - EARLY_TAIL_GUARD_MS)` and re-places
-the fast cues after it.
+## The hold-back
 
-`EARLY_SPLICE_MS` is 500 rather than 0 because a splice must land *behind the
-playhead*: the client discards its queued cues at `from_ms` and rewriting a
-shape it is already showing is a twitch, not a correction. 500 ms is ~250 ms of
-margin over when these cues actually arrive, and it is cheap — the fast leg is
-at its most accurate in exactly that opening window.
+The decoder's own last few frames are not settled — a live phone loop backtraces
+from the current frame, and the tail of that backtrace still moves as evidence
+arrives. `HOLD_BACK_MS` is how far behind the fed edge the accurate track stops.
+Measured on the corpus, a segment stops moving within 100 ms of the edge 85.2% of
+the time, 200 ms 98.2%, 300 ms 99.6%.
 
-The early leg does not resolve anything. It advances no cursor and consumes no
-sentence; the real boundary still arrives, still recognises the whole clip, and
-still splices from 0. This only makes the wait bearable.
+100 ms rather than 200 because the remaining churn is not a cost here — the
+overwrite absorbs it — while the lag is: generation runs 1.6-2.3x realtime, so
+the client's playhead sits well behind the fed edge and every millisecond of
+hold-back is a millisecond of that margin spent. Past the hold-back the predicted
+track takes over, so there is never a hole; it is a question of which leg covers
+audio that has not been played yet.
 
 ## Why the fast leg leads
 
@@ -64,62 +61,72 @@ into the side the eye forgives: against whole-clip recognition, frames inside
 tolerance go 62.3% -> 71.7%, and frames on the late side 30% -> 13%. The total
 error does not shrink at all. It only moves to where it does not read as wrong.
 
-Only *predicted* tracks lead. The early and accurate legs take their times from
-recognition over real audio, so their times are already right and a shift would
-be an error rather than the removal of one — which is why `_emit_sentence` and
-`_emit_chunk` are two paths and not one.
+Only *predicted* tracks lead. The accurate leg takes its times from recognition
+over real audio, so they are already right and a shift would be an error rather
+than the removal of one.
 
 ## The turn timeline
 
 Cue `t` is milliseconds from the turn's **first audio sample**, and the client
-anchors t=0 when bot playout starts. So offsets accumulate over *wire* bytes,
-and every byte counts the same whether it carries speech or silence. Some TTS
-services append a fixed tail of silence to each sentence; nothing here treats
-that as a special case, because recognition already handles it — silence in the
-PCM comes back as `X` cues, which is exactly what the pad should look like.
+anchors t=0 when bot playout starts. The live decode is fed that same audio from
+that same first sample, so its timeline *is* the turn timeline — there is no
+offset arithmetic on the accurate leg at all, which is most of what this module
+used to be. Offsets remain only on the predicted leg, where a sentence's start
+has to be guessed until its audio has been counted.
 
-While earlier sentences are still unresolved, a later sentence's start is itself
-an estimate. When an audio leg resolves sentence *k*, every still-pending
-sentence after it is re-emitted at its corrected offset — from the fast cues we
-already have, not by re-running the leg — and only when the correction actually
-moved. That keeps the stream continuous instead of leaving a hole between "the
-splice discarded it" and "its own audio arrived".
+Every wire byte counts the same whether it carries speech or silence. A service
+that pads its sentences gets that pad recognised rather than declared: it is
+silence in the PCM and comes back as `X`.
+
+## Latching
+
+The accurate leg is contingent. It gives up — permanently, for the turn — when
+
+- the decoder pool refuses (`open_stream` returns None): every decoder is out,
+  which is the pool's hard memory ceiling doing its job; or
+- decode stops keeping up: cumulative decode time passes `LATCH_RTF` of the audio
+  it has consumed, measured only once a turn is long enough for the numbers to
+  mean anything.
+
+Either way the turn finishes on predicted cues, which is a degradation and not a
+failure — audio still plays against a moving mouth. There is no un-latch: a turn
+that flips back and forth between legs would look worse than either. That
+includes the turn's closing emission, which abandons an open stream rather than
+finishing it — otherwise every latched turn would un-latch on its last message,
+which is the most visible place for a seam to fall.
 
 ## Emission
 
-Everything leaves through one injected callback, `emit(ctx, from_ms, cues,
-final)`, meaning *discard queued cues at or after `from_ms`, then append these*.
-`AvatarProcessor` supplies it; nothing here knows about pipecat frames, RTVI, or
-the transport.
+Everything leaves through one injected callback. `AvatarProcessor` supplies it;
+nothing here knows about pipecat frames, RTVI, or the transport.
 
 ## Fail fast
 
 This is the internal API and it behaves like a library: `build_viseme_engine`
 raises when the native aligner is not there, naming the path it looked at. The
-pipecat wrapper is the layer that decides a missing binary should cost the call
+pipecat wrapper is the layer that decides a missing library should cost the call
 its lipsync rather than its audio — see `AvatarProcessor._start_visemes`.
 
 ## The latency rule
 
-Nothing in this module may be awaited inline by a `process_frame`. Both entry
-points hand work to a per-turn worker task and return; the fast leg is
-fire-and-forget by construction, and the accurate leg chews on bytes the caller
-already accumulated. A `RhubarbError` costs one sentence its cues and never the
-call — degraded visemes beat a dropped turn.
+Nothing in this module may be awaited inline by a `process_frame`. Every entry
+point hands work to a per-turn worker task and returns. An `AvatarsyncError`
+costs one turn its accurate leg and never the call.
 
-The same rule is why the runtime is pre-warmed (`prewarm()`): `avatarsync` costs
-~250 ms to spawn (an 82 MB acoustic model plus a decoder warmup), and left to
-start lazily it starts *on the first sentence of the call* — inside the very
-window the fast leg exists to cover. Pre-warming happens in a background task, so
-it delays neither session setup nor a sentence that beats it: a request arriving
-mid-startup blocks on the runtime's own start lock and is served when the process
-is up.
+The same rule is why the runtime is pre-warmed (`prewarm()`): loading
+`libavatarsync` costs ~250 ms (a 125k-entry dictionary, an 82 MB acoustic model
+and a decoder warmup), and left to load lazily it loads *on the first sentence of
+the call* — inside the very window the fast leg exists to cover. Pre-warming
+happens in a background task, so it delays neither session setup nor a sentence
+that beats it: a request arriving mid-load blocks on the engine's own start lock
+and is served when the model is up.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
@@ -129,11 +136,12 @@ from loguru import logger
 
 from .durations import estimate_duration_ms
 from .avatarsync import (
+    AvatarsyncError,
+    AvatarsyncPaths,
     Cue,
-    RhubarbError,
-    RhubarbPaths,
     VisemeRuntime,
-    shared_pool,
+    VisemeStream,
+    shared_engine,
     shift,
 )
 
@@ -152,24 +160,24 @@ MIN_CUE_MS = 30
 CLOSURES = frozenset("AG")
 SILENT = "X"
 
-# The early leg, above. The splice point is how much of the turn's first
-# sentence the fast leg is allowed to keep; the guard is how much of the
-# recognised prefix is thrown away because `-cmn batch` normalised over a clip
-# that ends mid-phone. `sentence_audio.EARLY_PARTIAL_BYTES` decides when this
-# runs.
-EARLY_SPLICE_MS = 500
-EARLY_TAIL_GUARD_MS = 100
-
 # Predicted cues are emitted this much *early*. See "Why the fast leg leads",
 # above: the error is symmetric and the tolerance window is not.
 FAST_LEAD_MS = 60
 
+# How far behind the fed edge the accurate track stops. See "The hold-back".
+HOLD_BACK_MS = 100
+
+# When to stop believing the accurate leg can keep up. Both are needed: the ratio
+# alone would latch on the first frame of every turn, where the denominator is
+# one chunk and the numerator may include building a decoder.
+LATCH_MIN_MS = 1500
+LATCH_RTF = 0.8
+
 EmitCues = Callable[[str, int, list[Cue], bool], Awaitable[None]]
 
-
-def join_audio_chunks(chunks: Sequence[bytes]) -> bytes:
-    """Concatenate wire chunks, dropping keepalives."""
-    return b"".join(chunk for chunk in chunks if len(chunk) > KEEPALIVE_MAX_BYTES)
+# Wakes a turn's worker so it can retire. Not a job — it runs even when the turn
+# has been abandoned, which is the whole reason it is distinguishable.
+_STOP: Any = object()
 
 
 def wire_ms(pcm: bytes, sample_rate: int = SAMPLE_RATE) -> float:
@@ -182,6 +190,14 @@ def normalize_cues(cues: Sequence[Cue]) -> list[Cue]:
     Deliberately a mirror of the client's rule rather than something stricter:
     if the two ever disagree, the disagreement is the bug, and having the same
     rule twice makes that visible in tests instead of on someone's face.
+
+    **Deduplication is by shape, not by phone**, for that same reason — the
+    client's rule is the one being mirrored and it has never seen a phone. So a
+    run of cues sharing a shape collapses to its first, and that cue's `p` is the
+    phone at the moment the *shape* changed. A renderer that wants the phone
+    transitions inside a held shape (shape `B` covering S → T, say) is asking for
+    a rule the client does not have yet, and getting it means changing both
+    sides in lockstep. Until then this loses nothing the wire could carry.
     """
     out: list[Cue] = []
     for cue in sorted(cues, key=lambda c: c.t):
@@ -190,21 +206,37 @@ def normalize_cues(cues: Sequence[Cue]) -> list[Cue]:
             continue
         if out and cue.t - out[-1].t < MIN_CUE_MS:
             if letter in CLOSURES:
-                out[-1] = Cue(t=out[-1].t, v=letter)
+                out[-1] = Cue(t=out[-1].t, v=letter, p=cue.p)
             continue
-        out.append(Cue(t=cue.t, v=letter))
+        out.append(Cue(t=cue.t, v=letter, p=cue.p))
     return out
 
 
-def _shape_at(cues: Sequence[Cue], t_ms: int) -> str:
-    """The mouth shape a track is showing at `t_ms` — the last cue at or before
-    it. Silence before the first cue, which is what the widget assumes too."""
-    shape = SILENT
+def _cue_at(cues: Sequence[Cue], t_ms: int) -> Cue | None:
+    """The cue a track is showing at `t_ms` — the last one at or before it, or
+    `None` before the first, which the widget reads as silence."""
+    found: Cue | None = None
     for cue in cues:
         if cue.t > t_ms:
             break
-        shape = cue.v
-    return shape
+        found = cue
+    return found
+
+
+def clip_track(cues: Sequence[Cue], from_ms: int) -> list[Cue]:
+    """A track from `from_ms` onward, keeping the shape already in force there.
+
+    The shape is carried rather than dropped because the caller is about to
+    discard everything from `from_ms` on: a track that begins at the first
+    *change* after that point leaves the mouth holding whatever preceded it for
+    however long the next change takes to arrive, which on a held vowel is
+    hundreds of milliseconds of visibly wrong face.
+    """
+    later = [cue for cue in cues if cue.t > from_ms]
+    held = _cue_at(cues, from_ms)
+    if held is None:
+        return later
+    return [Cue(t=from_ms, v=held.v, p=held.p), *later]
 
 
 def lead_track(cues: Sequence[Cue], ms: int = FAST_LEAD_MS) -> list[Cue]:
@@ -217,84 +249,107 @@ def lead_track(cues: Sequence[Cue], ms: int = FAST_LEAD_MS) -> list[Cue]:
     — a shape that is already over — and `normalize_cues` would then discard the
     right one as too short.
     """
-    moved = [Cue(t=cue.t - ms, v=cue.v) for cue in cues]
+    moved = [Cue(t=cue.t - ms, v=cue.v, p=cue.p) for cue in cues]
     if not moved or moved[0].t >= 0:
         return moved
-    return [Cue(t=0, v=_shape_at(moved, 0)), *(cue for cue in moved if cue.t > 0)]
+    return clip_track(moved, 0)
 
 
 def cues_to_wire(cues: Sequence[Cue]) -> list[dict[str, Any]]:
-    """`{t, v}` dicts, the shape the `cues` server-message carries."""
-    return [{"t": cue.t, "v": cue.v} for cue in cues]
+    """`{t, v, p?}` dicts, the shape the `cues` server-message carries.
+
+    `p` is omitted during silence rather than sent as null — the wire cue is one
+    per shape change in a stream of them, and a key that is absent half the time
+    is smaller than one that is null half the time.
+    """
+    return [
+        {"t": cue.t, "v": cue.v} if cue.p is None else {"t": cue.t, "v": cue.v, "p": cue.p}
+        for cue in cues
+    ]
 
 
 @dataclass
 class _Sentence:
-    """One sentence, from "handed to TTS" to "its audio is fully here"."""
+    """One sentence, from "handed to TTS" until its audio has been counted."""
 
     text: str
     est_speech_ms: int
-    # Cues relative to this sentence's own start, kept so a corrected offset can
-    # be re-emitted without re-running the leg.
+    # Cues relative to this sentence's own start, kept so the predicted tail can
+    # be re-placed behind a moving accurate edge without re-running the leg.
     fast_cues: list[Cue] = field(default_factory=list)
-    emitted_start_ms: int | None = None
 
 
 @dataclass
 class _Turn:
     ctx: str
-    queue: asyncio.Queue[Callable[[], Awaitable[None]]]
+    queue: asyncio.Queue[Any]
     worker: asyncio.Task[None]
+    # Sentences announced whose audio has not been counted yet. These are what
+    # the predicted tail is built from.
     pending: deque[_Sentence] = field(default_factory=deque)
-    # Wire ms of every sentence whose audio has fully landed. Sentences resolve
-    # in order, so this is also the next sentence's true start.
+    # Wire ms of every sentence whose audio has fully landed — the next
+    # sentence's true start. Only moves on a boundary the caller supplies.
     resolved_wire_ms: float = 0.0
+
+    sample_rate: int = 0
+    stream: VisemeStream | None = None
+    # None until the first audio frame; False once the accurate leg has given up
+    # for this turn (pool refusal or falling behind), and it never goes back.
+    accurate: bool | None = None
+    # Every wire byte fed to the decoder, and how long decoding them took.
+    fed_ms: float = 0.0
+    decode_ms: float = 0.0
+    # Nothing before this needs re-sending: it is settled, and on the accurate
+    # leg it has also already been played.
+    published_ms: int = 0
+
     closed: bool = False
-    # The early leg runs at most once per turn: it exists for the first
-    # sentence, and every sentence after it is accurate before it is played.
-    early_done: bool = False
+    aborted: bool = False
 
 
-def build_viseme_engine(emit: EmitCues, *, sample_rate: int) -> VisemeEngine:
-    """The engine, pre-warmed, leasing the worker's shared aligner pool.
+def build_viseme_engine(emit: EmitCues, *, sample_rate: int = SAMPLE_RATE) -> VisemeEngine:
+    """The engine, pre-warmed, leasing the worker's shared aligner.
 
-    **Raises** `RhubarbUnavailableError` when the native aligner is not on this
-    machine — the sdist, or a platform we publish no wheel for. This is the
+    **Raises** `AvatarsyncUnavailableError` when the native aligner is not on
+    this machine — the sdist, or a platform we publish no wheel for. This is the
     internal API: it says what is missing and where it looked. `AvatarProcessor`
     is the layer that decides that is survivable.
 
     The native half needs no configuration. The platform wheel carries the
-    aligner and its model tree inside the package, so the common case is a
+    library and its model tree inside the package, so the common case is a
     `pip install` and nothing else; a source checkout of this repo is found by
     walking up to `native/avatarsync`.
 
-    The runtime is a **lease on a worker-wide pool**, not a process of this
-    session's own. `avatarsync` is ~86 MB of acoustic model answering requests
-    that take 15-31 ms; per-session processes made memory scale with concurrency
-    for no throughput gain at all.
+    `sample_rate` is only a fallback for a turn that emits no audio. The real
+    rate comes off each `TTSAudioRawFrame`, because that is the one place it is
+    true: the pipeline's configured output rate is what the *transport* wants,
+    and a TTS service is free to hand over something else and let pipecat
+    resample it.
+
+    The runtime is a **lease on a worker-wide engine**, not a model of this
+    session's own. That is ~86 MB of acoustic model plus a bounded pool of live
+    decoders; per-session copies made memory scale with concurrency for no
+    throughput gain at all.
     """
-    paths = RhubarbPaths.locate()
+    paths = AvatarsyncPaths.locate()
     paths.check()
-    engine = VisemeEngine(emit, shared_pool(paths).lease(), sample_rate=sample_rate)
-    # Spawn `avatarsync` now, in the background. Lazily started it starts on the
-    # call's first sentence — ~250 ms charged to exactly the window the fast leg
-    # exists to cover, so the one turn that genuinely needs predicted cues is the
-    # one that would not get them in time. Only the worker's first session pays
-    # it now that the pool is shared; every later one finds the model loaded.
+    engine = VisemeEngine(emit, shared_engine(paths).lease(), sample_rate=sample_rate)
+    # Load the library now, in the background. Lazily it loads on the call's
+    # first sentence — ~250 ms charged to exactly the window the fast leg exists
+    # to cover, so the one turn that genuinely needs predicted cues is the one
+    # that would not get them in time. Only the worker's first session pays it;
+    # every later one finds the model loaded.
     engine.prewarm()
     return engine
 
 
 class VisemeEngine:
-    """Turns sentences and their audio into spliced cue chunks.
+    """Turns sentences and their audio into cue tracks.
 
     One instance per session. `emit` is the only way anything leaves. The runtime
     is injected rather than defaulted — a silently self-constructed one is how a
     session ends up talking to a binary nobody chose; `build_viseme_engine` is
     the one place that chooses.
-
-    Trailing silence some services append to each sentence needs no declaring:
-    it is wire time like any other, and recognition returns `X` for it.
     """
 
     def __init__(
@@ -308,19 +363,22 @@ class VisemeEngine:
         self._runtime = runtime
         self._sample_rate = sample_rate
         self._turns: dict[str, _Turn] = {}
+        # Workers of turns that have been abandoned and are still winding down.
+        # They hold the only reference to their own stream, and dropping that on
+        # the floor is how a decoder leaks.
+        self._retiring: set[asyncio.Task[None]] = set()
         self._prewarm_task: asyncio.Task[None] | None = None
 
     # ---- startup -----------------------------------------------------------
 
     def prewarm(self) -> asyncio.Task[None]:
-        """Spawn `avatarsync` now rather than on the call's first sentence.
+        """Load the model now rather than on the call's first sentence.
 
         Idempotent, and returns the task so a caller that genuinely wants to wait
         (a test) can. Nothing in a session ever does: the point is that setup
-        does not block on a 250 ms process spawn, and a sentence that arrives
-        first does not fail — `RhubarbRuntime.start()` and `_request()` share one
-        lock, so an early request waits for this task's process instead of
-        starting a second one.
+        does not block on a 250 ms model load, and a sentence that arrives first
+        does not fail — `AvatarsyncEngine.start()` holds a lock that a request
+        arriving mid-load waits on, rather than starting a second load.
         """
         if self._prewarm_task is None:
             self._prewarm_task = asyncio.create_task(self._start_runtime(), name="visemes:prewarm")
@@ -330,8 +388,8 @@ class VisemeEngine:
         try:
             await self._runtime.start()
         except Exception as exc:
-            # Exactly as survivable as any other rhubarb failure: the first
-            # sentence retries the spawn, and if that fails too the turn loses
+            # Exactly as survivable as any other aligner failure: the first
+            # sentence retries the load, and if that fails too the turn loses
             # its cues, not its audio.
             logger.warning(
                 "avatar: lipsync runtime did not pre-warm ({}); it will start lazily", exc
@@ -340,52 +398,46 @@ class VisemeEngine:
     # ---- entry points (never block the caller) -----------------------------
 
     async def on_sentence_queued(self, ctx: str, text: str) -> None:
-        """A sentence has been handed to TTS. Emit fast-leg cues for it."""
+        """A sentence has been handed to TTS. Predict its cues now."""
         turn = self._turn(ctx)
         sentence = _Sentence(text=text, est_speech_ms=estimate_duration_ms(text))
         turn.queue.put_nowait(lambda: self._run_fast_leg(turn, sentence))
 
-    async def on_sentence_audio(
-        self, ctx: str, pcm: bytes | Sequence[bytes], *, sentences: int | None = 1
-    ) -> None:
-        """A chunk of the turn's audio has fully arrived. Emit corrected cues.
+    async def on_audio(self, ctx: str, pcm: bytes, *, sample_rate: int | None = None) -> None:
+        """One TTS audio frame. Feed the decode and re-emit what it now knows.
 
-        `pcm` may be the raw wire chunks; keepalives are dropped here so the
-        caller never has to remember to.
-
-        `sentences` is how many queued sentences this chunk covers, oldest first.
-        Normally one — the caller cuts at each sentence boundary — but a TTS
-        service with no word timestamps offers no boundary until the end of the
-        turn, and then one chunk retires everything predicted for it: `None`
-        means *all of them*. Getting this wrong does not misplace the chunk
-        (offsets are byte-derived); it strands the covered sentences in
-        `pending`, where they would be re-emitted at offsets that have already
-        been spoken.
-
-        No chunk is `final`: whether one is the turn's last is not knowable here,
-        and pretending otherwise is what made `final` a dead flag. That answer
-        arrives separately, as `on_context_closed`.
+        Called per frame, not per sentence: providers deliver 200-500 ms pieces
+        and the whole point of the live decode is that it does not wait for a
+        boundary. Keepalive frames are dropped here so no caller has to remember
+        to.
         """
-        audio = pcm if isinstance(pcm, bytes) else join_audio_chunks(pcm)
+        if len(pcm) <= KEEPALIVE_MAX_BYTES:
+            return
         turn = self._turn(ctx)
-        turn.queue.put_nowait(lambda: self._run_audio_leg(turn, audio, sentences))
+        if turn.sample_rate == 0:
+            turn.sample_rate = sample_rate or self._sample_rate
+        turn.queue.put_nowait(lambda: self._run_accurate_leg(turn, pcm))
 
-    async def on_sentence_partial(self, ctx: str, pcm: bytes | Sequence[bytes]) -> None:
-        """A prefix of the turn's first sentence exists. Correct it early.
+    async def on_sentence_spoken(self, ctx: str) -> None:
+        """Every sample of the oldest un-counted sentence has now been sent.
 
-        Queued behind the fast leg that predicted this same sentence, which is
-        what makes `turn.pending[0]` the sentence this audio belongs to.
+        This is a *bookkeeping* signal, not a decode trigger — it moves the point
+        the predicted tail is laid out from, so later sentences stop being placed
+        behind an estimate that has since been measured. A TTS service with no
+        word timestamps never sends it; there the tail keeps its estimated
+        offsets, which is what it had before any of this.
         """
-        audio = pcm if isinstance(pcm, bytes) else join_audio_chunks(pcm)
-        turn = self._turn(ctx)
-        turn.queue.put_nowait(lambda: self._run_early_leg(turn, audio))
+        turn = self._turns.get(ctx)
+        if turn is None:
+            return
+        turn.queue.put_nowait(lambda: self._resolve_sentence(turn))
 
     async def on_context_closed(self, ctx: str) -> None:
-        """The TTS context is closed: no further sentence belongs to this turn.
+        """The TTS context is closed: no further audio belongs to this turn.
 
-        Queued rather than acted on, so it lands *behind* every leg already
+        Queued rather than acted on, so it lands *behind* every frame already
         handed over — which is what makes `final` deterministic rather than a
-        race between the last audio leg and the frame that says it was the last.
+        race between the last audio frame and the frame that says it was the last.
         """
         turn = self._turns.get(ctx)
         if turn is None:
@@ -393,16 +445,27 @@ class VisemeEngine:
         turn.queue.put_nowait(lambda: self._close_turn(turn))
 
     async def end_turn(self, ctx: str) -> None:
-        """The turn is over (clean or interrupted). Drop its bookkeeping."""
+        """The turn is over (clean or interrupted). Drop its bookkeeping.
+
+        Does not cancel the worker, and that is not laziness. A cancelled
+        `run_in_executor` stops the *await*, not the thread: the decoder would
+        still be inside a foreign call on this turn's stream while we freed it,
+        which is a segfault rather than an exception. So the turn is flagged —
+        every queued job becomes a no-op from here — and the worker is asked to
+        retire, which it does after whatever call is already in flight returns.
+        Nothing waits for that; the cost of a barge-in is one more decode nobody
+        reads.
+        """
         turn = self._turns.pop(ctx, None)
         if turn is None:
             return
-        turn.worker.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await turn.worker
+        turn.aborted = True
+        turn.queue.put_nowait(_STOP)
+        self._retiring.add(turn.worker)
+        turn.worker.add_done_callback(self._retiring.discard)
 
     async def flush(self, ctx: str) -> None:
-        """Wait until every leg handed over for this turn has emitted.
+        """Wait until every job handed over for this turn has run.
 
         Never call this from a `process_frame` — it is the one method here that
         does wait on viseme work. It exists for shutdown, and for tests, which
@@ -415,6 +478,10 @@ class VisemeEngine:
     async def aclose(self) -> None:
         for ctx in list(self._turns):
             await self.end_turn(ctx)
+        # Retiring workers own the only reference to their decoder, so the
+        # session is not closed until they have handed it back.
+        if self._retiring:
+            await asyncio.gather(*list(self._retiring), return_exceptions=True)
         task, self._prewarm_task = self._prewarm_task, None
         if task is not None and not task.done():
             task.cancel()
@@ -422,170 +489,215 @@ class VisemeEngine:
                 await task
         await self._runtime.stop()
 
-    # ---- the legs ----------------------------------------------------------
+    # ---- the worker --------------------------------------------------------
 
     def _turn(self, ctx: str) -> _Turn:
         turn = self._turns.get(ctx)
         if turn is None:
-            queue: asyncio.Queue[Callable[[], Awaitable[None]]] = asyncio.Queue()
-            # One worker per turn, so the legs run in the order they were
-            # handed over. Ordering is not a nicety: the fast leg for sentence
-            # k+1 needs the offsets the audio leg for sentence k just resolved.
-            worker = asyncio.create_task(self._drain(queue), name=f"visemes:{ctx}")
-            turn = _Turn(ctx=ctx, queue=queue, worker=worker)
+            queue: asyncio.Queue[Any] = asyncio.Queue()
+            placeholder: Any = None
+            turn = _Turn(ctx=ctx, queue=queue, worker=placeholder)
+            # One worker per turn, so jobs run in the order they were handed
+            # over. Ordering is not a nicety: a sentence's predicted offset
+            # depends on how much audio has been counted, and the audio frames
+            # doing the counting are in this same queue.
+            turn.worker = asyncio.create_task(self._drain(turn), name=f"visemes:{ctx}")
             self._turns[ctx] = turn
         return turn
 
-    async def _drain(self, queue: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
-        while True:
-            job = await queue.get()
-            try:
-                await job()
-            except RhubarbError as exc:
-                # One sentence loses its cues. The call does not notice.
-                logger.warning("viseme leg failed: {}", exc)
-            except Exception:
-                logger.exception("viseme leg raised")
-            finally:
-                queue.task_done()
+    async def _drain(self, turn: _Turn) -> None:
+        try:
+            while True:
+                job = await turn.queue.get()
+                try:
+                    if job is _STOP:
+                        return
+                    if turn.aborted:
+                        continue
+                    await job()
+                except AvatarsyncError as exc:
+                    # The turn loses its accurate leg. The call does not notice.
+                    logger.warning("viseme leg failed: {}", exc)
+                    self._latch(turn, str(exc))
+                except Exception:
+                    logger.exception("viseme leg raised")
+                finally:
+                    turn.queue.task_done()
+        finally:
+            # The only place a stream is released. It runs after every job this
+            # worker will ever run, on the same task that made the calls, so
+            # there is no window in which the decoder is freed under a thread
+            # still using it.
+            stream, turn.stream = turn.stream, None
+            if stream is not None:
+                with contextlib.suppress(Exception):
+                    await stream.close()
+
+    # ---- the legs ----------------------------------------------------------
 
     async def _run_fast_leg(self, turn: _Turn, sentence: _Sentence) -> None:
         start_ms = self._projected_start_ms(turn)
-        cues = await self._runtime.text_cues(sentence.text, sentence.est_speech_ms)
-        sentence.fast_cues = cues
+        sentence.fast_cues = await self._runtime.text_cues(sentence.text, sentence.est_speech_ms)
         turn.pending.append(sentence)
-        await self._emit_sentence(turn, sentence, start_ms)
 
-    async def _run_early_leg(self, turn: _Turn, pcm: bytes) -> None:
-        """Recognise a prefix of the turn's first sentence and splice it in.
+        # Not emitted at all when recognition has already reached past this
+        # sentence's projected start — its audio is here and decoded, so a
+        # predicted track over it would be a correction in the wrong direction.
+        track = clip_track(self._fast_track(sentence, start_ms), turn.published_ms)
+        from_ms = max(0, start_ms - FAST_LEAD_MS, turn.published_ms)
+        if start_ms + sentence.est_speech_ms <= turn.published_ms or not track:
+            return
+        await self._emit(turn.ctx, from_ms, normalize_cues(track), False)
 
-        Everything this does *not* do is the interesting part. It does not pop
-        the sentence, advance `resolved_wire_ms`, or close the mouth at the end
-        of what it recognised — the sentence is still in flight, and a closing
-        `X` here would shut the mouth mid-word. It only replaces predicted cues
-        with recognised ones in a window that has not been played yet.
+    async def _run_accurate_leg(self, turn: _Turn, pcm: bytes) -> None:
+        turn.fed_ms += wire_ms(pcm, turn.sample_rate)
+        stream = await self._ensure_stream(turn)
+        if stream is None:
+            return
+
+        began = time.monotonic()
+        await stream.feed(pcm)
+        # The hold-back is applied here rather than inside the read so both
+        # halves of the emission agree on where recognition stops and prediction
+        # takes over. `edge_ms` is what has been *fed*; the decoder's own edge
+        # trails it by under a millisecond at any rate we accept.
+        edge_ms = max(0, round(turn.fed_ms) - HOLD_BACK_MS)
+        # The whole current sentence is rewritten every time, not just the stretch
+        # past the last accurate edge. Publishing only forward would freeze each
+        # 100 ms window under whatever the decoder believed when that window was
+        # the live edge — and the live edge is the decoder at its worst, with the
+        # least right context and the least converged CMN. Measured: rewriting
+        # forward-only costs 11 points of frame agreement against a batch decode
+        # of the same audio, and makes the result depend on the TTS frame size
+        # (200 ms scored 8-12 points below 500 ms purely because it froze more
+        # windows). Rewriting from the sentence start, the two cadences agree
+        # exactly.
+        #
+        # The sentence and not the turn, because the cost is the emission: a
+        # 46 s turn rewritten from zero on every frame is 65k cues and 1.7 MB on
+        # the wire, and grows with the square of the turn. Per sentence it is
+        # bounded by one sentence's cues and linear in the turn.
+        splice_ms = round(turn.resolved_wire_ms)
+        cues = await stream.cues(splice_ms, HOLD_BACK_MS)
+        turn.decode_ms += (time.monotonic() - began) * 1000
+
+        # `cues` empty means recognition has nothing at all past what is already
+        # published, so there is nothing to overwrite it *with*: emitting anyway
+        # would discard the predicted cues covering that stretch and replace them
+        # with a tail that starts later, leaving a hole.
+        if edge_ms > turn.published_ms and cues:
+            # One emission, both legs: recognised up to the edge, predicted after
+            # it. They go together because the wire primitive discards from
+            # `from_ms` — appending only the recognised part would silently take
+            # the predicted tail with it, which is what the old `_reemit_pending`
+            # existed to undo.
+            track = [*cues, *self._predicted_tail(turn, edge_ms)]
+            await self._emit(turn.ctx, splice_ms, normalize_cues(track), False)
+            turn.published_ms = edge_ms
+
+        if turn.fed_ms >= LATCH_MIN_MS and turn.decode_ms > turn.fed_ms * LATCH_RTF:
+            self._latch(
+                turn,
+                f"decode is at {turn.decode_ms / turn.fed_ms:.2f}x realtime over "
+                f"{turn.fed_ms / 1000:.1f}s",
+            )
+
+    async def _ensure_stream(self, turn: _Turn) -> VisemeStream | None:
+        """The turn's live decode, opened on its first audio frame.
+
+        `None` means this turn runs on predicted cues — either the pool refused,
+        or something already made that decision.
         """
-        if turn.early_done or turn.resolved_wire_ms > 0 or not turn.pending:
-            # Either the boundary beat us to it (a sentence shorter than the
-            # trigger, or a slow worker), or this is not the first sentence.
-            return
-        turn.early_done = True
+        if turn.accurate is False:
+            return None
+        if turn.stream is not None:
+            return turn.stream
+        stream = await self._runtime.open_stream(turn.sample_rate or self._sample_rate)
+        if stream is None:
+            self._latch(turn, "every decoder is in use")
+            return None
+        turn.stream = stream
+        turn.accurate = True
+        return stream
 
-        start_ms = round(turn.resolved_wire_ms)
-        # The prefix is raw wire, so it is speech: the 250 ms pad is appended
-        # after the sentence, and we are nowhere near the end of it.
-        end_ms = start_ms + round(wire_ms(pcm, self._sample_rate)) - EARLY_TAIL_GUARD_MS
-        splice_ms = start_ms + EARLY_SPLICE_MS
-        if end_ms - splice_ms < MIN_CUE_MS:
-            # Nothing would survive the splice. Leave the fast cues alone.
-            return
+    def _latch(self, turn: _Turn, why: str) -> None:
+        """Give up on the accurate leg for this turn, permanently.
 
-        cues = shift(await self._runtime.audio_cues(pcm, self._sample_rate), start_ms)
-        if not cues:
-            return
-        # Open with the shape recognition says is in force *at* the splice, so
-        # the mouth does not hold whatever the fast leg left there until the
-        # next recognised cue happens to land.
-        window = [
-            Cue(t=splice_ms, v=_shape_at(cues, splice_ms)),
-            *(cue for cue in cues if splice_ms < cue.t < end_ms),
-        ]
-        await self._emit(turn.ctx, splice_ms, normalize_cues(window), False)
-        await self._resume_fast(turn, end_ms)
-
-    async def _resume_fast(self, turn: _Turn, from_ms: int) -> None:
-        """Put the predicted cues back after `from_ms`, which a splice just cut.
-
-        `_reemit_pending` cannot do this job: it re-places sentences whose
-        *offset* moved, and the early leg moves nobody's offset — it lands inside
-        sentence one, which is still pending at the same start it always had. So
-        that sentence needs its tail restored explicitly, and the ones after it
-        need re-sending because `from_ms` discarded them wholesale.
+        Permanently because a turn that flipped between legs would show the seam
+        every time it flipped, and the predicted track is continuous. The stream
+        is not closed here — the turn's end owns that, and closing it out from
+        under a decode in flight is the one thing that is not survivable.
         """
-        cursor = turn.resolved_wire_ms
-        for sentence in turn.pending:
-            start_ms = round(cursor)
-            cursor += sentence.est_speech_ms
-            # `from_ms` is a recognised boundary, so predicted cues resume *at*
-            # it and never before — including via the lead, which would
-            # otherwise let a sentence starting near the splice overwrite the
-            # last `FAST_LEAD_MS` of real recognition with a guess. Each
-            # sentence gets its own `from_ms` so the second does not discard
-            # the first.
-            at = max(from_ms, start_ms - FAST_LEAD_MS)
-            tail = [cue for cue in self._fast_track(sentence, start_ms) if cue.t >= at]
-            if tail:
-                # A sentence wholly behind the splice leaves nothing here.
-                await self._emit(turn.ctx, at, normalize_cues(tail), False)
+        if turn.accurate is False:
+            return
+        turn.accurate = False
+        logger.info("avatar: turn {} is on predicted cues — {}", turn.ctx, why)
 
-    async def _run_audio_leg(self, turn: _Turn, pcm: bytes, sentences: int | None) -> None:
-        total_ms = wire_ms(pcm, self._sample_rate)
-        start_ms = round(turn.resolved_wire_ms)
-
-        # Every sentence this chunk covers is now resolved by measurement, so
-        # none of them may be re-emitted from its estimate.
-        n = len(turn.pending) if sentences is None else min(sentences, len(turn.pending))
-        covered = [turn.pending.popleft() for _ in range(n)]
-        turn.resolved_wire_ms += total_ms
-
-        # The whole chunk, silence included. A service that pads its sentences
-        # gets that pad recognised rather than declared: rhubarb reads it as the
-        # silence it is and returns `X`, which is the cue we would have had to
-        # synthesize anyway. Trimming it first would buy a base64 round trip on
-        # 12 kB of zeros at the price of a number every caller has to measure.
-        cues: list[Cue] = []
-        if pcm:
-            cues = await self._runtime.audio_cues(pcm, self._sample_rate)
-
-        await self._emit_chunk(turn.ctx, start_ms, cues, round(total_ms))
-
-        for sentence in covered:
-            sentence.emitted_start_ms = start_ms
-        await self._reemit_pending(turn)
+    async def _resolve_sentence(self, turn: _Turn) -> None:
+        if turn.pending:
+            turn.pending.popleft()
+        turn.resolved_wire_ms = turn.fed_ms
 
     async def _close_turn(self, turn: _Turn) -> None:
-        """Emit the chunk that completes the turn's track, and say so.
+        """Emit the track that completes the turn, and say so.
 
-        Every sentence closes its own mouth at the end of its *speech*, one pad
-        short of its wire. Nothing places the end of the turn's audio itself,
-        which is where this lands a final `X` — the only cue in a track that
-        describes the turn rather than a sentence in it.
-
-        `final` rides it because a chunk is the only thing the wire has to hang
-        it on, and this is the only chunk we can promise nothing follows.
-        Deliberately absent from an interrupted turn: `end_turn` cancels this
-        worker, so a turn that was cut never claims to have completed.
+        `final` rides it because this is the only emission we can promise nothing
+        follows. Deliberately absent from an interrupted turn: `end_turn` flags
+        the turn, so a turn that was cut never claims to have completed.
         """
         if turn.closed:
             return
         turn.closed = True
-        # Past every sentence, resolved or still only estimated: a sentence whose
-        # audio never arrived keeps its fast cues rather than being spliced away.
-        end_ms = self._projected_start_ms(turn)
+
+        stream, turn.stream = turn.stream, None
+        # A latched turn does not finish its stream, it abandons it. `finish()`
+        # is one more decode, and this turn latched precisely because decodes
+        # were not arriving in time to be worth having — so its result would land
+        # over audio that has already played, which is the correction-as-twitch
+        # the latch exists to prevent. It would also be the turn's *last*
+        # emission, so the seam would fall at the end of every latched turn, and
+        # "there is no un-latch" would be true everywhere except where it shows.
+        if stream is not None and turn.accurate is False:
+            await stream.close()
+            stream = None
+        if stream is not None:
+            try:
+                # No hold-back: there is no more evidence coming, so the tail of
+                # the backtrace is as settled as it will ever be.
+                cues = await stream.finish()
+            finally:
+                await stream.close()
+            end_ms = round(turn.fed_ms)
+            track = clip_track([*cues, Cue(t=end_ms, v=SILENT)], turn.published_ms)
+            await self._emit(turn.ctx, turn.published_ms, normalize_cues(track), True)
+            turn.published_ms = end_ms
+            return
+
+        # Predicted all the way. Past every sentence, so a turn whose audio never
+        # arrived keeps its predicted cues rather than being closed over them.
+        end_ms = max(round(turn.fed_ms), self._projected_start_ms(turn), turn.published_ms)
         await self._emit(turn.ctx, end_ms, [Cue(t=end_ms, v=SILENT)], True)
 
     # ---- offsets and emission ---------------------------------------------
 
     def _projected_start_ms(self, turn: _Turn) -> int:
-        """Where the next sentence starts: measured wire so far, plus estimates."""
+        """Where the next sentence starts: counted wire so far, plus estimates."""
         return round(turn.resolved_wire_ms + sum(s.est_speech_ms for s in turn.pending))
 
-    async def _reemit_pending(self, turn: _Turn) -> None:
-        """Re-place still-pending sentences after a splice moved the ground.
+    def _predicted_tail(self, turn: _Turn, from_ms: int) -> list[Cue]:
+        """Predicted cues for audio recognition has not reached yet.
 
-        Emitting the accurate chunk with `from_ms = start` discards every queued
-        cue at or after it — including the fast-leg cues for sentences that have
-        not been spoken yet. Those are re-sent here at their corrected offsets,
-        from cues we already hold, so a splice never leaves a gap. Silent when
-        the estimate was right, which is the common case.
+        Laid out from the last counted boundary, so the estimate only has to
+        cover the sentences after it rather than accumulating across the turn.
         """
+        track: list[Cue] = []
         cursor = turn.resolved_wire_ms
         for sentence in turn.pending:
-            start_ms = round(cursor)
+            track.extend(self._fast_track(sentence, round(cursor)))
             cursor += sentence.est_speech_ms
-            if sentence.emitted_start_ms == start_ms:
-                continue
-            await self._emit_sentence(turn, sentence, start_ms)
+        if not track:
+            return []
+        return clip_track(track, from_ms)
 
     def _fast_track(self, sentence: _Sentence, start_ms: int) -> list[Cue]:
         """One sentence's predicted cues, on the turn timeline and led."""
@@ -597,29 +709,3 @@ class VisemeEngine:
         # the mouth open `FAST_LEAD_MS` longer at the end of every sentence,
         # which is the hanging-mouth artefact the X exists to prevent.
         return lead_track(track)
-
-    async def _emit_sentence(self, turn: _Turn, sentence: _Sentence, start_ms: int) -> None:
-        sentence.emitted_start_ms = start_ms
-        track = self._fast_track(sentence, start_ms)
-        # `from_ms` moves with the track: it means "discard from here", and cues
-        # appended before it would sit behind what the client kept.
-        await self._emit(turn.ctx, max(0, start_ms - FAST_LEAD_MS), normalize_cues(track), False)
-
-    async def _emit_chunk(
-        self, ctx: str, start_ms: int, cues: Sequence[Cue], chunk_ms: int
-    ) -> None:
-        """Shift a *recognised* track onto the turn timeline, close it, emit.
-
-        No lead here — these times were measured against the audio they describe.
-        Predicted tracks go out through `_emit_sentence`.
-
-        Never `final`: a sentence's chunk cannot be the one that completes the
-        turn, because a later sentence may still re-place it. Only `_close_turn`
-        emits with `final` set.
-        """
-        # Close at the chunk's true end. Recognition normally lands an X on any
-        # trailing silence itself, so this usually collapses into that one; it
-        # matters when the chunk ends mid-shape, where without it the widget
-        # holds the last cue open until the next sentence arrives.
-        track = [*shift(cues, start_ms), Cue(t=start_ms + chunk_ms, v=SILENT)]
-        await self._emit(ctx, start_ms, normalize_cues(track), False)

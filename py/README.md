@@ -62,11 +62,14 @@ the 56 MB acoustic model it needs. That is why the wheel is ~44 MB and
 platform-specific. **No path, no environment variable, no separate artifact to
 ship into your image.**
 
-Three legs, and the client splices between them: a **fast** leg predicting the
-timeline from text before the audio exists (~0.4 ms), an **accurate** leg
-recognising phones from the rendered PCM (~15 ms), and an **early-prefix** leg
-for the first sentence, where latency is most visible. The reasoning and the
-constants are in `visemes.py`, next to the numbers they explain.
+Two legs, and the **server** splices between them. The **fast** leg predicts the
+whole timeline from the sentence's text before any audio exists (~0.15 ms, on
+the event loop) so the mouth is already moving when the first sample plays. The
+**accurate** leg then recognises phones from the rendered PCM as it streams, off
+the loop, and overwrites the prediction from the point it has reached. The
+client never chooses: a `cues` message carries `from_ms`, and everything queued
+at or after it is discarded. The reasoning and the constants are in
+`visemes.py`, next to the numbers they explain.
 
 | platform | wheel |
 |---|---|
@@ -83,12 +86,12 @@ condition rather than a failure**: `AvatarProcessor` catches, logs once, and
 runs the session state-channel only. The face still listens, thinks, claims the
 floor and yields it; its mouth does not move while it speaks. Worse, not broken.
 (The internal `build_viseme_engine()` fails fast instead, raising
-`RhubarbUnavailableError` — a caller who asked for an engine and silently did
+`AvatarsyncUnavailableError` — a caller who asked for an engine and silently did
 not get one has been lied to.)
 
 A source checkout of the repo is found by walking up to `native/avatarsync`, so
-the tests and the demo run against a locally built binary with no configuration
-either.
+the tests and the demo run against a locally built library with no configuration
+either. `voqalize-avatar info` says which one was found and proves it answers.
 
 ## Saying what the pipeline cannot infer
 

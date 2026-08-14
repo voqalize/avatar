@@ -280,14 +280,19 @@ Three tiers, best first — full recipes with code are in
 2. **Forced alignment** (any TTS): phonemize + align (MFA, gentle, or
    `rhubarb-lip-sync` directly — our letters *are* Rhubarb's), then map ARPAbet
    through `ARPABET_TO_VISEME`.
-3. **No server work**: the client amplitude fallback, or `textToCues(text)` —
-   a crude grapheme guesser fit for previews only.
+3. **No server work**: `textToCues(text)` — a crude grapheme guesser fit for
+   previews only. (The client amplitude fallback that used to be the other
+   half of this tier is gone; see
+   [removed.md § Amplitude lipsync](removed.md#amplitude-lipsync).)
 
 `experiments/rhubarb-textsync/` derived letters from *text* before audio
 exists, to keep model-init cost off the time-to-first-audio path. It graduated:
-the production form is `native/avatarsync/`, one resident binary serving both a
-~0.2 ms text leg and a ~15–35 ms warm audio-recognition leg, driven by
-`voqalize-avatar` (see *The reference backend*).
+the production form is `native/avatarsync/`, one resident **shared library**
+loaded into the caller's process, serving a ~0.2 ms text leg and a live
+streaming audio-recognition leg from one acoustic model, driven by
+`voqalize-avatar` (see *The reference backend*). The subprocess that used to
+carry it, and why it went, are in
+[removed.md § Removed in 0.3](removed.md#removed-in-03--the-backend-transport).
 
 ## Composing behavior: `perform(actions, { audio?, clock?, onAction? })`
 

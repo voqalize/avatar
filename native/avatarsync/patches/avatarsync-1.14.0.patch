@@ -1,31 +1,68 @@
-Three changes to pristine rhubarb-lip-sync 1.14.0, all of them about turning a
-one-shot CLI into a resident service. Nothing here alters what Rhubarb decides;
-`animate()` and both recognizers are untouched.
+Four changes to pristine rhubarb-lip-sync 1.14.0, all of them about turning a
+one-shot CLI into a library another process loads. Nothing here alters what
+Rhubarb decides; `animate()` and both recognizers are untouched.
 
-  1. CMakeLists.txt — build our `avatarsync` executable from src/avatarsync/.
-  2. pocketSphinxTools.cpp — cache the decoder pool across calls
+  1. CMakeLists.txt — compile position-independent, so the vendored static
+     archives can be linked into a shared library at all.
+  2. CMakeLists.txt — build libavatarsync from src/avatarsync/, with hidden
+     visibility so the only symbols it offers are the avs_* ABI.
+  3. pocketSphinxTools.cpp — cache the decoder pool across calls
      (RHUBARB_WARM_POOL). Upstream rebuilds it per call, which is right for a
-     process that runs once and exits and ruinous for a service: ps_init()
-     against an 82 MB acoustic model dominates every short clip. Measured 181 ms
-     cold → 31 ms warm for `phonetic`.
-  3. pocketSphinxTools.cpp — let RHUBARB_RES_DIR override the model directory.
-     Upstream derives it from the executable's own location, which forces one
-     56 MB copy of the models per platform binary; we keep a single shared tree.
+     process that runs once and exits and ruinous for a resident library:
+     ps_init() against an 82 MB acoustic model dominates every short clip.
+     Measured 181 ms cold → 31 ms warm for `phonetic`.
+  4. pocketSphinxTools.cpp — let RHUBARB_RES_DIR override the model directory.
+     Upstream derives it from the executable's own location, which is not even
+     meaningful for a library loaded by python3, and would otherwise force one
+     56 MB copy of the models per platform artifact; we keep a single shared
+     tree.
 
 --- a/rhubarb/CMakeLists.txt
 +++ b/rhubarb/CMakeLists.txt
-@@ -518,7 +518,25 @@
+@@ -9,6 +9,15 @@
+ set(CMAKE_CXX_STANDARD 17)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
++# Compile everything position-independent.
++#
++# The artifact we ship is a shared library, and on Linux a static archive built
++# without -fPIC cannot be linked into one. The failure is a wall of relocation
++# errors naming a vendored pocketsphinx object file, which points at the symbol
++# rather than at the missing flag; it is worth the global setting to never see
++# it. On macOS this is already the default and the line is a no-op.
++set(CMAKE_POSITION_INDEPENDENT_CODE ON)
++
+ # Enable POSIX threads
+ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+ 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
+@@ -518,7 +527,41 @@
  	rhubarb-lib
  )
  target_compile_options(rhubarb PUBLIC ${enableWarningsFlags})
 +
-+# Define the avatarsync executable: one resident process serving both viseme
-+# legs — text+duration -> cues with no audio (rhubarb-recognition for
-+# tokenizeText/wordToPhones plus rhubarb-animation's animate(), never touching
-+# the acoustic model), and real `phonetic` recognition over PCM handed in on
-+# stdin (rhubarb-lib's animateAudioClip).
-+add_executable(avatarsync
-+	src/avatarsync/avatarsync.cpp
++# Define libavatarsync: both viseme legs behind a C ABI, for a host process to
++# load in-process rather than spawn.
++#
++#   text  — rhubarb-recognition for tokenizeText/wordToPhones plus
++#           rhubarb-animation's animate(), never touching the acoustic model.
++#   audio — real `phonetic` recognition over PCM the caller already holds.
++#
++# A shared library rather than an executable because the caller is a Python
++# voice agent on an asyncio loop: a pipe would put base64, JSON, a reader task
++# and a restart policy between it and a function call, and ctypes releases the
++# GIL for the duration of a foreign call anyway, so the decoder runs off the
++# event loop for free.
++add_library(avatarsync SHARED
++	src/avatarsync/core.cpp
++	src/avatarsync/capi.cpp
++)
++target_include_directories(avatarsync PUBLIC "src/avatarsync")
++# Hidden by default, with the ABI marked AVS_API in avatarsync.h. The process
++# loading this has its own symbol table and no interest in ours.
++set_target_properties(avatarsync PROPERTIES
++	CXX_VISIBILITY_PRESET hidden
++	C_VISIBILITY_PRESET hidden
++	VISIBILITY_INLINES_HIDDEN ON
 +)
 +target_link_libraries(avatarsync
 +	rhubarb-lib
@@ -62,7 +99,7 @@ one-shot CLI into a resident service. Nothing here alters what Rhubarb decides;
 +	// Prepare pool of decoders.
 +	//
 +	// Upstream builds this pool per call, which is right for a CLI that runs once
-+	// and exits. In a resident service it means paying ps_init() — an 82MB
++	// and exits. In a resident library it means paying ps_init() — an 82MB
 +	// acoustic model off disk, ~160ms native — on every single request, and it is
 +	// the dominant cost for the short clips a TTS sidecar sees.
 +	//
@@ -102,15 +139,16 @@ one-shot CLI into a resident service. Nothing here alters what Rhubarb decides;
 
  	BoundedTimeline<Phone> phones(audioClip->getTruncatedRange());
  	std::mutex resultMutex;
-@@ -168,7 +208,17 @@
+@@ -168,7 +208,18 @@
  	return phones;
  }
 
 +// Upstream resolves the model directory from the executable's own location and
-+// hard-fails if res/sphinx is not a sibling of the binary. That forces one 56 MB
-+// copy of the models per platform binary in a repo that ships several. When
-+// RHUBARB_RES_DIR is set we take it verbatim, which also skips the
-+// getBinDirectory() sanity check — the only caller of it.
++// hard-fails if res/sphinx is not a sibling of the binary. For a library loaded
++// by python3 that location is the interpreter's, which is meaningless; and it
++// would force one 56 MB copy of the models per platform artifact in a repo that
++// ships several. When RHUBARB_RES_DIR is set we take it verbatim, which also
++// skips the getBinDirectory() sanity check — the only caller of it.
  const path& getSphinxModelDirectory() {
 -	static path sphinxModelDirectory(getBinDirectory() / "res" / "sphinx");
 +	static path sphinxModelDirectory = [] {
@@ -121,3 +159,4 @@ one-shot CLI into a resident service. Nothing here alters what Rhubarb decides;
 +	}();
  	return sphinxModelDirectory;
  }
+

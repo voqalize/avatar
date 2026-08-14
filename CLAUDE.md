@@ -126,14 +126,24 @@ The rig is judged by eye; the packages are judged by test.
 node tools/sweep.mjs      # rig conformance gate — run before committing src/
 npm test                  # client/: dispatcher + jsdom package boundary
 npm run studio:dev        # Avatar Studio — the review environment
-cd py && uv run pytest     # backend, against the real avatarsync binary
+cd py && uv run pytest     # backend, against the real avatarsync library
+cd py && uv run --group demo python ../demo/pipecat/server.py   # a real call
 ```
 
 Headless render/screenshot/diff/motion tooling: [tools/README.md](tools/README.md).
 Which Studio route validates which contract:
 [studio-verification.md](docs/studio-verification.md), [studio/README.md](studio/README.md).
 
-Two things no suite will tell you:
+Three things no suite will tell you:
+
+- **Lipsync is only ever verified in [`demo/pipecat/`](demo/pipecat/README.md)**
+  — a real call, your microphone, live TTS, `AvatarProcessor()` seated between
+  the TTS and the transport. Nothing else exercises the streaming accurate leg:
+  Studio and `demo/rig/lipsync-review.html` play *baked* cue tracks, so they
+  show what a leg's cues look like and not how the two legs interleave, latch or
+  rewrite under a real generator. The two constraints the demo exists to check
+  are the ones only ears catch — that the mouth moves the instant audio starts,
+  and that the accurate leg's arrival is not visible as a jump.
 
 - **Serve with `python3 serve.py 8777`, never `python3 -m http.server`.** The
   stdlib server sends `Last-Modified` and no `Cache-Control`, so browsers apply

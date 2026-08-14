@@ -62,37 +62,42 @@ processor infers what the agent is doing from frames already flowing past it,
 
 Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
 Why a library rather than a product, and what each published artifact owns:
-the same document. What 0.2 cut from the public surface and how to get any of
-it back: [removed.md](docs/removed.md).
+the same document. What 0.2 and 0.3 cut from the public surface, and how to get
+any of it back: [removed.md](docs/removed.md).
 
 ## TTS to visemes
 
 A native library turns speech into [Rhubarb](https://github.com/DanielSWolf/rhubarb-lip-sync)
 visemes — the A–H+X alphabet, nine shapes, a condensation of the Preston Blair
 mouth set. `avatarsync` is our C++ fork of it, it ships inside the Python wheel
-with its acoustic model, and `AvatarProcessor` is the only thing that knows the
-binary exists. Nothing to install, no path, no environment variable.
+with its acoustic model, loaded into the process through `ctypes`, and
+`AvatarProcessor` is the only thing that knows it exists. Nothing to install, no
+path, no environment variable, no subprocess.
 
 Every sentence gets answered twice, because waiting for the accurate answer
 would delay the audio:
 
 - **fast leg** — predicted from the text the moment it is handed to TTS, before
-  any audio exists. ~0.4 ms, and it is what keeps the mouth moving from the
-  first frame of playout.
-- **accurate leg** — real phone recognition over the rendered PCM, ~15–31 ms,
-  once that sentence's audio has fully arrived.
+  any audio exists. ~0.15 ms, on the event loop, and it is what keeps the mouth
+  moving from the first frame of playout.
+- **accurate leg** — real phone recognition over the rendered PCM, decoded
+  *while it streams* on a worker thread, and overwriting the prediction as it
+  advances.
 
-Shortly after the audio starts, accurate cues land and the client splices them
-in. A third **early leg** covers the opening of the turn, where the fast leg's
-inaccuracy is most visible and there is not yet a whole sentence of audio to
-recognise.
+Three constants carry the design. `FAST_LEAD_MS = 60` emits predicted cues
+early, because the eye is forgiving of a mouth that moves ahead of the sound and
+not of one that lags. `HOLD_BACK_MS = 100` is how far behind the fed edge the
+accurate track stops — a segment near the edge is still liable to change, and a
+shape rewritten under the playhead is a twitch rather than a correction. And
+`LATCH_RTF = 0.8` gives up: if decode stops keeping up with playout, the turn
+falls back to the fast leg permanently rather than shipping corrections that
+arrive after the mouth has already moved on. The rest of the reasoning is in
+[`py/src/voqalize_avatar/visemes.py`](py/src/voqalize_avatar/visemes.py), next to
+the numbers it explains.
 
-The one constant worth knowing here is `EARLY_SPLICE_MS = 500`: a correction
-must land *behind* the playhead, because a mouth shape rewritten under the
-playhead is a twitch rather than a correction. The rest of the reasoning — why
-predicted tracks lead, how a resolved sentence re-places the ones after it — is
-in [`py/src/voqalize_avatar/visemes.py`](py/src/voqalize_avatar/visemes.py),
-next to the numbers it explains.
+Emission is **overwrite, never merge**: a `cues` message says "discard everything
+queued at or after `from_ms`, then append these". The server decides; the client
+has no say and no way to refuse.
 
 Not using our backend? [contract-protocol.md § Producing cues server-side](docs/contract-protocol.md)
 covers native TTS viseme events and forced alignment.
@@ -241,7 +246,7 @@ need a server, and it must be `python3 serve.py 8777` rather than
 ```sh
 node tools/sweep.mjs      # rig conformance gate — run before committing src/
 npm test                  # client: dispatcher + jsdom package boundary
-cd py && uv run pytest    # backend, against the real avatarsync binary
+cd py && uv run pytest    # backend, against the real avatarsync library
 ```
 
 Headless render, screenshot and pixel-diff tooling — including a real

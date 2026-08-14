@@ -55,11 +55,11 @@ it subscribes to as a local literal for exactly this reason, with a test pinning
 it against the real enum. The check that catches the regression is packing the
 tarball and importing it from a clean project; CI does it on every push.
 
-**One pypi package, and the binary is inside it.** The whole lipsync stack is
-stdlib plus a subprocess, with *zero* avatar-specific Python dependencies, so a
-second wheel for the native half would buy a dependency edge nobody needs and a
-second version to keep in step. The 3 MB binary and the 56 MB acoustic model
-therefore ride in the wheel itself, which makes it platform-specific and ~44 MB
+**One pypi package, and the library is inside it.** The whole lipsync stack is
+stdlib plus a ctypes call into our own shared library, with *zero*
+avatar-specific Python dependencies, so a second wheel for the native half would
+buy a dependency edge nobody needs and a second version to keep in step. The 2 MB
+library and the 56 MB acoustic model therefore ride in the wheel itself, which makes it platform-specific and ~44 MB
 and makes `pip install voqalize-avatar` the entire installation procedure.
 
 This was briefly the other way round — the artifact shipped separately and the
@@ -258,12 +258,13 @@ src/                    the widget — published, not exported
 client/                 AvatarClient (splice, clock anchor) + React binding
                         -> @voqalize/avatar, whose one export is createAvatar
 py/                     voqalize-avatar: pyproject + src/voqalize_avatar/ + tests
-native/avatarsync/      the rhubarb fork: patch, src, build.sh, binaries
+native/avatarsync/      the rhubarb fork: patch, capi.cpp, build.sh, libavatarsync.*
 docs/                   the contracts, binding for both packages
-  removed.md            what 0.2 cut from the public surface, and how to undo it
+  removed.md            what 0.2 and 0.3 cut from the surface, and how to undo it
 package.json            @voqalize/avatar, one export
 studio/                 Avatar Studio — vite + React, the review environment
 demo/ tools/            the rig demos and the headless verification tooling
+  pipecat/              a real call — the only place lipsync is verified
 experiments/            server-side spikes; ships nowhere near the widget
 ```
 
