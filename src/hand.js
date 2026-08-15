@@ -4,9 +4,9 @@
  * The avatar has no arms (CLAUDE.md, constraint 9): two earlier rigs carried a
  * full forearm/hand chain, nine parameter channels and several hundred lines of
  * geometry each, and it was removed on sight. This is the other design. It
- * survived a stakeholder trial in `experiments/arm-gesture/` and was promoted
- * on 2026-08-07; what makes it a different proposition from the thing that was
- * cut is that **it is not part of the rig**. No parameter channel, no per-face
+ * survived a stakeholder trial and was promoted on 2026-08-07; what makes it a
+ * different proposition from the thing that was cut is that **it is not part of
+ * the rig**. No parameter channel, no per-face
  * geometry, no forearm — one drawing, placed by four numbers derived from the
  * mounted avatar's own `META.viewBox`, painted in its own theme, appended over
  * its SVG. A face that never plays a gesture is byte-for-byte what it was.

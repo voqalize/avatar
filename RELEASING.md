@@ -4,7 +4,7 @@ Two packages, one tag, no long-lived credentials.
 
 | package | registry | what's in it |
 |---|---|---|
-| [`@voqalize/avatar`](https://www.npmjs.com/package/@voqalize/avatar) | npm | the widget (`src/`) plus the `./pipecat` and `./react` subpaths |
+| [`@voqalize/avatar`](https://www.npmjs.com/package/@voqalize/avatar) | npm | `createAvatar` (`.`), `<Avatar>` (`./react`), the widget (`./internal`) |
 | [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) | PyPI | the pipecat processor, state machine, wire and viseme engine |
 
 They version in lockstep and ship together. They are two ends of one wire

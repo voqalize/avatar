@@ -42,7 +42,7 @@ Homepage = "https://github.com/voqalize/avatar"
 Repository = "https://github.com/voqalize/avatar"
 Issues = "https://github.com/voqalize/avatar/issues"
 # The wire format this package speaks, and the widget that renders it.
-Protocol = "https://github.com/voqalize/avatar/blob/main/docs/contract-protocol.md"
+Protocol = "https://github.com/voqalize/avatar/blob/main/docs/contract-wire.md"
 
 [build-system]
 requires = ["hatchling"]
