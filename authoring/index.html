@@ -1,20 +1,22 @@
 <!doctype html>
 <!--
-  Index for the avatar-development harnesses.
+  The front door of the workshop.
 
-  These are not entry points to the product. A call to show people is
-  `server/` — a real pipecat process with a real transport — and `index.html`
-  is the full control harness; everything in this directory exists for the
-  occasions when someone is *building or repairing a rig*, which is a different
-  job with a different rhythm. They were sitting alongside the demos and reading
-  as six more ways in; they are one way in, from here.
+  Everything in this directory is for *building or repairing an avatar*, which
+  is a different job from shipping one and has a different rhythm. Nothing here
+  is a product surface: a call to show people is `server/`, and the IDE for the
+  published interface is `studio/`.
+
+  This page is written to be enough on its own. Someone who draws for a living
+  and has never seen this repo should be able to open it and know which page to
+  click, so every entry says what it answers rather than what it contains.
 
   Nothing here loads unless you open it, so the cost of keeping them is a
   directory listing. The cost of not keeping them is finding the G/B viseme
   collision by eye on a live call.
 -->
 <meta charset="utf-8">
-<title>Avatar — rig harnesses</title>
+<title>Avatar — the workshop</title>
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; padding: 40px 28px 64px; background: #14171c; color: #c8ccd4;
@@ -34,10 +36,21 @@
 </style>
 <body>
 <div class="wrap">
-  <h1>Avatar — rig harnesses</h1>
+  <h1>Avatar — the workshop</h1>
   <p class="sub">
-    For building and repairing avatars. The rig is judged by eye, so every one of
-    these renders through the real generators rather than reporting numbers.
+    For drawing avatars and making them move. Every page here renders through
+    the same code that ships, so what you see is what a caller gets — and the
+    rig is judged by eye, which is why these show you a face rather than a
+    number. Nothing needs a build step: edit a file in <code>src/</code>, reload,
+    look.
+  </p>
+
+  <p class="sub">
+    Serve this directory's parent with <code>python3 authoring/serve.py 8777</code>
+    and open <a href="http://localhost:8777/authoring/">localhost:8777/authoring/</a>.
+    Not <code>python3 -m http.server</code> — it lets the browser cache modules
+    you have edited, which has cost three debugging sessions here, one of them
+    producing an error message that was simply untrue.
   </p>
 
   <h2>Start here when a rig is new or broken</h2>
@@ -93,7 +106,7 @@
         walking the mixer to an absolute simulated time in 1/60s ticks. Same
         seed, same <em>t</em>, same pixels — which is the only reason a change
         to the liveness layer can be measured at all. Not a page to look at;
-        it is the driver for <code>node tools/motion.mjs</code>, which reports
+        it is the driver for <code>node authoring/tools/motion.mjs</code>, which reports
         how far the body actually travels in delivered pixels.
         <code>&amp;gesture=GESTURE_GREET&amp;at=0.4&amp;side=1</code> fires a hand gesture at
         an absolute sim time, which is how a frame-edge hand gets filmstripped
@@ -133,19 +146,39 @@
     </li>
   </ul>
 
+  <h2>Drive one by hand</h2>
+  <ul>
+    <li>
+      <a href="workbench.html">workbench.html</a>
+      <p class="d">
+        One avatar and every control there is: states, emotions, gaze, the
+        interjections, the hand gestures, text you type turned into visemes, and
+        the raw parameter sliders underneath all of it. This is the page to open
+        when the question is <span class="q">what does it look like when…</span>
+        rather than <span class="q">is this rig correct</span>.
+      </p>
+    </li>
+  </ul>
+
   <h2>Not here</h2>
   <ul>
     <li>
       <a href="http://localhost:7860/">server/</a>
       <p class="d">
-        A real call, driven by a real pipecat process. Run
+        A real call — your microphone, a real pipecat process, no API key. The
+        only place lipsync can actually be judged, because only there do the two
+        viseme legs interleave under a live generator. Run
         <code>cd py &amp;&amp; uv run --group server python ../server/server.py</code>
         first; nothing here starts it for you.
       </p>
     </li>
     <li>
-      <a href="../../index.html">index.html</a>
-      <p class="d">The full control harness, driving one avatar as a host would.</p>
+      <a href="http://127.0.0.1:4173/">studio/</a>
+      <p class="d">
+        The IDE for the published interface — the options a product developer
+        passes to <code>createAvatar</code>, and the wire, on the same live call.
+        It knows nothing about rigs. <code>pnpm run studio:dev</code>.
+      </p>
     </li>
   </ul>
 </div>

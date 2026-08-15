@@ -31,11 +31,11 @@
 <div id="out"></div>
 
 <script type="module">
-import { makeParams } from '../../src/params.js';
-import { VISEME_LETTERS, shapeFor } from '../../src/visemes.js';
-import { EMOTION_NAMES, emotionPose } from '../../src/emotions.js';
-import { GAZE_TARGETS, GAZE_NAMES } from '../../src/gaze.js';
-import { FACES, DEFAULT_FACE } from '../../src/faces.js';
+import { makeParams } from '../src/params.js';
+import { VISEME_LETTERS, shapeFor } from '../src/visemes.js';
+import { EMOTION_NAMES, emotionPose } from '../src/emotions.js';
+import { GAZE_TARGETS, GAZE_NAMES } from '../src/gaze.js';
+import { FACES, DEFAULT_FACE } from '../src/faces.js';
 
 const qs = new URLSearchParams(location.search);
 const which = qs.get('face') || DEFAULT_FACE;

@@ -58,7 +58,7 @@ jobs:
         # a parameter-space bug that would bite the default rig too.
         env:
           PUPPETEER_ARGS: --no-sandbox
-        run: node tools/sweep.mjs
+        run: node authoring/tools/sweep.mjs
 
       - name: npm package contents
         # The tarball is the artifact consumers actually get; `files` has been

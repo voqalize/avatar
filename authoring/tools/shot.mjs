@@ -2,10 +2,10 @@
 /**
  * Render one page headless and write a PNG.
  *
- *   node tools/shot.mjs 'demo/rig/contact-sheet.html?face=peep' -o /tmp/peep.png
- *   node tools/shot.mjs 'demo/rig/clip-strip.html?clip=SHRUG' --selector '#g'
- *   node tools/shot.mjs index.html --wait 500          # extra settle ms
- *   node tools/shot.mjs page.html --wait 'window.done' # await an expression
+ *   node authoring/tools/shot.mjs 'authoring/contact-sheet.html?face=peep' -o /tmp/peep.png
+ *   node authoring/tools/shot.mjs 'authoring/clip-strip.html?clip=SHRUG' --selector '#g'
+ *   node authoring/tools/shot.mjs index.html --wait 500          # extra settle ms
+ *   node authoring/tools/shot.mjs page.html --wait 'window.done' # await an expression
  *
  * Serves the repo itself (no serve.py needed), waits for module scripts +
  * fonts + two rAF ticks, and fails (exit 1) on any page error, console.error
@@ -21,7 +21,7 @@ const opt = (name, dflt) => {
   return i >= 0 ? args[i + 1] : dflt;
 };
 if (!urlPath) {
-  console.error('usage: node tools/shot.mjs <url-path> [-o out.png] [--selector css] [--width N] [--scale N] [--wait ms|expr]');
+  console.error('usage: node authoring/tools/shot.mjs <url-path> [-o out.png] [--selector css] [--width N] [--scale N] [--wait ms|expr]');
   process.exit(2);
 }
 const out = opt('-o', 'shot.png');

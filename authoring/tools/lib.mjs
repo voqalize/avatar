@@ -12,7 +12,10 @@ import { extname, join, normalize, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer';
 
-export const REPO_ROOT = normalize(join(dirname(fileURLToPath(import.meta.url)), '..'));
+// `authoring/tools/` → the repo root, two up. The pages import `../src/*.js`
+// by relative path, so the served root has to be the root and not this
+// directory — same reason serve.py does it.
+export const REPO_ROOT = normalize(join(dirname(fileURLToPath(import.meta.url)), '..', '..'));
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',

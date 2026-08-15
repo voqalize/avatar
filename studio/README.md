@@ -65,7 +65,7 @@ see.
   step, no options.
 - **Not a rig workbench.** Channel extremes, viseme close-ups, clip strips and
   the numeric conformance sweep are internals of the SVG renderer and live in
-  `demo/rig/` ([tools/README.md](../tools/README.md)). Studio validates the
+  `authoring/` ([authoring/tools/README.md](../authoring/tools/README.md)). Studio validates the
   contract; those validate the drawing.
 - **Not where lipsync is judged.** Only a real call is
   ([CLAUDE.md § Verifying](../CLAUDE.md)), and this is one — but the two

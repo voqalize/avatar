@@ -26,10 +26,10 @@
 </style>
 <div id="g"></div>
 <script type="module">
-import { makeParams, REST, CHANNELS, TAU, RANGE, clamp, approach } from '../../src/params.js';
-import { ClipPlayer } from '../../src/clips.js';
-import { INTERNAL_CLIPS } from '../../src/interjections.js';
-import { FACES, DEFAULT_FACE } from '../../src/faces.js';
+import { makeParams, REST, CHANNELS, TAU, RANGE, clamp, approach } from '../src/params.js';
+import { ClipPlayer } from '../src/clips.js';
+import { INTERNAL_CLIPS } from '../src/interjections.js';
+import { FACES, DEFAULT_FACE } from '../src/faces.js';
 
 const q = new URLSearchParams(location.search);
 const which = q.get('face') || DEFAULT_FACE;

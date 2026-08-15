@@ -101,7 +101,7 @@ remain deferred until there is evidence for a stable JavaScript extension API.
 
 ## Verification lab
 
-Open [the Pipecat lifecycle lab](../demo/rig/pipecat-lifecycle-lab.html)
+Open [the Pipecat lifecycle lab](../authoring/pipecat-lifecycle-lab.html)
 through the development server. It mounts the real `AvatarClient` against a
 Pipecat-shaped local event emitter and exposes six repeatable traces:
 

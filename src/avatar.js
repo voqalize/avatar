@@ -339,7 +339,7 @@ export function createAvatar(opts = {}) {
   // `manual` withholds the rAF loop so a tool can drive frames itself. The
   // baseline pages could already step a ClipPlayer by hand, but nothing could
   // step the *mixer* — which is where idle, gaze and engagement actually
-  // compose — so motion had no reproducible render. See tools/motion.mjs.
+  // compose — so motion had no reproducible render. See authoring/tools/motion.mjs.
   const manual = !!opts.manual;
 
   function frame(now) {

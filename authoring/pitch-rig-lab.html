@@ -24,10 +24,10 @@
   <section class="card"><h2>Corrective contract</h2><div class="stage" id="corrective"></div><p class="note">Skull, face and hair share the hinge; neck shortens behind them.</p></section>
 </main>
 <script type="module">
-  import { createFace } from '../../src/face-peep.js';
-  import { REST, CHANNELS, TAU, RANGE, clamp, approach, makeParams } from '../../src/params.js';
-  import { ClipPlayer } from '../../src/clips.js';
-  import { INTERNAL_CLIPS } from '../../src/interjections.js';
+  import { createFace } from '../src/face-peep.js';
+  import { REST, CHANNELS, TAU, RANGE, clamp, approach, makeParams } from '../src/params.js';
+  import { ClipPlayer } from '../src/clips.js';
+  import { INTERNAL_CLIPS } from '../src/interjections.js';
 
   const legacy = createFace(document.querySelector('#legacy'), {}, { pitchRig:false });
   const corrective = createFace(document.querySelector('#corrective'));

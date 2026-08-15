@@ -2,7 +2,7 @@
 /**
  * Measure how much of the avatar actually moves, in delivered pixels.
  *
- *   node tools/motion.mjs --span 24 --state LISTENING -o .review/motion
+ *   node authoring/tools/motion.mjs --span 24 --state LISTENING -o .review/motion
  *
  * The one question the rest of the tooling cannot answer. `sweep()` proves the
  * parameters are finite, `contact-sheet` proves a pose is drawn, `clip-strip`
@@ -10,7 +10,7 @@
  * brought this tool into being, which was that the body reads as a still image
  * with a moving face. That complaint is about a sequence, and it is about
  * amplitude at the size the thing is actually shown, so this samples a
- * deterministic run (demo/rig/body-lab.html seeds the RNG and steps by hand)
+ * deterministic run (authoring/body-lab.html seeds the RNG and steps by hand)
  * at 1:1 device pixels and reports:
  *
  *   motion map     per-pixel luminance range over the window, drawn as a heat
@@ -55,7 +55,7 @@ const server = await startServer();
 const browser = await launchBrowser();
 let shots = [];
 try {
-  const url = `demo/rig/body-lab.html?face=${face}&state=${state}&seed=${seed}`
+  const url = `authoring/body-lab.html?face=${face}&state=${state}&seed=${seed}`
     + `&w=${width}&talk=${talk}&user=${user}`;
   const { page, errors } = await openSettled(browser, server.port, url, {
     width: width + 40, height: 900, scale: 1, wait: 'window.ready',

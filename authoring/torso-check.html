@@ -17,8 +17,8 @@
 // *combination*. `shoulderL` x `shoulderR` x `torsoLean` x head pose is where a
 // rig leaks background from behind the shirt or slides the collar off the neck,
 // and a channel-extremes row on the contact sheet cannot show that.
-import { makeParams } from '../../src/params.js';
-import { FACES, DEFAULT_FACE } from '../../src/faces.js';
+import { makeParams } from '../src/params.js';
+import { FACES, DEFAULT_FACE } from '../src/faces.js';
 
 const qs = new URLSearchParams(location.search);
 const which = qs.get('face') || DEFAULT_FACE;

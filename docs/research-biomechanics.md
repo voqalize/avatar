@@ -132,7 +132,7 @@ Practical consequences for us:
 - The Preston Blair working method — "the best trick to getting lip synch
   looking correct is having an easy way to repeatedly preview your sequence
   along with your soundtrack ... fine tuning poses" — is what
-  `demo/rig/lipsync-eval.html` exists to be.
+  `authoring/lipsync-eval.html` exists to be.
 
 **Open question — a minimum-perceptible hold.** `MIN_CUE_MS = 30` in
 `visemes.js` is a *drop* threshold (cues closer than that merge), which is a

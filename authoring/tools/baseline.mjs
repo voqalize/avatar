@@ -2,14 +2,14 @@
 /**
  * Render the standard verification set for every registered avatar.
  *
- *   node tools/baseline.mjs [outDir]        # default .review/baseline-<sha>/
+ *   node authoring/tools/baseline.mjs [outDir]        # default .review/baseline-<sha>/
  *
  * Per avatar: the contact sheet, the torso sheet, and clip filmstrips for
  * NOD_SMALL (fast, smoothing-dominated) and SHRUG (multi-channel, held).
  * Only deterministic pages are included — these all render via direct
  * `apply()` or fixed-tick ClipPlayer stepping, no live mixer, no randomness —
  * so two baselines from the same tree must be pixel-identical, and
- * `tools/diff.mjs` between baselines is a real refactor-safety check.
+ * `authoring/tools/diff.mjs` between baselines is a real refactor-safety check.
  *
  * The avatar list is scraped from the registry through the served page, so a
  * newly registered avatar joins the baseline without touching this file.
@@ -29,7 +29,7 @@ const server = await startServer();
 const browser = await launchBrowser();
 try {
   // Ask the face table itself which faces exist.
-  const probe = await openSettled(browser, server.port, 'demo/rig/index.html');
+  const probe = await openSettled(browser, server.port, 'authoring/index.html');
   const names = await probe.page.evaluate(async () => {
     const mod = await import('/src/faces.js');
     return mod.FACE_NAMES;
@@ -38,10 +38,10 @@ try {
 
   const jobs = [];
   for (const name of names) {
-    jobs.push([`${name}-contact-sheet.png`, `demo/rig/contact-sheet.html?face=${name}`]);
-    jobs.push([`${name}-torso-check.png`, `demo/rig/torso-check.html?face=${name}`]);
+    jobs.push([`${name}-contact-sheet.png`, `authoring/contact-sheet.html?face=${name}`]);
+    jobs.push([`${name}-torso-check.png`, `authoring/torso-check.html?face=${name}`]);
     for (const clip of CLIPS) {
-      jobs.push([`${name}-clip-${clip}.png`, `demo/rig/clip-strip.html?face=${name}&clip=${clip}`]);
+      jobs.push([`${name}-clip-${clip}.png`, `authoring/clip-strip.html?face=${name}&clip=${clip}`]);
     }
   }
 

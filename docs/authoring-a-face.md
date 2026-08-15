@@ -145,7 +145,7 @@ untouched.
 
 **It is optional.** A face with no `pitch` block keeps the legacy translate, and
 `createFace(mount, theme, { pitchRig: false })` forces that path for A/B review
-(`demo/rig/pitch-rig-lab.html`). `peep` is calibrated; `wren` and `myna` are not.
+(`authoring/pitch-rig-lab.html`). `peep` is calibrated; `wren` and `myna` are not.
 
 Accept it when the jaw meets the neck at every sampled `headPitch` with no
 background gap or collar leak, and when at production tile size `NOD_SMALL`
@@ -241,26 +241,26 @@ then plays the face half alone.
 
 ## Checklist for a new avatar
 
-1. Serve with `python3 serve.py 8777` (never `python3 -m http.server` — its
+1. Serve with `python3 authoring/serve.py 8777` (never `python3 -m http.server` — its
    caching has burned this project three times).
-2. `demo/rig/contact-sheet.html?face=NAME` — every viseme, emotion, gaze and
+2. `authoring/contact-sheet.html?face=NAME` — every viseme, emotion, gaze and
    channel extreme. Check the **mouth-detail crop row**, not just full heads:
    two visemes can be numerically distinct and visually identical (`G` vs `B`
    both read as a white strip until `G` was rebuilt as nearly-all-teeth). At
    avatar size a viseme is ~40 px tall; letter collisions are invisible on the
    full-head row. The crop row frames itself from your `META.mouthCrop`.
-3. `demo/rig/torso-check.html?face=NAME` — shoulders × lean × head pose.
+3. `authoring/torso-check.html?face=NAME` — shoulders × lean × head pose.
    These channels only fail *in combination*; this is where a rig leaks
    background from behind the shirt if it is going to.
-4. `demo/rig/clip-strip.html?clip=NOD_SMALL&face=NAME` — phase relationships
+4. `authoring/clip-strip.html?clip=NOD_SMALL&face=NAME` — phase relationships
    through the mixer's own smoothing, as a filmstrip.
-5. `demo/rig/rig-check.html` → `await sweep()` — conformance: params finite,
+5. `authoring/rig-check.html` → `await sweep()` — conformance: params finite,
    `|v| ≤ 2`, svg connected, across every state/emotion/gaze/interjection and
    a viseme track, plus `checkHandFraming` against your window and a pass of
    every hand gesture. Sweep also cannot see *looks*; it reaches shoulders/torso
    only through clips, so drive those with a `setOverrides` loop over
    `[-1, 0, 1]` per channel — and look at one hand gesture at peak extension
-   (`demo/rig/body-lab.html?face=NAME&gesture=HI&at=0.4`), because figure/ground
+   (`authoring/body-lab.html?face=NAME&gesture=HI&at=0.4`), because figure/ground
    between hand and shirt is a judgement the framing check cannot make.
 6. Auto-traced art has known failure modes to budget for: zero-margin abutting
    contours open seams under parallax; the trace stops at the source crop;

@@ -39,7 +39,7 @@
   code path — same AvatarsyncEngine, same normalize_cues — so what you watch here
   is what a pipecat call would put on the wire.
 
-  Serve with `python3 serve.py 8777`, never `python3 -m http.server`.
+  Serve with `python3 authoring/serve.py 8777`, never `python3 -m http.server`.
 -->
 <style>
   :root {
@@ -257,12 +257,13 @@
 </aside>
 
 <script type="module">
-import { createAvatar } from '../../src/avatar.js';
-import { peep } from '../../src/face-peep.js';
+import { createAvatar } from '../src/avatar.js';
+import { peep } from '../src/face-peep.js';
 
-// The clip sets and their audio stay in demo/ — one copy of the wavs, shared
-// with the call demo and the blind eval page. Only the harness lives down here.
-const DATA = '../';
+// Clips and audio sit beside the pages, flat, because the JSON files embed
+// `eval-audio/…` relative paths — one copy of a hundred wavs, shared by both
+// lipsync pages and by py/scripts/check_alignment.py.
+const DATA = './';
 const clips = await (await fetch(`${DATA}lipsync-clips.json`)).json();
 const avatar = createAvatar({ mount: document.getElementById('stage'), face: peep });
 

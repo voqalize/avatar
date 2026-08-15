@@ -15,7 +15,7 @@
   the rig is built (so the phases, gaps and hold windows are drawn from a known
   stream), the avatar is created with {manual:true} so no rAF ever runs, and
   window.stepTo(t) walks the mixer to an absolute simulated time in 1/60 s
-  ticks. Same seed, same t, same pixels — which is what lets tools/motion.mjs
+  ticks. Same seed, same t, same pixels — which is what lets authoring/tools/motion.mjs
   difference frames and call the result a measurement.
 
   ?face=peep&state=LISTENING&seed=7&w=440&talk=0&user=0
@@ -43,8 +43,8 @@ Math.random = () => {
   return _s / 4294967296;
 };
 
-const { createAvatar } = await import('../../src/avatar.js');
-const { FACES, DEFAULT_FACE } = await import('../../src/faces.js');
+const { createAvatar } = await import('../src/avatar.js');
+const { FACES, DEFAULT_FACE } = await import('../src/faces.js');
 
 const mount = document.getElementById('m');
 mount.style.width = (Number(q.get('w') || 440)) + 'px';

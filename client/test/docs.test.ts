@@ -48,7 +48,7 @@ const RETIRED = new Set([
 ]);
 
 /** Where the code lives. Anything defined in here counts as existing. */
-const CODE_DIRS = ["src", "client/src", "py/src", "tools", "studio/src", "native", "demo"];
+const CODE_DIRS = ["src", "client/src", "py/src", "studio/src", "server", "native", "authoring"];
 const CODE_EXT = /\.(js|mjs|ts|tsx|py|c|h|json|html)$/;
 
 /** Prose that makes claims about this code. */
@@ -58,7 +58,9 @@ const DOC_FILES = [
   "RELEASING.md",
   "studio/README.md",
   "py/README.md",
-  "tools/README.md",
+  "server/README.md",
+  "authoring/README.md",
+  "authoring/tools/README.md",
 ];
 const DOC_DIR = "docs";
 const DOC_EXEMPT = /^(removed|research-.*)\.md$/;
@@ -71,7 +73,7 @@ function walk(dir: string, out: string[] = []): string[] {
   try {
     entries = readdirSync(dir);
   } catch {
-    return out; // an optional tree (native/, demo/) may be absent in a checkout
+    return out; // an optional tree (native/) may be absent in a checkout
   }
   for (const name of entries) {
     // `vendor/` holds bundled third-party code: a hundred thousand identifiers

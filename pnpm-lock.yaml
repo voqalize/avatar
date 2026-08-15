@@ -63,6 +63,18 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@22.20.1)(jsdom@25.0.1)
 
+  authoring/tools:
+    dependencies:
+      pixelmatch:
+        specifier: ^7.2.0
+        version: 7.2.0
+      pngjs:
+        specifier: ^7.0.0
+        version: 7.0.0
+      puppeteer:
+        specifier: ^25.5.0
+        version: 25.7.0
+
   studio:
     dependencies:
       '@pipecat-ai/client-js':
@@ -96,18 +108,6 @@ importers:
       vite:
         specifier: ^7.3.6
         version: 7.3.6(@types/node@22.20.1)
-
-  tools:
-    dependencies:
-      pixelmatch:
-        specifier: ^7.2.0
-        version: 7.2.0
-      pngjs:
-        specifier: ^7.0.0
-        version: 7.0.0
-      puppeteer:
-        specifier: ^25.5.0
-        version: 25.7.0
 
 packages:
 

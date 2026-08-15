@@ -2,7 +2,7 @@
 /**
  * Compare two PNGs pixel by pixel.
  *
- *   node tools/diff.mjs a.png b.png [-o diff.png] [--threshold 0]
+ *   node authoring/tools/diff.mjs a.png b.png [-o diff.png] [--threshold 0]
  *
  * Prints the changed-pixel count and percentage; exits non-zero when the count
  * exceeds --threshold (default 0, i.e. any difference fails). Dimension
@@ -20,7 +20,7 @@ const opt = (name, dflt) => {
   return i >= 0 ? args[i + 1] : dflt;
 };
 if (files.length !== 2) {
-  console.error('usage: node tools/diff.mjs a.png b.png [-o diff.png] [--threshold 0]');
+  console.error('usage: node authoring/tools/diff.mjs a.png b.png [-o diff.png] [--threshold 0]');
   process.exit(2);
 }
 const [aPath, bPath] = files;

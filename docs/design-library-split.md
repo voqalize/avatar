@@ -247,10 +247,10 @@ host reaching past the export map for the raw widget genuinely does not need it.
 
 ## Layout
 
-`src/`, `demo/` and `tools/` stayed exactly where they were. Moving `src/`
-would break every rig page and every headless tool for no gain a consumer can
-see, and the widget is this repo's primary artifact — it has earned the short
-path. The backend material arrived as siblings:
+`src/` stayed exactly where it was. Moving it would break every rig page and
+every headless tool for no gain a consumer can see, and the widget is this
+repo's primary artifact — it has earned the short path. Everything else is a
+sibling, and each sibling answers one question:
 
 ```
 src/                    the widget — published, not exported
@@ -262,9 +262,11 @@ native/avatarsync/      the rhubarb fork: patch, capi.cpp, build.sh, libavatarsy
 docs/                   the contracts, binding for both packages
   removed.md            what 0.2 and 0.3 cut from the surface, and how to undo it
 package.json            @voqalize/avatar, one export
-studio/                 Avatar Studio — vite + React, the review environment
-demo/ tools/            the rig demos and the headless verification tooling
-  pipecat/              a real call — the only place lipsync is verified
+studio/                 Avatar Studio — the IDE for the published options
+server/                  one pipecat process, canned services, zero API keys
+                        — the only place lipsync is verified
+authoring/              the workshop: rig pages, clip fixtures, serve.py
+  tools/                headless render / screenshot / diff / sweep
 experiments/            server-side spikes; ships nowhere near the widget
 ```
 

@@ -2,9 +2,9 @@
 /**
  * Run the rig-check conformance sweep headless.
  *
- *   node tools/sweep.mjs
+ *   node authoring/tools/sweep.mjs
  *
- * Loads demo/rig/rig-check.html, runs `await sweep()` (every state, emotion,
+ * Loads authoring/rig-check.html, runs `await sweep()` (every state, emotion,
  * gaze and interjection on every registered avatar, then a viseme track;
  * asserts finite in-range params and attached SVGs), prints the result and
  * exits non-zero on failure. This is the pre-commit gate for anything that
@@ -15,7 +15,7 @@ import { startServer, launchBrowser, openSettled } from './lib.mjs';
 const server = await startServer();
 const browser = await launchBrowser();
 try {
-  const { page, errors } = await openSettled(browser, server.port, 'demo/rig/rig-check.html');
+  const { page, errors } = await openSettled(browser, server.port, 'authoring/rig-check.html');
   if (errors.length) {
     console.error('rig-check failed to load cleanly:');
     for (const e of errors) console.error('  ' + e);

@@ -34,7 +34,7 @@ import wave
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-DEMO = REPO / "demo"
+AUTHORING = REPO / "authoring"
 STEP_MS = 10  # one animation frame at 100 Hz; finer than any shift a viewer sees
 
 # Fraction of peak RMS above which a frame counts as speech. Loose on purpose:
@@ -100,7 +100,7 @@ def best_lag(a: list[int], b: list[int], span: int = 40) -> tuple[int, float]:
 
 
 def main() -> None:
-    clips = json.loads((DEMO / "lipsync-clips.json").read_text())
+    clips = json.loads((AUTHORING / "lipsync-clips.json").read_text())
     names = list(clips[0]["tracks"])
     print("positive = mouth later than the sound\n")
     head = "".join(f"{n:>26}" for n in names)
@@ -109,7 +109,7 @@ def main() -> None:
 
     totals: dict[str, list[tuple[int, int, int]]] = {n: [] for n in names}
     for c in clips:
-        voice = speech(envelope(DEMO / c["audio"], c["ms"]))
+        voice = speech(envelope(AUTHORING / c["audio"], c["ms"]))
         a_on, a_off = edges(voice)
         cells = []
         for name in names:

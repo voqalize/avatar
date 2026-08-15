@@ -136,7 +136,7 @@ Non-obvious, and recorded nowhere else.
 The rig is judged by eye; the packages are judged by test.
 
 ```
-node tools/sweep.mjs      # rig conformance gate — run before committing src/
+node authoring/tools/sweep.mjs      # rig conformance gate — run before committing src/
 pnpm test                 # client/: dispatcher + jsdom package boundary
 pnpm run studio:dev       # Avatar Studio — the review environment
 cd py && uv run pytest     # backend, against the real avatarsync library
@@ -144,7 +144,7 @@ cd server && uv run --project ../py --group server --group dev python -m pytest
 cd py && uv run --group server python ../server/server.py   # a real call
 ```
 
-Headless render/screenshot/diff/motion tooling: [tools/README.md](tools/README.md).
+Headless render/screenshot/diff/motion tooling: [authoring/tools/README.md](authoring/tools/README.md).
 Which Studio route validates which layer: [studio/README.md](studio/README.md).
 
 Three things no suite will tell you:
@@ -152,13 +152,13 @@ Three things no suite will tell you:
 - **Lipsync is only ever verified in [`server/`](server/README.md)**
   — a real call, your microphone, live TTS, `AvatarProcessor()` seated between
   the TTS and the transport. Nothing else exercises the streaming accurate leg:
-  Studio and `demo/rig/lipsync-review.html` play *baked* cue tracks, so they
+  Studio and `authoring/lipsync-review.html` play *baked* cue tracks, so they
   show what a leg's cues look like and not how the two legs interleave, latch or
   rewrite under a real generator. The two constraints the demo exists to check
   are the ones only ears catch — that the mouth moves the instant audio starts,
   and that the accurate leg's arrival is not visible as a jump.
 
-- **Serve with `python3 serve.py 8777`, never `python3 -m http.server`.** The
+- **Serve with `python3 authoring/serve.py 8777`, never `python3 -m http.server`.** The
   stdlib server sends `Last-Modified` and no `Cache-Control`, so browsers apply
   heuristic freshness and stop revalidating modules you have edited. That has
   cost three debugging sessions, one of which produced a module error that was
@@ -184,7 +184,8 @@ Three things no suite will tell you:
   ([studio/README.md](studio/README.md)). Its two routes drive a real
   `SmallWebRTCTransport` call against `server/`; there is no fake clock, no
   trace fixture and no demo-only state machine anywhere in it. Rig authoring
-  lives in `demo/rig/*` and root `index.html`, which are moving to `authoring/`.
+  moved out to `authoring/` ([authoring/README.md](authoring/README.md)), which
+  is the whole workshop: the pages, the clip fixtures and the headless tools.
 - **The vocabulary is the seven core states, everywhere above the mixer.** The
   render-state pass-throughs (`TYPING`, `CANT_HEAR`, `WANTS_IN`, …) are gone
   from `src/behavior.js`; `CANT_HEAR` and friends are still real states *in*

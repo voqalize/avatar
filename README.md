@@ -228,42 +228,50 @@ Authoring a face is a staged process that starts from a reference image rather
 than a text brief:
 [authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md).
 
-## Avatar Studio
+## Trying it
 
-A browser-based IDE for the avatars. It lets you see them in their various
-states, test an avatar you are building, and connect to a live pipecat call to
-see how it all works together.
+Two surfaces, and neither wants an API key. `server/` is one pipecat process
+with canned LLM and TTS services behind the real pipecat interfaces, so the
+frames the avatar reads are the frames a production pipeline produces
+([server/README.md](server/README.md)):
 
 ```sh
 pnpm install          # one workspace: the package, the IDE and the rig tooling
-pnpm run studio:dev
-open http://127.0.0.1:4173/#/rig
+cd py && uv run --group server python ../server/server.py
+open http://localhost:7860/          # the 30-second look — a real call, no build step
 ```
 
-Four workspaces — `#/rig` (raw parameters, visemes, gestures), `#/behavior`
-(states and actions), `#/runtime` (replay a deterministic pipecat trace from
-time zero), `#/connection` (attach a real `PipecatClient`). Which route
-validates which layer, and why Studio will not turn a URL into a pipecat client
-for you: [studio/README.md](studio/README.md).
+**Avatar Studio** is the IDE for `createAvatar`, pointed at that same server.
+`#/` drives the published option surface — face, the three gains, the hand and
+its side — against a live `SmallWebRTCTransport` call, and its compare mode
+mounts all three faces on one `PipecatClient`. `#/wire` decodes every `claim`,
+`action` and `cues` chunk as it arrives, beside controls that make the server
+misbehave on purpose.
 
-Studio always drives the production behavior and wire adapters, never a
-demo-only state machine. It is absorbing the static rig pages under `demo/rig/`,
-which remain as reference tools until the matching route reaches parity. Those
-need a server, and it must be `python3 serve.py 8777` rather than
-`python3 -m http.server` — the stdlib server sends `Last-Modified` and no
-`Cache-Control`, so browsers stop revalidating modules you have edited.
+```sh
+pnpm run studio:dev                  # with server/ running in another terminal
+open http://127.0.0.1:4173/
+```
+
+Studio imports `@voqalize/avatar` and nothing else from this repo — no `src/`,
+no `/internal` — so a thing it cannot do is a thing a consumer cannot do:
+[studio/README.md](studio/README.md).
+
+Drawing or repairing an avatar happens somewhere else again — `authoring/` is
+the workshop, no build step, served by `python3 authoring/serve.py 8777`
+([authoring/README.md](authoring/README.md)).
 
 ## Verifying
 
 ```sh
-node tools/sweep.mjs      # rig conformance gate — run before committing src/
+node authoring/tools/sweep.mjs      # rig conformance gate — run before committing src/
 pnpm test                 # client: dispatcher + jsdom package boundary
 cd py && uv run pytest    # backend, against the real avatarsync library
 ```
 
 Headless render, screenshot and pixel-diff tooling — including a real
 "prove this refactor changed nothing on screen" workflow —
-is in [tools/README.md](tools/README.md).
+is in [authoring/tools/README.md](authoring/tools/README.md).
 
 `sweep()` passing is not evidence a change looks good: it catches dead avatars,
 NaN leaks and detached SVGs, and nothing else. Every defect this project has
@@ -292,7 +300,7 @@ unchanged, and travels with that directory.
 |---|---|---|
 | [Open Peeps](https://www.openpeeps.com/) | the drawing *idiom* `peep` is authored in — no artwork is copied | CC0 |
 | Rhubarb Lip Sync 1.14.0 | `native/avatarsync/` (fetched at build time, not vendored) | MIT; see `UPSTREAM-LICENSE.md` |
-| [piper](https://github.com/OHF-Voice/piper1-gpl) voices `en_US-ljspeech-high`, `en_US-libritts_r-medium` | spoke every wav in `demo/*-audio/` and `py/tests/fixtures/` | LJSpeech public domain; LibriTTS-R CC BY 4.0 |
+| [piper](https://github.com/OHF-Voice/piper1-gpl) voices `en_US-ljspeech-high`, `en_US-libritts_r-medium` | spoke every wav in `authoring/*-audio/` and `py/tests/fixtures/` | LJSpeech public domain; LibriTTS-R CC BY 4.0 |
 
 The three avatars are original drawings. All demo audio is synthesised from
 text written for this repo.

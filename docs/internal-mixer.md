@@ -218,8 +218,8 @@ and tuned on the rig.
 
 **A server cannot send one of these.** `perform` is not on the wire and was
 deliberately taken off it ([removed.md § The `perform` command](removed.md));
-what remains is a local authoring surface. `demo/perf-clips.json` scripts its
-turns this way and `demo/rig/expression-lab.html` plays them:
+what remains is a local authoring surface. `authoring/perf-clips.json` scripts its
+turns this way and `authoring/expression-lab.html` plays them:
 
 ```js
 avatar.speak({ cues, audio });          // the utterance

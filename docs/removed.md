@@ -91,7 +91,7 @@ built, and the `fallback.level` readout it shared with the amplitude tier above
 against the named turn's clock.
 
 **Why it went:** no consumer composed one. Both drive the face through states
-and interjections, and the timelines that exist are authored in `demo/`, not
+and interjections, and the timelines that exist are authored in `authoring/`, not
 sent by a server. It also carried the only piece of *client* logic that had to
 guess: `resolveClock` had to decide whether a `perform` naming a ctx we never
 saw a `speech start` for should ride that turn's clock or a fresh one, and both
@@ -99,7 +99,7 @@ answers are wrong in some deployment.
 
 **Note:** `avatar.perform(actions, {audio, clock})` is **not** removed — it is
 still the composition surface, still documented in internal-mixer.md, and
-`demo/rig/expression-lab.html` still drives every scripted turn through it. What
+`authoring/expression-lab.html` still drives every scripted turn through it. What
 went away is a *server* being able to send one over the wire.
 
 **Recover:** `git show v0.1.0:client/src/AvatarClient.ts` (`handlePerform`,
@@ -638,5 +638,5 @@ otherwise stops in mid-air. Nothing in the repo does that now — `server/` and
 edges to dissolve should read the original.
 
 **Recover:** `git checkout v0.2.2 -- demo/call.html demo/floor.js demo/vad.js`.
-The clips it played are still checked in at `demo/perf-clips.json`, because
-`demo/rig/expression-lab.html` plays them too.
+The clips it played are still checked in at `authoring/perf-clips.json`,
+because `authoring/expression-lab.html` plays them too.

@@ -196,13 +196,13 @@
 </aside>
 
 <script type="module">
-import { createAvatar } from '../../src/avatar.js';
-import { peep } from '../../src/face-peep.js';
+import { createAvatar } from '../src/avatar.js';
+import { peep } from '../src/face-peep.js';
 
-// The clip sets and their audio stay in demo/ — the call demo plays the
-// same files, and one copy of a hundred wavs is the point. Only the harness
-// moved down here, so every path out of the JSON needs the hop back up.
-const DATA = '../';
+// Clips and audio sit beside the pages, flat, because the JSON files embed
+// `eval-audio/…` relative paths — one copy of a hundred wavs, shared by both
+// lipsync pages and by py/scripts/check_alignment.py.
+const DATA = './';
 const SETS = {
   perf: { file: 'perf-clips.json', clips: null },
   eval: { file: 'eval-clips.json', clips: null },

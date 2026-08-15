@@ -163,7 +163,7 @@ Two things only ears catch, and no suite in this repo will tell you either:
 
 Watch more than one vendor. Under `google` the corrections stream in and the
 mouth converges while it is still talking; under `google-http` the predicted leg
-is replaced in one go. Studio and `demo/rig/lipsync-review.html` play *baked*
+is replaced in one go. Studio and `authoring/lipsync-review.html` play *baked*
 cue tracks — they show what a leg's cues look like, never how the two legs
 interleave, latch or rewrite under a live generator.
 

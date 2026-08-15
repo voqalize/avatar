@@ -1,4 +1,4 @@
-"""Regenerate `demo/lipsync-clips.json` — the review page's data.
+"""Regenerate `authoring/lipsync-clips.json` — the review page's data.
 
 Ten clips, both legs, produced by the **shipping** code path: the same
 `AvatarsyncEngine` a pipecat call loads, then the same `lead_track` /
@@ -39,7 +39,7 @@ commas. This number is set by eye — the trade is a threshold low enough to clo
 on a comma against one high enough not to snap shut inside a stop consonant —
 and only the winner ships as `Config::pauseRestMs`.
 
-Audio and text come from `demo/eval-clips.json`, whose `tracks` were baked by
+Audio and text come from `authoring/eval-clips.json`, whose `tracks` were baked by
 the old subprocess pipeline and are left alone; this writes a separate file.
 """
 
@@ -55,8 +55,8 @@ from voqalize_avatar.durations import estimate_duration_ms
 from voqalize_avatar.visemes import SILENT, cues_to_wire, lead_track, normalize_cues
 
 REPO = Path(__file__).resolve().parents[2]
-DEMO = REPO / "demo"
-OUT = DEMO / "lipsync-clips.json"
+AUTHORING = REPO / "authoring"
+OUT = AUTHORING / "lipsync-clips.json"
 
 # Ten, chosen to span what a call actually contains rather than to flatter the
 # aligner. Backchannels are over-represented on purpose: the avatar listens far
@@ -104,7 +104,7 @@ def accurate_track(cues: list[Cue], clip_ms: int) -> list[Cue]:
 
 
 async def main() -> None:
-    source = {c["id"]: c for c in json.loads((DEMO / "eval-clips.json").read_text())}
+    source = {c["id"]: c for c in json.loads((AUTHORING / "eval-clips.json").read_text())}
     paths = AvatarsyncPaths.locate()
     # One engine per threshold. The threshold is baked at open() rather than per
     # call on purpose — production sets it once and a per-call knob would be a
@@ -118,7 +118,7 @@ async def main() -> None:
         out = []
         for clip_id, why in PICKS:
             meta = source[clip_id]
-            path = DEMO / meta["audio"]
+            path = AUTHORING / meta["audio"]
             pcm, rate, clip_ms = read_wav(path)
             est_ms = estimate_duration_ms(meta["text"])
 

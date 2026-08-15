@@ -3,7 +3,7 @@
     uv run --with piper-tts python record.py
 
 Run this after editing the text in `lines.json`. It is the checked-in answer to
-a question the repo could not previously answer: the clips in `demo/*-audio/`
+a question the repo could not previously answer: the clips in `authoring/*-audio/`
 were spoken by piper on somebody's laptop by a command nobody wrote down, so
 "how do I add a line?" had no answer but "ask whoever made the last one".
 
