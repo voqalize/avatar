@@ -264,8 +264,7 @@ the workshop, no build step, served by `python3 authoring/serve.py 8777`
 ## Verifying
 
 ```sh
-node authoring/tools/sweep.mjs      # rig conformance gate — run before committing src/
-pnpm test                 # client: dispatcher + jsdom package boundary
+pnpm test                 # client, package boundary, and the rig conformance sweep
 cd py && uv run pytest    # backend, against the real avatarsync library
 ```
 
@@ -273,9 +272,9 @@ Headless render, screenshot and pixel-diff tooling — including a real
 "prove this refactor changed nothing on screen" workflow —
 is in [authoring/tools/README.md](authoring/tools/README.md).
 
-`sweep()` passing is not evidence a change looks good: it catches dead avatars,
-NaN leaks and detached SVGs, and nothing else. Every defect this project has
-found was found by looking at a rendered page.
+The conformance sweep passing is not evidence a change looks good: it catches
+dead avatars, NaN leaks and detached SVGs, and nothing else. Every defect this
+project has found was found by looking at a rendered page.
 
 Releasing both packages from one tag: [RELEASING.md](RELEASING.md).
 

@@ -655,7 +655,7 @@ export function createHand(svg, theme, meta, opts = {}) {
 /**
  * Rules 1 and 4, asserted rather than eyeballed — both were violated by an
  * early cut and neither is visible in a still of the resting pose. Run by
- * `authoring/tools/sweep.mjs` against every registered avatar, because the frame numbers
+ * `pnpm test` against every registered avatar, because the frame numbers
  * are derived per avatar and a rig with a different window could break the
  * budget without anything else noticing.
  *

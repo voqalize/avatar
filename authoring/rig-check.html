@@ -43,8 +43,9 @@
 <script type="module">
 import {
   createAvatar, STATE_NAMES, EMOTION_NAMES, GAZE_NAMES,
-  ACTION_IDS, checkHandFraming, textToCues,
+  ACTION_IDS, textToCues,
 } from '../src/avatar.js';
+import { conformanceSweep } from '../src/conformance.js';
 import { FACES, FACE_NAMES } from '../src/faces.js';
 
 const stage = document.getElementById('stage');
@@ -108,54 +109,15 @@ group('speech', ['speak', 'stop', 'blink'], (k, v) => {
 function note(msg) { log.textContent = msg + '\n' + log.textContent.split('\n').slice(0, 8).join('\n'); }
 
 // --- automatic conformance sweep -----------------------------------------
-// The manual buttons are for looking; this is for proving. Steps through every
-// state, emotion, gaze and interjection on both rigs and asserts the mixer
-// keeps producing finite, in-range parameters for each avatar. A NaN anywhere
-// in the chain shows up as a frozen face, which is easy to miss by eye.
+// The manual buttons are for looking; this is for proving. The assertions and
+// the order they run in live in `src/conformance.js`, because the same sweep
+// runs headless in `client/test/conformance.test.ts` and two copies of a gate
+// is one copy that quietly stops matching. What this page adds is real time
+// passing, on a face you can watch it happen to.
 window.sweep = async () => {
-  const problems = [];
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-  function check(label) {
-    for (const r of rigs) {
-      const p = r.avatar.params;
-      for (const k in p) {
-        if (!Number.isFinite(p[k])) problems.push(`${r.name} ${label}: ${k}=${p[k]}`);
-        else if (Math.abs(p[k]) > 2) problems.push(`${r.name} ${label}: ${k} out of range (${p[k].toFixed(2)})`);
-      }
-      // The face must still be in the DOM and still be an <svg>.
-      if (!r.avatar.svg.isConnected) problems.push(`${r.name} ${label}: svg detached`);
-    }
-  }
-
-  for (const s of STATE_NAMES)       { all((k) => k.setState(s));      await wait(90); check(`state ${s}`); }
-  for (const e of EMOTION_NAMES)     { all((k) => k.setEmotion(e, 1)); await wait(90); check(`emotion ${e}`); }
-  for (const g of GAZE_NAMES)        { all((k) => k.setGaze(g));       await wait(90); check(`gaze ${g}`); }
-  for (const i of ACTION_IDS)         { all((k) => k.action(i));       await wait(180); check(`action ${i}`); }
-
-  // The hand. Two things are being proved and only one of them is the mixer's.
-  // Playing each gesture checks the usual invariants (its face half runs through
-  // the clip layer like any other interjection). checkHandFraming is the one
-  // that matters per AVATAR: the hand places itself off META.viewBox, so a rig
-  // with a different window could push ink through the portrait edge or lift the
-  // wrist into frame, and neither is visible in a resting still.
-  for (const r of rigs) {
-    try { checkHandFraming(r.avatar.meta); } catch (e) { problems.push(`${r.name} ${e.message}`); }
-  }
-  all((k) => k.setState('LISTENING'));
-  await wait(2000);   // let the longest gesture leave frame before speech starts
-
-  all((k) => k.speak({ cues: textToCues('okay, and what happened next') }));
-  for (let i = 0; i < 12; i++) { await wait(120); check('speaking'); }
-  all((k) => k.stopSpeaking().setState('LISTENING'));
-  await wait(200); check('after speech');
-
-  const ok = problems.length === 0;
+  const { ok, problems, summary } = await conformanceSweep(rigs);
   log.innerHTML = ok
-    ? `sweep passed — ${rigs.length} avatars x ${STATE_NAMES.length} states, `
-      + `${EMOTION_NAMES.length} emotions, ${GAZE_NAMES.length} gazes, `
-      + `${ACTION_IDS.length} semantic actions `
-      + `(framing asserted per avatar), plus a viseme track`
+    ? `sweep passed — ${summary}`
     : `<span class="bad">${problems.length} problems</span>\n` + problems.slice(0, 40).join('\n');
   return { ok, problems };
 };

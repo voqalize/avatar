@@ -41,6 +41,11 @@ jobs:
         run: pnpm run typecheck
 
       - name: unit tests
+        # Includes the rig conformance sweep (`client/test/conformance.test.ts`)
+        # — every state, emotion, gaze and semantic action on every shipped
+        # face, asserting finite in-range params and an attached drawing. It
+        # used to be a puppeteer job; the assertions never looked at a pixel,
+        # so a real Chrome was paying for nothing.
         run: pnpm test
 
       - name: studio typecheck and build
@@ -51,14 +56,6 @@ jobs:
         # it is the only thing in CI that consumes the package as a consumer
         # does, from outside.
         run: pnpm run studio:build
-
-      - name: rig conformance sweep
-        # Every state, emotion, gaze and interjection on every registered
-        # avatar, asserting finite params and a connected SVG. A crash here is
-        # a parameter-space bug that would bite the default rig too.
-        env:
-          PUPPETEER_ARGS: --no-sandbox
-        run: node authoring/tools/sweep.mjs
 
       - name: npm package contents
         # The tarball is the artifact consumers actually get; `files` has been

@@ -136,8 +136,8 @@ Non-obvious, and recorded nowhere else.
 The rig is judged by eye; the packages are judged by test.
 
 ```
-node authoring/tools/sweep.mjs      # rig conformance gate — run before committing src/
-pnpm test                 # client/: dispatcher + jsdom package boundary
+pnpm test                 # client/, package boundary, and the rig conformance sweep
+                          # (`src/conformance.js`) — run before committing src/
 pnpm run studio:dev       # Avatar Studio — the review environment
 cd py && uv run pytest     # backend, against the real avatarsync library
 cd server && uv run --project ../py --group server --group dev python -m pytest
@@ -158,14 +158,15 @@ Three things no suite will tell you:
   are the ones only ears catch — that the mouth moves the instant audio starts,
   and that the accurate leg's arrival is not visible as a jump.
 
-- **Serve with `python3 authoring/serve.py 8777`, never `python3 -m http.server`.** The
-  stdlib server sends `Last-Modified` and no `Cache-Control`, so browsers apply
+- **Serve with `python3 authoring/serve.py 8777`, never `python3 -m
+  http.server`.** The stdlib server sends `Last-Modified` and no `Cache-Control`, so browsers apply
   heuristic freshness and stop revalidating modules you have edited. That has
   cost three debugging sessions, one of which produced a module error that was
   simply a lie. Do not work around it with `?v=` either — that puts two copies
   of the module in the graph and fails differently and worse.
-- **`sweep()` passing is not evidence a change is good.** It catches dead
-  avatars, NaN leaks and detached SVGs, nothing about how the face *looks*.
+- **The conformance sweep passing is not evidence a change is good.** It
+  catches dead avatars, NaN leaks and detached SVGs, nothing about how the face
+  *looks*.
   Every defect this project has found was found by looking: a `G`/`B` viseme
   collision invisible without a mouth crop, a compound state that read as
   *asleep* rather than busy, screenshot flukes that were mid-blink frames.

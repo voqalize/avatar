@@ -4,7 +4,8 @@
  *
  *   node authoring/tools/motion.mjs --span 24 --state LISTENING -o .review/motion
  *
- * The one question the rest of the tooling cannot answer. `sweep()` proves the
+ * The one question the rest of the tooling cannot answer. The conformance sweep
+ * proves the
  * parameters are finite, `contact-sheet` proves a pose is drawn, `clip-strip`
  * proves a gesture's phases — and all three are blind to the complaint that
  * brought this tool into being, which was that the body reads as a still image

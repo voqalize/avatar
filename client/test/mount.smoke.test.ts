@@ -6,7 +6,7 @@
  * itself rather than `AvatarClient`'s dispatcher logic, and it is deliberately
  * shallow — it proves the *package boundary* works (the subpath resolves, the
  * ES modules load, the SVG lands in the DOM), not that the rig looks right.
- * The rig is judged by eye and by `authoring/tools/sweep.mjs`; see CLAUDE.md § Verifying.
+ * The rig is judged by eye and by `pnpm test`; see CLAUDE.md § Verifying.
  *
  * jsdom gap, stubbed here (not in the widget): jsdom does not implement
  * `requestAnimationFrame`/`cancelAnimationFrame` at all — there is nothing to

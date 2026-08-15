@@ -266,7 +266,7 @@ studio/                 Avatar Studio — the IDE for the published options
 server/                  one pipecat process, canned services, zero API keys
                         — the only place lipsync is verified
 authoring/              the workshop: rig pages, clip fixtures, serve.py
-  tools/                headless render / screenshot / diff / sweep
+  tools/                headless render / screenshot / diff / motion
 experiments/            server-side spikes; ships nowhere near the widget
 ```
 

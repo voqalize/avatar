@@ -35,8 +35,8 @@ found was found by looking: a `G`/`B` viseme collision invisible without a
 mouth crop, a compound state that read as *asleep* rather than busy, screenshot
 flukes that turned out to be mid-blink frames.
 
-`tools/sweep.mjs` passing is not evidence a change is good. It catches dead
-avatars, NaN leaks and detached SVGs — nothing about how the face *looks*.
+The conformance sweep passing is not evidence a change is good. It catches
+dead avatars, NaN leaks and detached SVGs — nothing about how the face *looks*.
 
 ## What each page is for
 
@@ -106,7 +106,11 @@ pixel-for-pixel. The diff is a real guarantee rather than a smoke test: the
 baseline pages have no live mixer and no randomness, so two renders of the same
 tree are byte-identical and any nonzero diff is a real change.
 
+The conformance sweep is not here — it needs no browser, so it runs in
+`pnpm test` (`src/conformance.js` holds the assertions). `rig-check.html`'s
+**run sweep** button runs that same sweep in real time, on a face you can watch
+it happen to.
+
 ```sh
-pnpm install                          # once, from the repository root
-node authoring/tools/sweep.mjs        # before committing anything in src/
+pnpm install                          # once, from the repository root; for tools/
 ```

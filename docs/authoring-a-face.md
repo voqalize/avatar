@@ -233,8 +233,8 @@ any keyframe would let the wrist rise into the window (the hand must always be
 *cut* by the bottom edge, never end in a floating stump) or let the hand's
 rotated width cross the window's side (a portrait window pillarboxed in a 16:9
 tile slices anything outboard with a hard vertical line that reads as a
-rendering fault). `sweep()` runs it for every registered avatar, so a new face
-with an unusual window fails the gate rather than the eye.
+rendering fault). The conformance sweep runs it for every registered avatar, so
+a new face with an unusual window fails the gate rather than the eye.
 
 If a character's idiom cannot carry it, mount with `hand: false`; a `GESTURE_*`
 then plays the face half alone.
@@ -254,10 +254,12 @@ then plays the face half alone.
    background from behind the shirt if it is going to.
 4. `authoring/clip-strip.html?clip=NOD_SMALL&face=NAME` — phase relationships
    through the mixer's own smoothing, as a filmstrip.
-5. `authoring/rig-check.html` → `await sweep()` — conformance: params finite,
+5. `pnpm test` — the conformance sweep: params finite,
    `|v| ≤ 2`, svg connected, across every state/emotion/gaze/interjection and
    a viseme track, plus `checkHandFraming` against your window and a pass of
-   every hand gesture. Sweep also cannot see *looks*; it reaches shoulders/torso
+   every hand gesture. (`authoring/rig-check.html`'s **run sweep** button is the
+   same sweep in real time, if you want to watch it land.) It also cannot see
+   *looks*; it reaches shoulders/torso
    only through clips, so drive those with a `setOverrides` loop over
    `[-1, 0, 1]` per channel — and look at one hand gesture at peak extension
    (`authoring/body-lab.html?face=NAME&gesture=HI&at=0.4`), because figure/ground

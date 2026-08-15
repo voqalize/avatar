@@ -272,7 +272,7 @@ export const EMOTION_NAMES: readonly AvatarEmotionName[];
 export const ACTIONS: Readonly<Record<AvatarActionId, unknown>>;
 export const ACTION_IDS: readonly AvatarActionId[];
 /** Asserts the two framing rules against a face's own window. Throws on
- * violation — `authoring/tools/sweep.mjs` runs it for every registered avatar. */
+ * violation — `pnpm test` runs it for every registered avatar. */
 export function checkHandFraming(meta: AvatarMeta): {
   ok: true;
   wristDrop: number;

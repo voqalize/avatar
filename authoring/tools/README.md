@@ -10,16 +10,12 @@ pnpm install                # once, from the repository root; puppeteer
                             # downloads its own Chromium on install
 ```
 
-## The four commands
+## The three commands
 
 ```sh
 node authoring/tools/shot.mjs 'authoring/contact-sheet.html?face=peep' -o /tmp/peep.png
 node authoring/tools/shot.mjs 'authoring/clip-strip.html?clip=SHRUG' --selector '#g'
     # [-o out.png] [--selector css] [--width N] [--scale N] [--wait ms|expr]
-
-node authoring/tools/sweep.mjs
-    # the conformance gate: rig-check's sweep() headless. Run before any
-    # commit that touches src/. Exit 0 iff ok.
 
 node authoring/tools/baseline.mjs [outDir]
     # the standard verification set into .review/baseline-<sha>/ by default:
@@ -54,6 +50,6 @@ node authoring/tools/shot.mjs 'authoring/clip-strip.html?clip=NOD_SLOW&face=peep
 
 **What the baseline cannot see:** live-mixer behavior (idle motion, gaze
 saccades, backchannel timing) is intentionally excluded — it is random and
-time-based, so it can never be pixel-compared. `sweep.mjs` covers it for
-sanity (finite, in-range params); judging its *feel* still needs a human and
-a real browser.
+time-based, so it can never be pixel-compared. The conformance sweep in
+`pnpm test` covers it for sanity (finite, in-range params); judging its *feel*
+still needs a human and a real browser.
