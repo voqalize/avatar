@@ -72,7 +72,7 @@ perspective.
 | `mouthRound` | 0.10 | 0..1 | 0.042 | pucker / protrusion |
 | `mouthPress` | 0.15 | 0..1 | 0.042 | lips thinned & pressed |
 | `mouthTuck` | 0 | 0..1 | 0.042 | lower lip under upper teeth (F/V) |
-| `mouthCornerL/R` | 0.10 | −1.4..1.4 | 0.13 | −frown..+smile |
+| `mouthCornerL/R` | 0 | −1.4..1.4 | 0.13 | −frown..+smile |
 | `teethUpper` | 0 | 0..1 | 0.042 | upper-teeth reveal |
 | `tongue` | 0 | 0..1 | 0.042 | tongue raised into aperture (L) |
 | `jaw` | 0 | 0..1 | 0.07 | extra chin drop, lags the lips |
@@ -133,4 +133,8 @@ An author reviews rest and channel extremes, meaningful extreme composites,
 every viseme at full-frame and close scale, curated transitions (`X→A→X`,
 `A→D→A`, `D→F→B`, `B→G→H`, and rapid closures), the same raw frame across
 registered rigs, and numeric conformance (finite values, mounted renderer,
-clean teardown). Studio's Rig routes implement this review.
+clean teardown). The pages under `authoring/` implement this review —
+`contact-sheet.html`, `torso-check.html`, `clip-strip.html`, `rig-check.html`
+([authoring/README.md](../authoring/README.md)). Studio does not: it drives the
+published contract and never reaches a pose channel
+([studio/README.md](../studio/README.md)).

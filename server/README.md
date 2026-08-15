@@ -30,7 +30,7 @@ The avatar is byte-identical whichever vendor spoke.
 ## Run
 
 ```
-npm install && npm run build && pnpm run server:vendor
+pnpm install && pnpm -w run build && pnpm -w run server:vendor
 cd py && uv run --group server python ../server/server.py
 ```
 
@@ -163,9 +163,11 @@ Two things only ears catch, and no suite in this repo will tell you either:
 
 Watch more than one vendor. Under `google` the corrections stream in and the
 mouth converges while it is still talking; under `google-http` the predicted leg
-is replaced in one go. Studio and `authoring/lipsync-review.html` play *baked*
-cue tracks — they show what a leg's cues look like, never how the two legs
-interleave, latch or rewrite under a live generator.
+is replaced in one go. `authoring/lipsync-review.html` plays *baked* cue tracks
+— it shows what a leg's cues look like, never how the two legs interleave,
+latch or rewrite under a live generator. Studio drives this same server, so the
+legs are live there too; what it does not give you is this page's plainness,
+which is the point of judging here.
 
 ## The audio is committed
 
@@ -204,7 +206,7 @@ and are Apple's to license, not ours to ship.
 
 `src/` and `client/dist/` are served straight from the working tree with
 `Cache-Control: no-store`, so a rig edit needs only a reload — no build, no
-restart, and no stale-module debugging. Only `client/` (`npm run build`) and the
+restart, and no stale-module debugging. Only `client/` (`pnpm -w run build`) and the
 vendored pipecat bundle (`pnpm run server:vendor`) need rebuilding, and only
 when you change them. Nothing of ours is bundled: `src/` is dependency-free ES
 modules by constraint and the browser loads it as-is.

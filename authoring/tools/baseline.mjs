@@ -11,8 +11,9 @@
  * so two baselines from the same tree must be pixel-identical, and
  * `authoring/tools/diff.mjs` between baselines is a real refactor-safety check.
  *
- * The avatar list is scraped from the registry through the served page, so a
- * newly registered avatar joins the baseline without touching this file.
+ * The avatar list is read from `src/faces.js` through the served page — the
+ * all-three tooling table, not a runtime registry (there is none) — so a face
+ * added there joins the baseline without touching this file.
  */
 import { execSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';

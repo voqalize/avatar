@@ -7,8 +7,9 @@ SVG face module supplies, what `face-core.js` gives it for free, and the staged
 process for adding a new character. A non-SVG renderer needs only the rig
 contract and can ignore everything here.
 
-*Living document. Describes the code as of `src/face*.js` on `main`; the
-[Direction](#direction) section flags what is about to change.*
+*Living document. Describes the code as of `src/face*.js` on `main`;
+[Adding a new avatar](#adding-a-new-avatar) is the staged process, and CLAUDE.md
+§ In flight flags what is about to change.*
 
 An avatar is a module exporting exactly this, and nothing more:
 
@@ -23,7 +24,9 @@ META = { viewBox: {x, y, w, h}, mouthCrop: {x, y, w, h} }
   rig). A face may ignore the argument entirely; wren and myna do.
 - `theme` — optional per-key colour overrides merged over the rig's palette;
   the merged object is returned as `theme`. Theme *keys* are per-avatar
-  (peep and wren carry 8 each; the retired rigs shared a ~25-key palette).
+  (all three line rigs happen to carry the same 6 — `ink`, `paper`, `accent`,
+  `mouthIn`, `teeth`, `tongue` — where the retired rigs shared a ~25-key
+  palette; that is what the idiom costs, not a rule).
   Hosts that paint *around* the widget read them off `api.theme` — see
   Palettes below.
 - `svg` — the live `<svg>` element.
@@ -85,7 +88,8 @@ What legitimately varies per avatar, and stays in the face module:
 - **The `POSE` spec values**: `yawPx`/`pitchPx` (parallax travel), `pivot`, lean
   travel and pivot, shrug lift and tilt degrees, `turnPx` (lateral trunk travel
   at `torsoTurn = 1`), the breath model, plus a `units` factor (see Art units).
-  Pupil travel and `lidFollow` strength (0.22 on both current rigs) are literals
+  Pupil travel and `lidFollow` strength (0.22 on all three current rigs, which
+  is convergence rather than a shared constant) are literals
   in the draw function rather than spec fields — eye geometry is per-drawing
   enough that naming it bought nothing.
 - **The breath model's numbers**. A rig declares `breathSwell` + `swellPivot`
@@ -163,12 +167,12 @@ same window at `92 50`; the retired rigs were 320×400 and a native 1024² cropp
 between rigs is silent breakage**: one retired rig's travels were the other's
 numbers with `units: S` (S = 2.67) in its `POSE` spec; peep's torso channels
 were once ported without conversion and the shoulders stopped reading, while
-nothing threw and `sweep()` passed. The trap inside the
+nothing threw and the conformance sweep passed. The trap inside the
 trap: **translations convert, degrees don't** — a rotation is already
 unit-independent, which is why `shrugTiltDeg` never takes the `units` factor.
 
 `viewBox` is not a rig constant. Hosts derive aspect from `META.viewBox` (or
-`api.meta.viewBox`); the demos do.
+`api.meta.viewBox`); the rig pages under `authoring/` do.
 
 ## Shipping a face
 
@@ -217,8 +221,9 @@ It is deliberately **not** part of this contract's parameter space: it writes a
 transform on its own `<g>` appended over the face's svg, it has no channel in
 `params.js`, and a face that never plays a gesture renders byte-for-byte what
 it rendered before. That is the whole reason it could be added at all — a hand
-channel only one avatar could draw is precisely the mistake CLAUDE.md
-constraint 9 names.
+channel only one avatar could draw is precisely the mistake CLAUDE.md names
+under **No arms**: *a channel only one avatar can render is the shape of the
+mistake, whatever the body part.*
 
 **What a face owes it: a `META.viewBox`, and `theme.ink` / `theme.paper`.**
 Nothing else, and no new META field. Placement derives four numbers from the
@@ -262,7 +267,7 @@ then plays the face half alone.
    *looks*; it reaches shoulders/torso
    only through clips, so drive those with a `setOverrides` loop over
    `[-1, 0, 1]` per channel — and look at one hand gesture at peak extension
-   (`authoring/body-lab.html?face=NAME&gesture=HI&at=0.4`), because figure/ground
+   (`authoring/body-lab.html?face=NAME&gesture=GESTURE_GREET&at=0.4`), because figure/ground
    between hand and shirt is a judgement the framing check cannot make.
 6. Auto-traced art has known failure modes to budget for: zero-margin abutting
    contours open seams under parallax; the trace stops at the source crop;
@@ -357,25 +362,30 @@ A new face module supplies:
    every *travel* in your own units; keep degrees as judgements about your own
    collar/neck geometry, not conversions.
 3. **Feature blocks** — use the face-core fragments where your model matches
-   (`irisLidEyes`, `browPair`, `pairedTeeth`); write your own where the
+   (`pairedTeeth` is the one that survives; recover `irisLidEyes` / `browPair`
+   from git if you draw sclera or endpoint-pair brows); write your own where the
    character disagrees. The mouth is always yours: honour the channel
    semantics in *Obligations* above. peep's bean-eye, point-list-brow and
    contour-mouth generators carried into wren as copies with re-derived
    constants — if a third line-art face repeats that, extract them into
    parameterized factories the way the stroke engine was extracted.
 4. **`META`** — viewBox and mouthCrop.
-5. **A registry entry** — `{ create, meta }` in `src/avatar.js`.
+5. **The exported record** — `export const <name> = { create, meta }` at the
+   foot of your module, an `exports` entry for `./faces/<name>`, a `.d.ts`
+   beside it, and a row in `src/faces.js` so the comparison tools can see it.
+   Nothing resolves a face by name at runtime (§ Shipping a face).
 
 What you get for free: the mixer, visemes, emotions, gaze, idle, clips,
 interjections, the frame-edge hand (§ The hand — it needs only your viewBox and
-two theme keys), the pose mechanics, the memoizer, and every host page and rig
-tool — the demos' avatar pickers, contact sheet, torso check, clip strip and
-`sweep()` all enumerate the registry. The wren run measured the split: the
+two theme keys), the pose mechanics, the memoizer, and every tool whose job is
+comparing faces — `authoring/rig-check.html`, the contact sheet, the torso
+check, the clip strip and the conformance sweep all enumerate `src/faces.js`.
+The wren run measured the split: the
 plumbing steps (2, 4, 5) are mechanical; the art (step 1) and the read of
 every state at tile size (the checklist) are where the judgement — and the
 time — actually goes. Static accessories interact with channels: wren's lens
 rings cap pupil travel, the exact channel DISTRACTED needs most — check your
 accessory against the gaze extremes early, not last.
 
-Then run the checklist above, and judge by eye — passing `sweep()` is not
+Then run the checklist above, and judge by eye — a passing conformance sweep is not
 evidence a face looks right.

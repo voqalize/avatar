@@ -76,6 +76,11 @@ at or after it is discarded. The reasoning and the constants are in
 | Linux x86-64 / aarch64 | `manylinux_2_25` — RHEL 8+, Debian 10+, Ubuntu 18.04+ |
 | macOS arm64 | `macosx_11_0_arm64` — macOS 11+ |
 
+That is the installer's view. The tags are *derived from the compiled binary*
+rather than declared, and `.github/workflows/wheels.yml` is the canonical
+statement of what gets built ([RELEASING.md](../RELEASING.md)); if this table
+and a published wheel ever disagree, the wheel is right.
+
 Intel macOS is absent for an upstream reason: `pipecat-ai` requires
 `onnxruntime`, which publishes no macOS x86-64 wheel, so nothing depending on
 pipecat installs there at all.

@@ -7,17 +7,30 @@
 > [contract-wire.md](contract-wire.md); how the client resolves it is
 > [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md).
 >
-> What follows is the imperative surface underneath all of that — the one
-> Studio, the rig pages and the headless tools drive directly, and the one a
+> What follows is the imperative surface underneath all of that — the one the
+> `authoring/` rig pages and the headless tools drive directly, and the one a
 > behavior author works against. It ships under `@voqalize/avatar/internal`
-> with no semver promise.
+> with no semver promise. Studio pointedly does *not* use it: Studio is the
+> surface an integrator copies from, so it takes the published `createAvatar`
+> and nothing else ([studio/README.md](../studio/README.md)).
 
 Everything below is reachable from one import:
 
 ```js
 import { createAvatar } from './src/avatar.js';
-const avatar = createAvatar({ mount: '#avatar' });   // also: avatar, face, theme, mouthGain, gestureGain
+import peep from './src/face-peep.js';
+const avatar = createAvatar({ mount: '#avatar', face: peep });
 ```
+
+`mount` and one of `face` / `rig` are required — `createAvatar` throws without
+them. A face is the `{ create, meta }` value a face module default-exports, not
+a name: a name would need a table, and a table would pull all three drawings
+into a consumer's bundle to render one. The rest are optional:
+`theme` (palette overrides), `rig` + `rigOptions` (a non-SVG renderer, which
+suppresses `face`), `hand: false` and `handSide` (the frame-edge hand),
+`mouthGain`, `gestureGain`, `motionGain`, and `manual` (no internal rAF loop —
+you call `tick` yourself, which is how the headless tools get deterministic
+frames).
 
 All setters are chainable. Unknown state, action and gesture ids **throw**;
 unknown emotion falls back to `neutral` silently; unknown gaze falls back to
@@ -84,27 +97,38 @@ then releases it when the action lands.
 ## Actions — `action(id)`
 
 Finite authored clips with baked plausible timings, so they are convincing with
-**no audio attached**. `ACTIONS` and `INTERNAL_CLIPS` (`src/interjections.js`)
-are the list, with each clip's duration and keyframes beside its intent; the
-promoted subset a *server* may send is the seven ids in
-[contract-wire.md](contract-wire.md).
+**no audio attached**. `src/interjections.js` holds two lists, each clip's
+duration and keyframes beside its intent:
+
+- `ACTION_IDS` / `ACTIONS` — the seven a *server* may send, and the only ids
+  `action(id)` accepts. Same seven as [contract-wire.md](contract-wire.md);
+  anything else throws, and `parseAvatarCommand` drops it before it gets that
+  far.
+- `INTERNAL_CLIPS` — the full authoring library the seven are drawn from, ~33
+  clips. It is a *timeline* library, not a second action vocabulary: nothing on
+  the mixer's surface takes one of its ids, and the authoring pages that review
+  them (`authoring/clip-strip.html`) drive a bare `ClipPlayer` instead. That
+  asymmetry is on purpose — promoting a clip to an action is a decision, and it
+  should cost an edit to `ACTION_IDS`.
 
 The rules that are not visible in the keyframes:
 
 - **The frontend never emits one autonomously.** Every nod, receipt and empathy
   beat is an explicit call. The wordless-acknowledgement family exists so a
   backend can *choose* one, not so the rig can reach for it.
-- **Disagreement and dismissal are server-sent only.** `HEAD_SHAKE`,
-  `HEAD_SHAKE_SOFT` and `BLINK_LONG` are policy decisions, not reflexes —
-  `BLINK_LONG` measurably shortens what the user says next.
+- **Disagreement and dismissal are deliberately not in the action vocabulary.**
+  `HEAD_SHAKE`, `HEAD_SHAKE_SOFT` and `BLINK_LONG` are authored, and stayed in
+  `INTERNAL_CLIPS`: a server cannot name them and neither can a host. They are
+  policy decisions rather than reflexes — `BLINK_LONG` measurably shortens what
+  the user says next — and nothing has yet asked to make one.
 - **A repeated clip while that clip is already playing collapses to a no-op.**
 - **Mouth safety overrides everything here.** An action fired during bot speech
   contributes head, brow and body channels but not a competing mouth shape.
 
-The spoken family (`OKAY`, `MM_HMM`, `ONE_MOMENT`, `SORRY`, …) carries text and
-a hand-tuned viseme track: silent but plausible until real audio is attached.
-Backchannels matter more than long-form speech, so these are tuned harder than
-their length suggests.
+The spoken family (`OKAY`, `MM_HMM`, `SURE`, `SORRY`, `GO_ON`, …) carries text
+and a hand-tuned viseme track: silent but plausible until real audio is
+attached. Backchannels matter more than long-form speech, so these are tuned
+harder than their length suggests.
 
 ## Hand gestures
 
@@ -119,13 +143,14 @@ never leaves the frame sideways and never shows a wrist — see
 [authoring-a-face.md § The hand](authoring-a-face.md) for the rules and the
 per-avatar check.
 
-Degradation is total and silent. An avatar mounted with `hand: false` — a face
-drawn in some other idiom, or a tile too small to spend the pixels — plays the
-face half and nothing else, which is the same fallback every id already had
-before the hand existed. `api.gesturing` is the id in flight, or `null` — which
-is what it always reads under `hand: false`, and `gestureEnd` correspondingly
-never fires there: both describe the *hand*, and there is no hand. An unknown
-id throws.
+Degradation is silent, and it stops at the drawing. `hand: false` — a face
+drawn in some other idiom, or a tile too small to spend the pixels — turns off
+the **SVG hand layer**, not the gesture. The face half plays, the gesture is
+still tracked, `api.gesturing` still reads the id in flight, `gestureEnd` still
+fires when it lands, and `frame.hand` still reaches the rig — because `hand` is
+a first-class pose channel and a custom rig may well render it
+([internal-rig.md](internal-rig.md)). What a `hand: false` SVG avatar shows is
+the same fallback every id had before the hand existed. An unknown id throws.
 
 `setHandSide(+1 | -1)` picks which side of the frame the hand enters from;
 `+1` (the viewer's right) is the default.
@@ -254,14 +279,37 @@ Rules:
 - `onAction(a)` is called after each verb dispatches — the telemetry/log hook.
 - Seeking the audio backward does not re-fire earlier actions.
 
+## Smoothing — what a keyframe actually renders as
+
+Every channel is a first-order chase toward its target with its own time
+constant τ ([internal-rig.md § The pose channels](internal-rig.md) has the
+table). **A clip's keyframes are not what the face does; the smoothing between
+them is**, and the gap is large enough to author against:
+
+- A channel chasing a target oscillating at ω rad/s renders at
+  `1/sqrt(1 + (ω·τ)²)` of the authored amplitude, and arrives `arctan(ω·τ)`
+  late.
+- The head's τ is 160 ms, so a nod at the top of the usable band — ~1.5 Hz,
+  ω ≈ 9.4 — renders at ~0.55 of what is written and lags ~56°. **Nod peaks are
+  authored pre-compensated**: a rendered 0.30 is written ~0.55.
+- Channels with differing τ therefore phase-shift relative to each other for
+  free. Brows (80 ms) lead the head (160 ms) which leads the trunk (440 ms)
+  with no authored offset at all, which is most of why the body reads as one
+  connected thing.
+
+The practical rule: **author a deliberate lead or lag on top of what the mixer
+already supplies, not from zero.** A gesture that "feels late" in the keyframes
+is usually a channel whose τ you have paid for twice.
+
 ## Events, gains, introspection
 
 - `on('state', fn)` — state changed (fires with the new name)
 - `on('speakEnd', fn)` — cue track completed
 - `on('clipEnd', fn)` — action finished (fires with its id)
 - `on('performEnd', fn)` — a performance's last action has fired
-- `on('gestureEnd', fn)` — the hand has left the frame (fires with the gesture
-  id). Only where a hand is mounted
+- `on('gestureEnd', fn)` — a hand gesture's timeline has run out (fires with
+  its id). Tracked from the semantic gesture, so it fires under `hand: false`
+  too — see § Hand gestures
 - `setMouthGain(g)` — scales viseme excursion away from rest (1 = as authored;
   useful when the avatar renders small). Never drags a closed mouth open.
 - `setGestureGain(g)` — scales clip deltas; small gestures under-render

@@ -40,10 +40,17 @@ An action during bot speech contributes compatible head/body/hand channels but
 not a competing mouth shape. `turn.interrupted` waits for bot playout to stop,
 then its held mouth can communicate the cut.
 
-Examples: `ack.continue`, `ack.receive`, `ack.realize`, `ack.empathy`,
-`ack.nod`, `turn.interrupted`, `gesture.greet`, `gesture.farewell`,
-`gesture.approve`, and `gesture.wait`. These are library vocabulary and may be
-broader than the current server profile.
+The vocabulary is seven, and `BEHAVIOR_ACTIONS` in `src/behavior.js` is the one
+copy: `ack.receive`, `ack.nod`, `turn.interrupted`, `gesture.greet`,
+`gesture.farewell`, `gesture.approve`, `gesture.wait`. Each maps to exactly one
+promoted wire id ([contract-wire.md](contract-wire.md)) — the two lists are the
+same seven things spelled twice, once for a reader and once for a protocol, and
+`WIRE_ACTION_TO_BEHAVIOR` is where they meet.
+
+The SVG renderer's own clip library is larger (`INTERNAL_CLIPS`), and that is
+not a broader profile waiting to be exposed: promoting a clip to an action is a
+decision about what a *server* may ask for, and it costs an edit in three
+places on purpose ([internal-mixer.md](internal-mixer.md) § Actions).
 
 ## Effective-state precedence
 

@@ -6,7 +6,7 @@ with the wire that drove it decoded beside them.
 ```sh
 pnpm install                                  # once, from the repository root
 cd py && uv run --group server python ../server/server.py   # in another terminal
-pnpm run studio:dev
+pnpm -w run studio:dev                        # -w: it is a root script
 open http://127.0.0.1:4173/                   # AVATAR_STUDIO_PORT overrides
 ```
 

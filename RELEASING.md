@@ -121,7 +121,7 @@ is a credential that outlives the person who created it.
           password: ${{ secrets.PYPI_API_TOKEN }}
 ```
 
-## The PyPI side is five artifacts, not one
+## The PyPI side is four artifacts, not one
 
 `voqalize-avatar` publishes one wheel per platform — each carrying the
 `avatarsync` aligner and its 56 MB acoustic model, hence ~44 MB apiece — plus a

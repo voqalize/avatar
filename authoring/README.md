@@ -86,8 +86,8 @@ this correct*.
   is.** A channel chasing an oscillating target attenuates and lags, so nod
   peaks are authored pre-compensated (a rendered 0.30 is written ~0.55).
   Author a lead or lag *on top of* what the mixer already supplies, not from
-  zero. The arithmetic is in
-  [docs/internal-mixer.md](../docs/internal-mixer.md).
+  zero. The arithmetic and the worked numbers are in
+  [docs/internal-mixer.md § Smoothing](../docs/internal-mixer.md).
 
 ## Adding an avatar
 

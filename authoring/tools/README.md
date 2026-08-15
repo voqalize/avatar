@@ -10,7 +10,7 @@ pnpm install                # once, from the repository root; puppeteer
                             # downloads its own Chromium on install
 ```
 
-## The three commands
+## The four commands
 
 ```sh
 node authoring/tools/shot.mjs 'authoring/contact-sheet.html?face=peep' -o /tmp/peep.png
@@ -20,10 +20,17 @@ node authoring/tools/shot.mjs 'authoring/clip-strip.html?clip=SHRUG' --selector 
 node authoring/tools/baseline.mjs [outDir]
     # the standard verification set into .review/baseline-<sha>/ by default:
     # contact sheet + torso sheet + NOD_SMALL/SHRUG filmstrips, per avatar.
-    # Avatar list comes from the registry, so new avatars join automatically.
+    # The avatar list comes from `src/faces.js`, so a new face joins by adding
+    # a row there and nothing else.
 
 node authoring/tools/diff.mjs a.png b.png [-o diff.png] [--threshold 0]
     # changed-pixel count; exit 1 above threshold (default: any change fails).
+
+node authoring/tools/motion.mjs --span 24 --state LISTENING -o .review/motion
+    # how much actually moves, in delivered pixels: a per-pixel motion map, and
+    # silhouette edge probes reported as peak-to-peak travel in CSS px.
+    # The others are blind to "the body reads as a still image" — that
+    # complaint is about a sequence at the size the thing is shown.
 ```
 
 ## Workflows

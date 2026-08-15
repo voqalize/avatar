@@ -438,8 +438,10 @@ It was also the last stringly-typed thing on the public surface. Passing a
 
 **Instead:** `import { wren } from '@voqalize/avatar/faces/wren'` and pass
 `face: wren`. `src/faces.js` still holds the all-three table for tooling that
-compares faces against each other — `rig-check`, the contact sheet, `sweep`,
-Studio. It is deliberately not on the package export map.
+compares faces against each other — `authoring/rig-check.html`, the contact
+sheet, the conformance sweep. It is deliberately not on the package export map,
+and Studio does not use it either: Studio imports the three face subpaths by
+name, exactly as a consumer would.
 
 **Recover:** `git show 02b0dad:src/avatar.js`, search `AVATARS`.
 

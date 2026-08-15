@@ -64,6 +64,11 @@ depends on. The rest are our own internals, and are named so.
 | rig | `apply({pose, hand})` / `destroy()`, our SVG renderer's internals | `src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
 | SVG faces | the drawings | `src/face-*.js` | [authoring-a-face.md](docs/authoring-a-face.md) |
 
+The two bold rows are the contracts, and only they carry a semver promise.
+Everything below them is named `internal-*` for the same reason it ships under
+`@voqalize/avatar/internal`: a future renderer must not plug into the wrong
+seam, and one already did ([removed.md § The Rive proof](docs/removed.md)).
+
 Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
 Why a library rather than a product, and what each published artifact owns:
 the same document. What 0.2 and 0.3 cut from the public surface, and how to get
@@ -230,7 +235,11 @@ than a text brief:
 
 ## Trying it
 
-Two surfaces, and neither wants an API key. `server/` is one pipecat process
+Three surfaces, none of which wants an API key, and each answers one question.
+*Does it work in a real call?* — `server/`. *Is the published interface
+enough?* — `studio/`. *Does the drawing read?* — `authoring/`.
+
+`server/` is one pipecat process
 with canned LLM and TTS services behind the real pipecat interfaces, so the
 frames the avatar reads are the frames a production pipeline produces
 ([server/README.md](server/README.md)):
@@ -249,7 +258,7 @@ mounts all three faces on one `PipecatClient`. `#/wire` decodes every `claim`,
 misbehave on purpose.
 
 ```sh
-pnpm run studio:dev                  # with server/ running in another terminal
+pnpm -w run studio:dev               # with server/ running in another terminal
 open http://127.0.0.1:4173/
 ```
 

@@ -33,19 +33,26 @@ application's, not the library's.
 
 | artifact | registry | contents | deps |
 |---|---|---|---|
-| `@voqalize/avatar` | npm | `createAvatar` (`.`), `<Avatar>` (`./react`), the widget (`./internal`) | optional peers: react, `@pipecat-ai/client-js` |
+| `@voqalize/avatar` | npm | `createAvatar` (`.`), `<Avatar>` (`./react`), the mixer (`./internal`), one face each (`./faces/*`) | optional peers: react, `@pipecat-ai/client-js` |
 | `voqalize-avatar` | pypi | processor, state machine, wire, viseme engine, `avatarsync` runtime | `pipecat-ai>=1.4,<2` |
 | `native/avatarsync` | *inside the pypi wheel* | the C++ fork, its build, the model tree | — |
 | — | — | `docs/` contracts, binding for all of them | — |
 
-**One npm package, one entry point.** It shipped as three subpaths — the bare
-widget, the dispatcher, the React binding — and 0.2 collapsed them to
-`import { Avatar } from "@voqalize/avatar"`. Both consumers render a call tile
-in React; three entry points meant three public surfaces to keep stable across
-versions, two of them for a host that does not exist. The widget and the
-dispatcher are still *in* the tarball, just not exported —
-[removed.md](removed.md) § The `/pipecat` and `/react` subpaths says how to put
-them back if a third consumer argues for it.
+**One npm package, and the subpaths have to earn their place.** It shipped as
+three — the bare widget, the dispatcher, the React binding — and 0.2 collapsed
+them to one, because both consumers render a call tile in React and three public
+surfaces to keep stable across versions is a cost paid for a host that did not
+exist. 0.3 restored the ones a real consumer asked for and no more:
+`.` (`createAvatar`), `./react`, `./internal` for the mixer, and one subpath per
+face so a host bundles the drawing it uses rather than all three.
+[design-avatar-interface.md](design-avatar-interface.md) is the current map;
+[removed.md](removed.md) § The `/pipecat` and `/react` subpaths records the
+collapse and what came back.
+
+**The entry-point count is the surface count.** `.` is the only one under a
+semver promise; `./internal` explicitly is not
+([internal-mixer.md](internal-mixer.md)). Adding a subpath is adding something
+this project has to keep working, which is why it takes a consumer asking.
 
 *Optional peers have to be optional in fact, not just in the manifest.* One
 runtime `import` of a peer makes the whole entry point fail to load without it
@@ -74,8 +81,10 @@ constraint that actually settled it: **mouth sync is the headline feature**, and
 a distribution choice that leaves it dark in the common case is a regression in
 the thing this project is for, whatever it saves elsewhere.
 
-The cost is honest and small — a 44 MB wheel, four platform builds instead of
-one, and no wheel at all for platforms outside the matrix. The last of those is
+The cost is honest and small — a 44 MB wheel, a build per platform instead of
+one ([RELEASING.md](../RELEASING.md) § The PyPI side is four artifacts, which
+owns the tags),
+and no wheel at all for platforms outside the matrix. The last of those is
 survivable precisely because of the property below: an install with no binary is
 an ordinary condition, not a failure.
 
@@ -154,13 +163,24 @@ pypi wheel; see the `native/avatarsync` note in decision 2.
 
 This is the core of the design and the thing the library exists to get right.
 
-**Tier 1 — base states, from stock pipecat frames, zero backend awareness.**
-The state machine reads only frames that any pipecat pipeline produces, and
-delivers `IDLE`, `LISTENING`, `THINKING`, `SPEAKING`, `TAKING_FLOOR`,
-`WAITING_FOR_USER`, `YIELDED`, `DEGRADED`, `OFFLINE`, the `speech` clock
-anchor, `user speaking` truth, and the whole viseme leg off `TTSAudioRawFrame`.
+**Tier 1 — base presence, from stock pipecat frames, zero backend awareness.**
 Drop `AvatarProcessor` into a pipeline between TTS and the output transport and
-this works — that is the promise, and it is what makes the library adoptable.
+the face is present: that is the promise, and it is what makes the library
+adoptable.
+
+What the backend actually puts on the wire is narrower than "the states",
+because the states are not the backend's to send. The processor reads only
+frames any pipecat pipeline produces and emits three commands —
+`claim` (`THINKING`, `WORKING`, or cleared), `action`, and `cues` off
+`TTSAudioRawFrame` ([contract-wire.md](contract-wire.md), the one copy).
+Everything else the presence state depends on — is the bot speaking, is the user
+speaking, is the transport up — the client already has from `PipecatClient`'s
+own events, and reads there rather than being told. Claims are *candidates*
+underneath those facts; the precedence ladder that resolves them lives once, in
+`client/src/AvatarClient.ts`
+([pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md)). The behavior
+vocabulary those two inputs resolve to is exactly seven names, and
+[contract-behavior.md](contract-behavior.md) owns the list.
 
 The pin is `pipecat-ai >= 1.4, < 2`, and it is an honest one: every frame the
 processor reads exists in 1.4.0, including the karaoke path
@@ -169,11 +189,22 @@ viseme legs are driven from, `UserTurnInferenceCompletedFrame` and
 `RTVIServerMessageFrame`. CI runs the suite at the declared floor as well as at
 the resolved version, so "we support 1.4" is a claim a test checks.
 
-**Tier 2 — composite states, which need to know what the application is doing.**
-`TYPING`, `TYPING_CHAT`, `SEARCHING_SCREEN`, `REVIEWING_SCREEN`, `DISTRACTED`,
-`CANT_HEAR`, `WANTS_IN`, and every deliberate interjection or `perform()`
-timeline. No amount of frame-watching infers these correctly, and a library
-that guessed would nod at the wrong moment.
+**Tier 2 — composite intent, which needs to know what the application is
+doing.** Is it reading the screen, is it typing into a chat, did it not hear
+that, does it want in. No amount of frame-watching infers these correctly, and a
+library that guessed would nod at the wrong moment.
+
+Where 0.3 landed is narrower than this section originally promised, and
+deliberately: the composite *render* states are no longer wire vocabulary at
+all. `AvatarControlFrame` carries an `AvatarMessage`, so a seam can say
+`WORKING`, or send one of the seven actions, and that is the whole of it. The
+richer poses (`REVIEWING_SCREEN`, `SEARCHING_SCREEN`, `CANT_HEAR`,
+`TYPING_CHAT`, `DISTRACTED`, `WANTS_IN`, …) are still real, still authored, and
+still reachable — through `avatar.setState` on the mixer, which is `./internal`
+and whose state list has exactly one copy, `STATES` in `src/avatar.js`. A host
+that wants one drives the mixer for it. That keeps the contract small enough to
+be worth calling a contract, and it puts the pass-throughs where their cost is
+visible ([removed.md](removed.md) § The behavior-state aliases).
 
 The motivating case is concrete and not hypothetical: an LLM service that runs
 its tools *out of process* pushes `LLMFullResponseStartFrame` but never pushes
@@ -226,15 +257,22 @@ application that knows its tool is searching can say so in one
 nobody should write twice — call ids are deduped and parallel calls are held, so
 a turn with three tools shows one settled `THINKING` rather than a flicker.
 
-### 5. The widget's public surface does not change
+### 5. The reorganization stops above the waist
 
-The widget keeps the surface both contracts describe — `createAvatar`,
-`setState`, `action`, `speak`/`pushCues`, `setUserSpeaking`.
-What changed in 0.2 is what the *npm package* exports, not what the widget can
-do: one React entry point, and the imperative surface behind it. Nothing in this
-reorganization touches `src/params.js` or any face module. If it does, something
-has gone wrong — the reorganization is above the waist of the system, and the
-waist is exactly where it should not reach.
+Nothing in this work touches the drawings, the pose channels or the mixer's
+motion. If a face module or `src/params.js` changes because the packaging
+changed, something has gone wrong — the waist is exactly where this should not
+reach, and it held: `src/` is still dependency-free ES modules with no build
+step.
+
+Above the waist it did change, and the direction was inward. The public seam is
+now `createAvatar({mount, client}) -> {destroy()}` — no `setState`, no `action`,
+no `speak`, no readback. Those verbs still exist on the mixer, which is
+`./internal` and carries no semver promise. The reasoning is decision 4's: an
+imperative surface on the public package is an invitation for the client to
+decide what the agent is doing, and the client does not get to decide.
+[design-avatar-interface.md](design-avatar-interface.md) is the seam;
+[removed.md](removed.md) lists each verb that left and how to reach it.
 
 ### 6. React is a peer at `>=18`, not a dependency at 19
 
@@ -253,15 +291,16 @@ repo's primary artifact — it has earned the short path. Everything else is a
 sibling, and each sibling answers one question:
 
 ```
-src/                    the widget — published, not exported
-  avatar.d.ts           its types, hand-maintained next to the code
+src/                    the mixer, the rig, the faces — reached through
+                        ./internal and ./faces/*, never by deep path
+  *.d.ts                its types, hand-maintained next to the code
 client/                 AvatarClient (splice, clock anchor) + React binding
-                        -> @voqalize/avatar, whose one export is createAvatar
+                        -> @voqalize/avatar, whose public export is createAvatar
 py/                     voqalize-avatar: pyproject + src/voqalize_avatar/ + tests
 native/avatarsync/      the rhubarb fork: patch, capi.cpp, build.sh, libavatarsync.*
 docs/                   the contracts, binding for both packages
   removed.md            what 0.2 and 0.3 cut from the surface, and how to undo it
-package.json            @voqalize/avatar, one export
+package.json            @voqalize/avatar and its export map
 studio/                 Avatar Studio — the IDE for the published options
 server/                  one pipecat process, canned services, zero API keys
                         — the only place lipsync is verified

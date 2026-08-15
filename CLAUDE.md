@@ -112,11 +112,11 @@ Non-obvious, and recorded nowhere else.
   rather than attention. The frame-edge hand is exempt: 2.8–3.0 Hz is the social
   wave band and the bottom of it reads as tired.
 - **Clip keyframes are not what the face does — the smoothing between them is.**
-  A channel chasing an oscillating target attenuates by `1/sqrt(1+(ω·τ)²)` and
-  lags by `arctan(ω·τ)`. Nod peaks are authored pre-compensated for the head's
-  160 ms τ (a rendered 0.30 is written ~0.55), and channels with differing τ are
-  already phase-shifted relative to each other for free. Author a deliberate
-  lead or lag *on top of* what the mixer already supplies, not from zero.
+  Nod peaks are authored pre-compensated for the head's 160 ms τ, and channels
+  with differing τ are already phase-shifted relative to each other for free.
+  Author a deliberate lead or lag *on top of* what the mixer already supplies,
+  not from zero. The arithmetic and the worked numbers are in
+  [internal-mixer.md § Smoothing](docs/internal-mixer.md) — one copy.
 - **`src/` has no build step, and that is a constraint, not a convenience.**
   Dependency-free ES modules — what you screenshot is what ships. `client/`
   (tsc) and `studio/` (vite) are compiled; nothing in `src/` may depend on
@@ -151,12 +151,13 @@ Three things no suite will tell you:
 
 - **Lipsync is only ever verified in [`server/`](server/README.md)**
   — a real call, your microphone, live TTS, `AvatarProcessor()` seated between
-  the TTS and the transport. Nothing else exercises the streaming accurate leg:
-  Studio and `authoring/lipsync-review.html` play *baked* cue tracks, so they
-  show what a leg's cues look like and not how the two legs interleave, latch or
-  rewrite under a real generator. The two constraints the demo exists to check
-  are the ones only ears catch — that the mouth moves the instant audio starts,
-  and that the accurate leg's arrival is not visible as a jump.
+  the TTS and the transport. `authoring/lipsync-review.html` plays *baked* cue
+  tracks, so it shows what a leg's cues look like and not how the two legs
+  interleave, latch or rewrite under a real generator. Studio joins the same
+  real call, so the legs are live there too — but Studio is an option surface,
+  and the two constraints that matter are the ones only ears catch: that the
+  mouth moves the instant audio starts, and that the accurate leg's arrival is
+  not visible as a jump.
 
 - **Serve with `python3 authoring/serve.py 8777`, never `python3 -m
   http.server`.** The stdlib server sends `Last-Modified` and no `Cache-Control`, so browsers apply
@@ -188,7 +189,7 @@ Three things no suite will tell you:
   drawing read?* The workshop: rig pages, clip fixtures, headless tools, no
   build step. A thing that belongs in one of them and lands in another is how
   this repo grew three answers to "show me the avatar"
-  ([removed.md § the demo surfaces](docs/removed.md)).
+  ([removed.md § Removed in 0.3 — the demo surfaces](docs/removed.md)).
 - **Studio is not a rig workbench, and no longer pretends to be.** It imports
   `@voqalize/avatar` and nothing else from this repo — no `src/`, no
   `/internal` — so a thing it cannot do is a thing a consumer cannot do. Its
@@ -197,9 +198,11 @@ Three things no suite will tell you:
   it, and it does not compose wire messages — every control on `#/wire` asks
   the *server* to send one.
 - **The vocabulary is the seven core states, everywhere above the mixer.** The
-  render-state pass-throughs (`TYPING`, `CANT_HEAR`, `WANTS_IN`, …) are gone
-  from `src/behavior.js`; `CANT_HEAR` and friends are still real states *in*
-  `src/avatar.js`, reached with `avatar.setState`, which is whose state it is.
+  render-state pass-throughs (`TYPING_CHAT`, `CANT_HEAR`, `WANTS_IN`, …) are
+  gone from `src/behavior.js`; they are still real states *in* `src/avatar.js`,
+  reached with `avatar.setState`, which is whose state it is. Only the `TYPING`
+  alias was deleted outright ([removed.md](docs/removed.md) § The
+  behavior-state aliases).
 - **Animation quality is the open avatar work.** `myna` is stakeholder-approved
   as a *static* character (2026-08-07); an animation expert found the motion not
   up to the mark. From the graded 2026-08 review: adopted ballistic head-follow

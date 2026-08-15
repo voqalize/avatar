@@ -86,11 +86,11 @@ subscribe to it directly — with its own precedence, for its own chrome.
 participant, so it never had state authority, and relaying it was a
 high-frequency subscription serving decoration ([removed.md](removed.md)).
 
-In Studio, the compact idle tile belongs only to the runtime routes (Wire Lab,
-Fixtures, Connection). Rig and behavior routes mount their own author previews
-and cannot alter the runtime projection. Studio uses a four-second quiet timer
-solely to make the enter/exit behavior reviewable; the client runtime default
-remains twelve seconds.
+`IDLE` is reached by a quiet timer — `idleDelayMs`, default 12 s
+(`client/src/AvatarClient.ts`). It is an `AvatarClient` option, not a
+`createAvatar` one: nothing on the public seam sets it, and nothing reads the
+resulting state back. Shortening it to *watch* the transition means
+constructing `AvatarClient` yourself, which is what the lab below does.
 
 The server owns `THINKING` and `WORKING` because function-event reporting at
 the browser is optional. It claims `WORKING` for active calls and clears it
