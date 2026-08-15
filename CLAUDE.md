@@ -179,14 +179,23 @@ Three things no suite will tell you:
   renderer, deliberately: the one that existed implemented the rig contract
   instead of the wire and is why that page now opens with a warning box
   ([removed.md § The Rive proof](docs/removed.md)).
+- **There are exactly three non-published surfaces, and each answers one
+  question.** [`server/`](server/README.md) — *does it work in a real call?* One
+  pipecat process, canned LLM and TTS behind the real pipecat interfaces, **zero
+  API keys**, and the only place lipsync is ever judged.
+  [`studio/`](studio/README.md) — *is the published interface enough?* The IDE,
+  pointed at that same server. [`authoring/`](authoring/README.md) — *does the
+  drawing read?* The workshop: rig pages, clip fixtures, headless tools, no
+  build step. A thing that belongs in one of them and lands in another is how
+  this repo grew three answers to "show me the avatar"
+  ([removed.md § the demo surfaces](docs/removed.md)).
 - **Studio is not a rig workbench, and no longer pretends to be.** It imports
   `@voqalize/avatar` and nothing else from this repo — no `src/`, no
-  `/internal` — so a thing it cannot do is a thing a consumer cannot do
-  ([studio/README.md](studio/README.md)). Its two routes drive a real
-  `SmallWebRTCTransport` call against `server/`; there is no fake clock, no
-  trace fixture and no demo-only state machine anywhere in it. Rig authoring
-  moved out to `authoring/` ([authoring/README.md](authoring/README.md)), which
-  is the whole workshop: the pages, the clip fixtures and the headless tools.
+  `/internal` — so a thing it cannot do is a thing a consumer cannot do. Its
+  two routes drive a real `SmallWebRTCTransport` call against `server/`; there
+  is no fake clock, no trace fixture and no demo-only state machine anywhere in
+  it, and it does not compose wire messages — every control on `#/wire` asks
+  the *server* to send one.
 - **The vocabulary is the seven core states, everywhere above the mixer.** The
   render-state pass-throughs (`TYPING`, `CANT_HEAR`, `WANTS_IN`, …) are gone
   from `src/behavior.js`; `CANT_HEAR` and friends are still real states *in*
@@ -196,6 +205,13 @@ Three things no suite will tell you:
   up to the mark. From the graded 2026-08 review: adopted ballistic head-follow
   braking and smile-corner decay during speech; deferred the turn-morph
   experiment (PR #1) and viseme salience ordering, with reasons on record.
+- **One open backend question, seen on the wire and not yet chased.** A single
+  3.4 s utterance produced ~171 `cues` chunks, every one of them `from_ms: 0`.
+  `from_ms` means "discard queued cues at or after this, then append these", so
+  a stream of zeroes is the accurate leg rewriting the whole track ~50×/s
+  instead of splicing at the edge it has reached. The mouth looks right, which
+  is why it survived this long; it is still either a real defect in the
+  streaming leg or a `from_ms` that means less than the docs say it does.
 - **New avatars follow the staged process** in
   [authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md) — the
   stakeholder's reference image is the identity spec, then production

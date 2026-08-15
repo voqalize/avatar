@@ -640,3 +640,63 @@ edges to dissolve should read the original.
 **Recover:** `git checkout v0.2.2 -- demo/call.html demo/floor.js demo/vad.js`.
 The clips it played are still checked in at `authoring/perf-clips.json`,
 because `authoring/expression-lab.html` plays them too.
+
+---
+
+## Studio's four workspaces and their traces
+
+**Was:** `#/rig` (pose extremes, the viseme alphabet and hand gestures as
+inspection targets), `#/behavior` (a base state plus a finite action, driven
+through `BehaviorController` with `random: () => 0`), `#/runtime` (replay a
+hand-written `Trace` — an array of `{at, kind, value}` events plus an optional
+wav — from an arbitrary cursor position, with a timeline scrubber), and
+`#/connection` (attach a `PipecatClient` you had built yourself). Plus
+`studio/src/rive-bob.ts`, a fifth avatar behind a rig adapter, and
+`docs/studio-verification.md` describing which route proved what.
+
+**Why they went:** three of the four reached past the published seam to do
+their job. `#/rig` drove `avatar.setOverrides` and the pose channels — the
+mixer's internals, which `createAvatar` deliberately does not expose. `#/behavior`
+instantiated `BehaviorController` directly. `#/runtime` was the load-bearing
+mistake: a trace is a **fixture**, written by us, so the thing it proved was
+that our reader could read our own writing. Every subtle wire question — does a
+claim lose to observed playout, does a cue burst arriving out of order latch or
+jump, what the ~170 cue chunks of one real utterance actually look like — is
+invisible to a fixture, because a fixture only contains what its author already
+knew to put in it. `#/connection` was honest and empty: it asked the developer
+to bring a client from somewhere the repo did not provide.
+
+**Instead:** `server/` provides the somewhere. Studio's two routes drive a real
+`SmallWebRTCTransport` call against a real pipecat pipeline, and every control
+on `#/wire` is an HTTP request asking the *server* to send the message —
+including the misbehaviours, which are now real messages from a real server
+rather than a fixture describing one ([studio/README.md](../studio/README.md)).
+
+**Recover:** these never shipped in a tagged release — Studio was added to
+`main` after `v0.2.2`. `git show 79511aa:studio/src/App.tsx` has all four
+workspaces and the trace type; `git show 79511aa:studio/src/rive-bob.ts` and
+`git show 79511aa:docs/studio-verification.md` for the rest.
+
+---
+
+## The puppeteer conformance gate (`tools/sweep.mjs`)
+
+**Was:** `node tools/sweep.mjs` — launch Chrome, serve the repo, load
+`rig-check.html`, call `window.sweep()`, exit non-zero on failure. It was the
+documented pre-commit gate for anything touching `src/`, and a CI job of its
+own with `PUPPETEER_ARGS: --no-sandbox`.
+
+**Why it went:** the sweep asserts *numbers* — finite, in-range mixer
+parameters and a drawing still attached to the document — and never once looked
+at a pixel. A real browser was ~15 s of wall clock and a headless-Chrome
+dependency in CI, bought for a DOM and a clock that jsdom already has.
+
+**Instead:** the assertions live in `src/conformance.js` with an `advance` seam,
+and run two ways from one copy. `client/test/conformance.test.ts` steps
+`{manual: true}` avatars at a fixed dt under a seeded RNG and finishes in
+~230 ms, inside `pnpm test`. `authoring/rig-check.html`'s **run sweep** button
+runs the same function in real time, on faces you can watch it happen to —
+which is the half a browser was ever needed for.
+
+**Recover:** `git checkout v0.2.2 -- tools/sweep.mjs`. It calls
+`window.sweep()`, which `authoring/rig-check.html` still defines.
