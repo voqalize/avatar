@@ -1,7 +1,7 @@
 /**
  * types.ts — the avatar wire vocabulary, client side.
  *
- * The binding definition is `docs/contract-protocol.md`; this file is its
+ * The binding definition is `docs/contract-wire.md`; this file is its
  * TypeScript restatement and must not drift from it. The Python half of the
  * same vocabulary is `py/src/voqalize_avatar/messages.py` — the three are
  * maintained together, and a command added to one without the others is

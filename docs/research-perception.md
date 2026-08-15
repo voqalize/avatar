@@ -62,7 +62,7 @@ Four jobs, equal rank. A face that nails three and fails one fails the product.
 - **The audit that catches it:** downsample the rest pose to 130 px and name,
   honestly, the first three things you see and in what order. The eye/mouth
   band should place no worse than second. This is now a checklist step
-  (contract-avatar.md).
+  (authoring-a-face.md).
 - **The rule that follows: author at close-up, accept at 130 px.** Anything
   judged only at full resolution is unjudged.
 
@@ -120,7 +120,7 @@ Four jobs, equal rank. A face that nails three and fails one fails the product.
      brackets).
   Everything else in the reference is negotiable and should be simplified
   toward the idiom. Likeness to the reference is a *stage*, not the bar
-  (contract-avatar.md § the staged process).
+  (authoring-a-face.md § the staged process).
 - **Protect-lists stop churn.** Once a mark is confirmed right — by
   stakeholder or by review — write it down as protected and stop touching it.
   Iteration pressure otherwise erodes exactly the marks that were working
@@ -200,7 +200,7 @@ likability. The tests:
 ## Applying this doc
 
 The staged authoring process and the verification checklist that operationalize
-everything above live in [contract-avatar.md](contract-avatar.md) — likeness
+everything above live in [authoring-a-face.md](authoring-a-face.md) — likeness
 stage, production-calibration stage, independent review stage. The division of
 labour: that doc says *what to do and in what order*; this one says *why, and
 what to measure when a judgement call is contested*.

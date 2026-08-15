@@ -1,4 +1,4 @@
-/** Renderer-neutral rig contract; see docs/contract-rig.md. */
+/** The mixer→rig pose model, internal to the SVG renderer; see docs/internal-rig.md. */
 export type RigChannel = string;
 export type RigPose = Readonly<Record<RigChannel, number>>;
 

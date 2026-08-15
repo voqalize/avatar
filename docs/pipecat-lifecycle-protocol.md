@@ -130,57 +130,26 @@ observes the actual `InterruptionFrame` and emits `action:RESPONSE_INTERRUPTED` 
 when bot speech is active. The browser treats bot playout stop as the mouth
 safety boundary, then plays that action.
 
-## Avatar server-message wire
+## What the backend does and does not send
 
-All custom avatar traffic remains an RTVI `server-message` envelope:
+The three commands and the promoted `action.id` list are
+[contract-wire.md](contract-wire.md) — one copy, and it is that one. What
+belongs here is the part that is about *lifecycle* rather than vocabulary:
 
-```json
-{ "type": "avatar", "cmd": "action", "id": "ACK_NOD" }
-```
-
-The vocabulary contains three commands:
-
-| `cmd` | Sent by | Purpose |
-|---|---|---|
-| `claim` | server/application | Durable lower-priority `THINKING`, `WORKING`, or an explicit `null` clear. |
-| `action` | server/application | Self-completing acknowledgement, reaction, face action, or hand gesture. |
-| `cues` | `AvatarProcessor` | Timed viseme chunks, keyed by `ctx`. |
-
-`action.id` is intentionally compact and semantic:
-
-| Family | IDs |
-|---|---|
-| Acknowledgement | `ACK_RECEIVE`, `ACK_NOD` |
-| System transition | `RESPONSE_INTERRUPTED` |
-| Visible gesture | `GESTURE_GREET`, `GESTURE_GOODBYE`, `GESTURE_APPROVE`, `GESTURE_WAIT` |
-
-There is no `user` command. Pipecat already emits VAD-derived user-speaking
+**There is no `user` command.** Pipecat already emits VAD-derived user-speaking
 events to the browser, so duplicating that fact over a second channel created
 races and obscured ownership.
 
-The backend `AvatarProcessor` deliberately does **not** mirror Pipecat
-lifecycle. Its `cues.ctx` is the stock base-TTS `context_id`; it does not make
-up a fallback. Because browser speaking events carry no context, the client
-FIFO-binds the next buffered `ctx` when `BotStartedSpeaking` arrives, anchors
-the cue clock then, and closes it at `BotStoppedSpeaking`. It passes
-`AvatarControlFrame` claims/actions through for explicit application intent.
+**`AvatarProcessor` deliberately does not mirror Pipecat lifecycle.** Its
+`cues.ctx` is the stock base-TTS `context_id`; it does not make up a fallback.
+Because browser speaking events carry no context, the client FIFO-binds the
+next buffered `ctx` when `BotStartedSpeaking` arrives, anchors the cue clock
+then, and closes it at `BotStoppedSpeaking`. It passes `AvatarControlFrame`
+claims/actions through for explicit application intent.
 
-## Composition precedence
-
-The client resolves effective state in this order:
-
-```text
-bot speech
-  > user speech
-  > OFFLINE / DEGRADED
-  > server WORKING claim
-  > server THINKING claim
-  > listening
-  > client idle after quiet timeout
-```
-
-Actions are layered over that state and finish their natural landing; they
-never create a durable state or need an action-end message.
+**Actions are layered over the effective state** resolved by the Authority
+model above, and finish their natural landing; they never create a durable
+state or need an action-end message.
 
 ## Compatibility
 

@@ -1,7 +1,7 @@
 # `avatarsync` — the native viseme engine
 
 The avatar widget is driven by a stream of Rhubarb A–H+X mouth-shape letters
-(the wire format is `docs/contract-protocol.md` § Speech in the avatar repo).
+(the wire format is `docs/internal-mixer.md` § Speech in the avatar repo).
 This directory owns the native code that produces them; `py/src/voqalize_avatar`
 owns the Python that drives it.
 

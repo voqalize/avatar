@@ -2,7 +2,7 @@
  * Avatar: "wren".
  *
  * The second line-art character, and the proof run for the recipe in
- * docs/contract-avatar.md: static art + a POSE spec + feature blocks + META,
+ * docs/authoring-a-face.md: static art + a POSE spec + feature blocks + META,
  * with the stroke engine imported from line-art.js rather than carried along.
  * Character: female, thirties, a big natural-curl mass, round glasses, a
  * crew-neck tee. Same idiom as peep — no strokes anywhere, ink and paper and

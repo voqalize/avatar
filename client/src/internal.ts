@@ -17,7 +17,7 @@
  *     // per frame:
  *     const s = track.sample();   // { letter: "D", intensity: 1 } | null
  *
- * `docs/contract-rig.md` describes the pose-channel model the bundled SVG
+ * `docs/internal-rig.md` describes the pose-channel model the bundled SVG
  * renderer uses internally. It is *not* the seam to implement — see
  * docs/design-avatar-interface.md.
  */

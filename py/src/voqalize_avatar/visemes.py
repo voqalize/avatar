@@ -153,7 +153,7 @@ KEEPALIVE_MAX_BYTES = 2
 SAMPLE_RATE = 24000
 BYTES_PER_SAMPLE = 2
 
-# The widget drops cues shorter than this (avatar docs/contract-protocol.md
+# The widget drops cues shorter than this (avatar docs/internal-mixer.md
 # § Speech), except that a closure replaces the cue it collapses into: A and G
 # carry the most lip-reading information of any shape.
 MIN_CUE_MS = 30

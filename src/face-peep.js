@@ -359,7 +359,7 @@ const PIVOT = { x: CX, y: 700 };
 
 // Pose mechanics for face-core's poseTransforms, in this rig's own art units
 // (native 760x950 — about 2.6x smaller than blue-shirt's, hence units: 1 and
-// its own literals; see the art-unit rules in docs/contract-avatar.md).
+// its own literals; see the art-unit rules in docs/authoring-a-face.md).
 //
 // The shrug tilt is 1.6 degrees, not blue-shirt's 1.9. This collar is a
 // shallow polo opening over a white neck on a white shirt, so there is no

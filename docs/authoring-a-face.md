@@ -1,7 +1,7 @@
 # Authoring an SVG avatar
 
 How to build a face for this project. The binding seam is
-[contract-rig.md](contract-rig.md) — `apply(frame)`, `destroy()`, and the 30
+[internal-rig.md](internal-rig.md) — `apply(frame)`, `destroy()`, and the 30
 pose channels every rig renders. This document is the layer beneath it: what an
 SVG face module supplies, what `face-core.js` gives it for free, and the staged
 process for adding a new character. A non-SVG renderer needs only the rig
@@ -55,7 +55,7 @@ it needs anything outside `src/face*.js`, it's a bug.
   never the camera. Tooling relies on this to crop safely after `apply()`.
 - **Honour the channel's semantic, not its plumbing** — the standing
   `mouthOpen` example is in
-  [contract-rig.md § The pose channels](contract-rig.md), with the full
+  [internal-rig.md § The pose channels](internal-rig.md), with the full
   channel table, rest values, ranges and sign conventions. A face consumes all
   30 and eases none of them.
 
@@ -82,10 +82,12 @@ memoizer and the same return shape. That convergence now lives in
 
 What legitimately varies per avatar, and stays in the face module:
 
-- **The `POSE`/`EYES` spec values**: `yawPx`/`pitchPx` (parallax travel),
-  `pivot`, lean travel and pivot, shrug lift and tilt degrees, `turnPx` (lateral
-  trunk travel at `torsoTurn = 1`), the breath model, pupil travel, `lidFollow`
-  strength (0.22 on both current rigs), plus a `units` factor (see Art units).
+- **The `POSE` spec values**: `yawPx`/`pitchPx` (parallax travel), `pivot`, lean
+  travel and pivot, shrug lift and tilt degrees, `turnPx` (lateral trunk travel
+  at `torsoTurn = 1`), the breath model, plus a `units` factor (see Art units).
+  Pupil travel and `lidFollow` strength (0.22 on both current rigs) are literals
+  in the draw function rather than spec fields — eye geometry is per-drawing
+  enough that naming it bought nothing.
 - **The breath model's numbers**. A rig declares `breathSwell` + `swellPivot`
   and breathes as a *scale about the hem*:
   the shoulder line rises and the chest widens while the bottom of the shirt
@@ -208,7 +210,7 @@ its theme keys stay overridable, but do not add a `dark` selector.
 ## The hand — a layer no face draws
 
 `src/hand.js` puts a hand into the bottom of the frame for `GESTURE_*` actions
-(protocol side: [contract-protocol.md](contract-protocol.md) § Hand gestures).
+(protocol side: [internal-mixer.md](internal-mixer.md) § Hand gestures).
 It is deliberately **not** part of this contract's parameter space: it writes a
 transform on its own `<g>` appended over the face's svg, it has no channel in
 `params.js`, and a face that never plays a gesture renders byte-for-byte what

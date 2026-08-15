@@ -15,20 +15,25 @@ open http://127.0.0.1:4173/#/rig              # AVATAR_STUDIO_PORT overrides
 ## The review model
 
 Four workspaces, arranged around who owns the decision under review rather than
-around a grab-bag of runtime buttons. Which contract each one validates:
-[studio-verification.md](../docs/studio-verification.md).
+around a grab-bag of runtime buttons. **Studio validates one layer at a time: a
+control at a higher layer must not be mistaken for a requirement of a lower
+one.**
 
-1. **Rig** — raw controls only. Pose extremes, individual visemes, hand gesture
-   clips. No lifecycle, no wire semantics.
-2. **Behavior** — durable states and finite actions, assuming the selected rig
-   has passed Rig review.
-3. **Runtime** — replay a deterministic factual pipecat/server trace from time
-   zero. The playhead *reconstructs* the avatar rather than mutating a
-   long-lived test surface, which is why there are no compensating reset
-   buttons. Quiet idle is therefore observable at any playhead past its
-   four-second interval, not only after waiting in real time.
-4. **Connect** — attach a real, host-created pipecat client to the same
-   production `AvatarClient` binding.
+| route | who it is for | what it validates |
+|---|---|---|
+| `#/rig` | avatar author | [internal-rig.md](../docs/internal-rig.md): rest and channel extremes, composites, every viseme at full-frame and close scale, curated transitions, hand gestures, numeric conformance. Raw controls only — no lifecycle, no wire semantics |
+| `#/behavior` | behavior-library developer | [contract-behavior.md](../docs/contract-behavior.md): durable states and finite actions, and how they read across rigs. Assumes the selected rig has passed Rig review |
+| `#/runtime` | client/backend integrator | [contract-wire.md](../docs/contract-wire.md) + [pipecat-lifecycle-protocol.md](../docs/pipecat-lifecycle-protocol.md): a deterministic trace replayed from time zero, plus the checked-in audio fixtures |
+| `#/connection` | product developer | a real, host-created `PipecatClient` end to end |
+
+Runtime's playhead *reconstructs* the avatar rather than mutating a long-lived
+test surface, which is why there are no compensating reset buttons. Quiet idle
+is therefore observable at any playhead past its four-second interval, not only
+after waiting in real time.
+
+Studio always drives the production behavior and wire adapters; it never
+maintains a demo-only state machine. Legacy rig pages under `demo/rig/` remain
+reference tools until the corresponding Studio route reaches parity.
 
 Every workspace uses the same composition: **library** (pick the thing under
 review), **review canvas** (one deliberately sized tile), **inspector**

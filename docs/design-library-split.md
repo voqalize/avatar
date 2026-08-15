@@ -2,8 +2,8 @@
 
 *Written 2026-08-07, when the avatar stopped being one product's animation and
 became a component with more than one consumer. The binding vocabulary is
-unchanged: [contract-protocol.md](contract-protocol.md) and
-[contract-avatar.md](contract-avatar.md) still govern.*
+unchanged: [contract-wire.md](contract-wire.md) and
+[contract-behavior.md](contract-behavior.md) still govern.*
 
 The avatar began as the talking head for a single voice-agent product, and the
 backend half of it — the pipecat processor, the state machine, the wire, the

@@ -104,7 +104,7 @@ async def cmd_cues(args: argparse.Namespace) -> int:
 
 def _wire(cue: Cue) -> dict[str, object]:
     """The wire cue, phone included when there is one. Mirrors
-    `visemes.cues_to_wire` — see docs/contract-protocol.md § Speech."""
+    `visemes.cues_to_wire` — see docs/internal-mixer.md § Speech."""
     return {"t": cue.t, "v": cue.v} if cue.p is None else {"t": cue.t, "v": cue.v, "p": cue.p}
 
 

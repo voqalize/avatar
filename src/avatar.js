@@ -603,7 +603,7 @@ export function createAvatar(opts = {}) {
    * Deliberately **not on the wire yet**: there is no `attend` command in
    * `client/src/types.ts`, so today this is reachable only from JS (the demo and
    * the rig pages). Adding the command is a protocol change and waits for a
-   * server that has something real to key it off — see docs/contract-protocol.md.
+   * server that has something real to key it off — see docs/internal-mixer.md.
    *
    * @param {number} [ms=1200] how long to hold. Binetti (N=498) puts preferred
    *        mutual gaze at 3295 ± 706 ms, so this is a fraction of the ceiling.
@@ -717,7 +717,7 @@ export function createAvatar(opts = {}) {
   /**
    * Play a timed action track — the composition surface a server assembles
    * turns from. Verbs: state / emotion / gaze / action (see
-   * perform.js for hygiene, docs/contract-protocol.md for the schema).
+   * perform.js for hygiene, docs/internal-mixer.md for the schema).
    *
    * Clock resolution mirrors speak(): explicit `clock` fn, else the audio
    * element's own time, else ms elapsed since this call. perform() never

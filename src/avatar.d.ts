@@ -3,7 +3,7 @@
  *
  * The widget is dependency-free ES modules with no build step, so there is no
  * compiler to derive these from; this file is written by hand against
- * `docs/contract-protocol.md` (the binding server ↔ widget contract) and a
+ * `docs/internal-mixer.md` (the mixer's driving API) and a
  * reading of `avatar.js`. It lives here rather than in a consumer because it
  * is only correct next to the code it describes — the previous copy lived in
  * a vendored tree two repos away and went stale the first time an enum grew.
@@ -18,7 +18,7 @@
  * stricter than the code it describes, so widen the runtime first.
  */
 
-/** `STATE_NAMES` — see docs/contract-protocol.md § States. */
+/** `STATE_NAMES` — see docs/internal-mixer.md § States. */
 export type AvatarStateName =
   | "IDLE"
   | "LISTENING"
@@ -37,7 +37,7 @@ export type AvatarStateName =
   | "DEGRADED"
   | "OFFLINE";
 
-/** `EMOTION_NAMES` — see docs/contract-protocol.md § Emotion. */
+/** `EMOTION_NAMES` — see docs/internal-mixer.md § Emotion. */
 export type AvatarEmotionName =
   | "neutral"
   | "warm"
@@ -46,7 +46,7 @@ export type AvatarEmotionName =
   | "encouraging"
   | "thoughtful";
 
-/** `GAZE_NAMES` — see docs/contract-protocol.md § Gaze. `"CUSTOM"` is the escape hatch (any name + a `custom` point works). */
+/** `GAZE_NAMES` — see docs/internal-mixer.md § Gaze. `"CUSTOM"` is the escape hatch (any name + a `custom` point works). */
 export type AvatarGazeName =
   | "USER"
   | "USER_EAR"
@@ -73,7 +73,7 @@ export type AvatarActionId =
   | "GESTURE_APPROVE"
   | "GESTURE_WAIT";
 
-/** Rhubarb Lip Sync letter — see docs/contract-protocol.md § Speech. */
+/** Rhubarb Lip Sync letter — see docs/internal-mixer.md § Speech. */
 export type VisemeLetter = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "X";
 
 /** One viseme cue: `t` is a ms offset into the utterance, `i` is optional 0..1 loudness. */
@@ -84,7 +84,7 @@ export interface Cue {
   i?: number;
 }
 
-/** A pose channel from `src/params.js` — see docs/contract-rig.md § The pose channels. */
+/** A pose channel from `src/params.js` — see docs/internal-rig.md § The pose channels. */
 export type PoseChannel =
   | "mouthOpen" | "mouthWidth" | "mouthRound" | "mouthPress" | "mouthTuck"
   | "mouthCornerL" | "mouthCornerR" | "teethUpper" | "tongue" | "jaw"
@@ -120,7 +120,7 @@ export interface GazeCustom {
 }
 
 /**
- * A `perform()` timeline action — see docs/contract-protocol.md § Composing
+ * A `perform()` timeline action — see docs/internal-mixer.md § Composing
  * behavior. `t` is a ms offset into the performance. Discriminated on `do`
  * because the verbs do not share their payload: only `action` is addressed by
  * `id`, and only `state` reads `keepGaze`.
@@ -152,7 +152,7 @@ export interface PerformOptions {
 }
 
 export interface PerformHandle {
-  /** Cancels the *future* of this performance only — see docs/contract-protocol.md. */
+  /** Cancels the *future* of this performance only — see docs/internal-mixer.md. */
   stop: () => void;
 }
 
@@ -215,7 +215,7 @@ export interface AvatarApi {
 }
 
 /** A face module's factory — `createFace(mount, theme)`. See
- * docs/contract-avatar.md § Adding a new avatar. */
+ * docs/authoring-a-face.md § Adding a new avatar. */
 export type FaceFactory = (
   mount: Element,
   theme?: FaceTheme,
@@ -244,7 +244,7 @@ export interface CreateAvatarOptions {
   /** The face to wear. Required unless `rig` replaces the renderer outright. */
   face?: Face;
   /** Renderer-neutral rig factory. It replaces the SVG face implementation;
-   * no SVG or metadata is required. See docs/contract-rig.md. */
+   * no SVG or metadata is required. See docs/internal-rig.md. */
   rig?: import("./rig.js").AvatarRigFactory;
   /** Passed to `rig` verbatim. Opaque here on purpose — it belongs to whoever
    * wrote the rig, and this file has no way to know its shape. */

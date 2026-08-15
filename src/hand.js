@@ -47,8 +47,8 @@
  *    at 14 degrees, which is what silently blew the budget the first time.
  *    `checkHandFraming()` asserts both rules against the real timelines.
  *
- * See docs/contract-protocol.md § Hand gestures for the wire surface and
- * docs/contract-avatar.md § The hand for what a face module owes this module
+ * See docs/internal-mixer.md § Hand gestures for the wire surface and
+ * docs/authoring-a-face.md § The hand for what a face module owes this module
  * (the answer is: a viewBox and two theme keys).
  */
 

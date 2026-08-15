@@ -147,7 +147,7 @@ searching says so in one `AvatarControlFrame`
 It never decides what the agent says or when. Pipecat owns the facts, the server
 owns intent, the rig only renders — a heuristic here that guessed at call
 *content* would be a bug, not a feature. Binding for both halves:
-[contract-protocol.md](https://github.com/voqalize/avatar/blob/main/docs/contract-protocol.md)
+[contract-wire.md](https://github.com/voqalize/avatar/blob/main/docs/contract-wire.md)
 and
 [pipecat-lifecycle-protocol.md](https://github.com/voqalize/avatar/blob/main/docs/pipecat-lifecycle-protocol.md).
 

@@ -62,8 +62,12 @@
     "src",
     "client/dist",
     "client/src",
-    "docs/contract-protocol.md",
-    "docs/contract-avatar.md",
+    "docs/contract-wire.md",
+    "docs/contract-behavior.md",
+    "docs/design-avatar-interface.md",
+    "docs/internal-mixer.md",
+    "docs/internal-rig.md",
+    "docs/authoring-a-face.md",
     "README.md"
   ],
   "scripts": {

@@ -68,7 +68,7 @@ from loguru import logger
 from ._native import NativeEngine, NativeError, NativeStream, library_name
 
 # The letters the widget understands: Rhubarb A-H plus X for silence.
-# (avatar docs/contract-protocol.md § Speech.)
+# (avatar docs/internal-mixer.md § Speech.)
 VISEME_LETTERS = frozenset("ABCDEFGHX")
 SILENT = "X"
 

@@ -23,16 +23,29 @@ things out better"* (2026-08-07), which is why there is a split at all
 Each row is a boundary that holds. If a thing is implemented behind one of
 these, link to it — do not re-explain it here.
 
-| layer | owns | code | contract |
+**Only the first two rows are contracts** — a format someone outside this repo
+implements or depends on. Everything below the rule is our own internals and is
+named `internal-*` so a future renderer does not plug into the wrong one; that
+mistake has already been made once ([removed.md § The Rive proof](docs/removed.md)).
+
+| layer | owns | code | reference |
 |---|---|---|---|
-| wire | `claim` / `action` / `cues`, nothing else | `client/src/AvatarClient.ts` | [contract-wire.md](docs/contract-wire.md) |
-| lifecycle | effective-state precedence, cue-clock anchor, FIFO ctx bind | `client/src/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
-| avatar | `createAvatar({mount, client}) -> {destroy()}` — the only public seam | `client/src/createAvatar.ts` | [design-avatar-interface.md](docs/design-avatar-interface.md) |
+| **wire** | `claim` / `action` / `cues`, nothing else | `client/src/AvatarClient.ts` | **[contract-wire.md](docs/contract-wire.md)** |
+| **avatar** | `createAvatar({mount, client}) -> {destroy()}` — the only public seam | `client/src/createAvatar.ts` | **[design-avatar-interface.md](docs/design-avatar-interface.md)** |
+| lifecycle | effective-state precedence, cue-clock anchor, FIFO ctx bind — **the one copy of the precedence ladder** | `client/src/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
 | behavior | states, actions, wire→library mapping | `src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
-| rig | `apply({pose, hand})` / `destroy()`, the 30 pose channels — **internal to the SVG renderer, not a seam to implement** | `src/rig.js` | [contract-rig.md](docs/contract-rig.md) |
-| mixer | layer order, per-channel smoothing, gaze, idle, clips | `src/avatar.js` | [contract-protocol.md](docs/contract-protocol.md) |
-| SVG faces | the drawings; `createFace` / `META`, exported as a `{create, meta}` value per module — never resolved by name | `src/face-*.js`, `line-art.js`, `src/faces.js` (tooling only) | [contract-avatar.md](docs/contract-avatar.md) |
-| backend | state inference from stock frames, the viseme legs | `py/src/voqalize_avatar/` | [contract-protocol.md](docs/contract-protocol.md) |
+| backend | state inference from stock frames, the viseme legs | `py/src/voqalize_avatar/` | [py/README.md](py/README.md) |
+| mixer | layer order, per-channel smoothing, gaze, idle, clips — **the driving API, `/internal`, no semver promise** | `src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
+| rig | `apply({pose, hand})` / `destroy()`, the 30 pose channels — **internal to the SVG renderer, not a seam to implement** | `src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
+| SVG faces | the drawings; `createFace` / `META`, exported as a `{create, meta}` value per module — never resolved by name | `src/face-*.js`, `line-art.js`, `src/faces.js` (tooling only) | [authoring-a-face.md](docs/authoring-a-face.md) |
+
+**The state list has exactly one copy: `STATES` in `src/avatar.js`,** with each
+entry's perceptual reasoning in the comment above it. A prose table of states in
+a doc is the shape that rots — the last one advertised a `TYPING` state for
+weeks after it was renamed `WORKING`. `npm test` now fails if a doc puts any
+SCREAMING_CASE name in backticks that the code does not define
+(`client/test/docs.test.ts`); `docs/removed.md` and the research pages are
+exempt, because naming things the code does not have is their job.
 
 Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
 Design narrative: [README.md § Design](README.md). Motion constants cite
@@ -131,8 +144,7 @@ cd py && uv run --group demo python ../demo/pipecat/server.py   # a real call
 ```
 
 Headless render/screenshot/diff/motion tooling: [tools/README.md](tools/README.md).
-Which Studio route validates which contract:
-[studio-verification.md](docs/studio-verification.md), [studio/README.md](studio/README.md).
+Which Studio route validates which layer: [studio/README.md](studio/README.md).
 
 Three things no suite will tell you:
 
@@ -179,7 +191,7 @@ Three things no suite will tell you:
   braking and smile-corner decay during speech; deferred the turn-morph
   experiment (PR #1) and viseme salience ordering, with reasons on record.
 - **New avatars follow the staged process** in
-  [contract-avatar.md § Adding a new avatar](docs/contract-avatar.md) — the
+  [authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md) — the
   stakeholder's reference image is the identity spec, then production
   calibration at 130 px retires it as the yardstick. The evidence is one day
   apart: `koel`, authored from a text brief, passed every rig check and was

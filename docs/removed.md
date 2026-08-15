@@ -98,7 +98,7 @@ saw a `speech start` for should ride that turn's clock or a fresh one, and both
 answers are wrong in some deployment.
 
 **Note:** `avatar.perform(actions, {audio, clock})` is **not** removed — it is
-still the composition surface, still documented in contract-protocol.md, and
+still the composition surface, still documented in internal-mixer.md, and
 `demo/floor.js` still drives every scripted turn through it. What went away is
 a *server* being able to send one over the wire.
 
@@ -389,14 +389,14 @@ as `rive-bob`, with `docs/rive-proof.md` reporting what it found and
 `@rive-app/canvas` as a Studio dependency.
 
 **Why it went (0.3): it was plugged into the wrong seam.** It implemented
-[contract-rig.md](contract-rig.md), the SVG mixer's internal parameter model,
+[internal-rig.md](internal-rig.md), the SVG mixer's internal parameter model,
 and so spent its code undoing the wire — thresholding `mouthOpen`/`mouthPress`/
 `mouthTuck` back into a Rhubarb letter the `cues` command had already stated,
 and reverse-engineering `CANT_HEAR` out of brow floats. A renderer that is not
 ours takes `claim` / `action` / `cues` and never sees a pose channel. That
 finding is now the standing argument in
 [design-avatar-interface.md § Why there is no renderer interface](design-avatar-interface.md)
-and the warning box at the top of contract-rig.md — the proof is gone, its
+and the warning box at the top of internal-rig.md — the proof is gone, its
 conclusion is load-bearing.
 
 **Instead:** a non-SVG avatar is its own `createAvatar`, published as its own
@@ -480,7 +480,7 @@ frame with. `Face` is `{ create, meta }`, both required, so the fallback was
 unreachable from any typed caller and only reachable from a mistake.
 
 **Instead:** export the record: `export const myFace = { create: createFace, meta: META }`.
-[contract-avatar.md](contract-avatar.md) says what META must contain.
+[authoring-a-face.md](authoring-a-face.md) says what META must contain.
 
 **Recover:** `git show 02b0dad:src/avatar.js`, search `mouthCrop`.
 

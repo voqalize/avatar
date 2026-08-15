@@ -106,7 +106,7 @@ def frames(cues: list[Cue], span_ms: int, step_ms: int = 10) -> list[str]:
 
 
 def assert_wire_valid(cues: list[Cue]) -> None:
-    """Every invariant docs/contract-protocol.md § Speech asks of a cue track.
+    """Every invariant docs/internal-mixer.md § Speech asks of a cue track.
 
     Everything except closing the mouth — see `assert_wire_clean`.
     """

@@ -1,4 +1,4 @@
-# Rig contract
+# The rig's pose model — internal
 
 > **This is not the seam to implement.** The public interface is
 > `createAvatar({ mount, client })` —
@@ -6,13 +6,13 @@
 > bundled SVG implementation's internal parameter model: the shape the mixer
 > hands its renderer, and the reference an author of *our* faces works against.
 >
-> It reads like the renderer contract, and that heading is what sent a
+> This page used to be called `contract-rig.md`, and that name is what sent a
 > non-SVG experiment (a Rive rig, removed 2026-08-12 — `docs/removed.md`) to the
 > wrong layer: it reconstructed a Rhubarb letter and a `CANT_HEAR` intent out of
 > pose floats that the wire had already stated plainly. A renderer that is not
 > ours should take `claim` / `action` / `cues` and never see this page.
 
-The contract between the mixer and a rig it drives. It is deliberately
+The interface between the mixer and a rig it drives. It is deliberately
 independent of SVG, WebGL, video, and any future rendering technology. The rig
 renders; it does not decide what the avatar is doing.
 

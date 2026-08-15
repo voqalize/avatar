@@ -3,7 +3,7 @@
 The widget *throws* on an unknown state or interjection id, and — worse —
 silently falls back to `neutral`/`USER` on an unknown emotion or gaze, so a typo
 there is invisible on screen and costs a debugging session. These lists are
-transcribed from the avatar repo's binding contract (`docs/contract-protocol.md`,
+transcribed from the avatar repo's wire contract (`docs/contract-wire.md`,
 `AvatarAction`). It is duplication on purpose: the two repos deploy separately,
 so the only place the vocabularies can be compared is a test that states both.
 

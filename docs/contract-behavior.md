@@ -47,16 +47,11 @@ broader than the current server profile.
 
 ## Effective-state precedence
 
-```text
-SPEAKING       observed Pipecat bot playout
-LISTENING      observed Pipecat user speech
-OFFLINE        fatal/disconnected presentation when no speech pre-empts it
-DEGRADED       recoverable failure presentation when no speech pre-empts it
-WORKING        active server claim
-THINKING       active server claim
-IDLE           client quiet-time fallback
-```
+Exactly one state is effective at any instant, and it is not the last message
+received. The ladder — which authority wins over which — is
+[pipecat-lifecycle-protocol.md § Authority model](pipecat-lifecycle-protocol.md),
+and that is the only copy.
 
-Bot playout is the hard invariant: if audio is playing, `SPEAKING` wins and the
-mouth must articulate. Server claims are lower-priority candidates, not
-effective-state commands.
+The invariant it exists to protect: **if bot audio is playing, `SPEAKING` wins
+and the mouth must articulate.** Server claims are lower-priority candidates,
+never effective-state commands.

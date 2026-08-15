@@ -31,7 +31,7 @@ implementation; nothing reads them but them.
 
 ## Why there is no renderer interface
 
-The [rig contract](contract-rig.md) is 30 float pose channels. It reads like the
+The [rig pose model](internal-rig.md) is 30 float pose channels. It reads like the
 renderer seam — it is the seam a Rive experiment plugged into — and that was the
 mistake: **it implemented the lower-level protocol that was SVG focussed instead
 of the wire protocol.** The evidence, all from that one adapter (removed
@@ -66,7 +66,7 @@ Three, and only the first is public.
 |---|---|---|
 | **Avatar** | `createAvatar`, the pipecat binding, effective-state precedence, cue-clock anchor | `client/src/{createAvatar,AvatarClient}.ts` · [contract-wire.md](contract-wire.md), [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md) |
 | **Behavior** | states → sustained pose/gaze/idle, actions → finite clips | `src/behavior.js` · [contract-behavior.md](contract-behavior.md) |
-| **Renderer** | the SVG mixer, the pose channels, the faces | `src/avatar.js`, `src/rig.js`, `src/face-*.js` · [contract-rig.md](contract-rig.md) |
+| **Renderer** | the SVG mixer, the pose channels, the faces | `src/avatar.js`, `src/rig.js`, `src/face-*.js` · [internal-rig.md](internal-rig.md) |
 
 An avatar author reads the first two. The third is our implementation's internal
 reference, published under `/internal` with no semver promise.

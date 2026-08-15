@@ -49,16 +49,20 @@ processor infers what the agent is doing from frames already flowing past it,
 
 ## The map
 
-| layer | owns | code | contract |
+Two of these are contracts — a format someone outside this repo implements or
+depends on. The rest are our own internals, and are named so.
+
+| layer | owns | code | reference |
 |---|---|---|---|
-| backend | state inference from stock pipecat frames, the viseme legs | [`py/`](py/README.md) | [contract-protocol.md](docs/contract-protocol.md) |
-| aligner | A–H+X letters from text *and* from audio | [`native/avatarsync/`](native/avatarsync/README.md) | its own README |
-| avatar | `createAvatar({mount, client})`, the only public seam | `client/src/createAvatar.ts` | [design-avatar-interface.md](docs/design-avatar-interface.md) |
-| wire | `claim` / `action` / `cues`, nothing else | `client/src/AvatarClient.ts` | [contract-wire.md](docs/contract-wire.md) |
+| **wire** | `claim` / `action` / `cues`, nothing else | `client/src/AvatarClient.ts` | **[contract-wire.md](docs/contract-wire.md)** |
+| **avatar** | `createAvatar({mount, client})`, the only public seam | `client/src/createAvatar.ts` | **[design-avatar-interface.md](docs/design-avatar-interface.md)** |
 | lifecycle | effective-state precedence, cue-clock anchor | `client/src/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
 | behavior | states, actions | `src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
-| rig | `apply({pose, hand})` / `destroy()`, our SVG renderer's internals | `src/rig.js` | [contract-rig.md](docs/contract-rig.md) |
-| mixer | layer order, per-channel smoothing, gaze, idle, clips | `src/avatar.js` | [contract-protocol.md](docs/contract-protocol.md) |
+| backend | state inference from stock pipecat frames, the viseme legs | [`py/`](py/README.md) | [`py/README.md`](py/README.md) |
+| aligner | A–H+X letters from text *and* from audio | [`native/avatarsync/`](native/avatarsync/README.md) | its own README |
+| mixer | layer order, per-channel smoothing, gaze, idle, clips | `src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
+| rig | `apply({pose, hand})` / `destroy()`, our SVG renderer's internals | `src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
+| SVG faces | the drawings | `src/face-*.js` | [authoring-a-face.md](docs/authoring-a-face.md) |
 
 Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
 Why a library rather than a product, and what each published artifact owns:
@@ -99,8 +103,16 @@ Emission is **overwrite, never merge**: a `cues` message says "discard everythin
 queued at or after `from_ms`, then append these". The server decides; the client
 has no say and no way to refuse.
 
-Not using our backend? [contract-protocol.md § Producing cues server-side](docs/contract-protocol.md)
-covers native TTS viseme events and forced alignment.
+**Not using our backend?** Any server can produce cues, three ways, best first.
+If your TTS emits native viseme events (Azure and friends), map the integer ids
+through `AZURE_VISEME_TO_LETTER` and ship `{t, v}` as they stream — nearly free,
+and the letters are already ours. Otherwise force-align: phonemize the text,
+align it against the audio with MFA, gentle or `rhubarb-lip-sync` itself, and
+map ARPAbet through `ARPABET_TO_VISEME`. With no server work at all,
+`textToCues(text)` is a crude grapheme guesser, fit for previews only. All three
+are exported from `@voqalize/avatar/internal`; the cue format and the rules a
+track must satisfy are
+[internal-mixer.md § Speech](docs/internal-mixer.md).
 
 ## The wire protocol
 
@@ -148,7 +160,7 @@ cues are all the avatar is ever told. `VisemeTrack` in
 for the current frame; every renderer needs that and none should write it twice.
 
 **There is deliberately no renderer interface.** The 30 pose channels in
-[contract-rig.md](docs/contract-rig.md) are how *our* SVG mixer talks to *our*
+[internal-rig.md](docs/internal-rig.md) are how *our* SVG mixer talks to *our*
 faces. That page reads like the renderer seam, and a Rive experiment implemented
 it — reconstructing a viseme letter and a `CANT_HEAR` intent out of pose floats
 the wire had already stated plainly ([removed.md](docs/removed.md)).
@@ -165,15 +177,16 @@ a point in a ~30-dimensional parameter space ([`src/params.js`](src/params.js));
 visemes, emotions, gaze poses and gesture keyframes are all named vectors in it.
 Blending a smile into a mid-sentence "oh" is arithmetic rather than SVG path
 surgery, and a stream of parameter updates is the *native* input format instead
-of something to adapt to. Channel by channel, with rest values and ranges:
-[contract-avatar.md § The parameter vector](docs/contract-avatar.md).
+of something to adapt to. Channel by channel, with rest values, ranges and
+smoothing constants:
+[internal-rig.md § The pose channels](docs/internal-rig.md).
 
 **Layers mix in a fixed order** — `base pose (state + emotion) → gaze → visemes
 → clip deltas → idle`. Later layers overwrite earlier ones on the channels they
 touch; clips and idle are *additive*, so a nod during speech moves the head
 while the mouth stays on the server's viseme track with no special-casing. One
 hard rule: **while the viseme track is playing it owns the mouth outright**
-([contract-protocol.md § The mouth priority rule](docs/contract-protocol.md)).
+([internal-mixer.md § The mouth priority rule](docs/internal-mixer.md)).
 An interjection firing mid-sentence contributes head and brows; its mouth track
 is silently dropped, or the avatar appears to say two things at once.
 
@@ -213,7 +226,7 @@ is no registry ([design-avatar-interface.md](docs/design-avatar-interface.md)).
 
 Authoring a face is a staged process that starts from a reference image rather
 than a text brief:
-[contract-avatar.md § Adding a new avatar](docs/contract-avatar.md).
+[authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md).
 
 ## Avatar Studio
 
@@ -229,10 +242,9 @@ open http://127.0.0.1:4173/#/rig
 
 Four workspaces — `#/rig` (raw parameters, visemes, gestures), `#/behavior`
 (states and actions), `#/runtime` (replay a deterministic pipecat trace from
-time zero), `#/connection` (attach a real `PipecatClient`). Which one validates
-which contract: [studio-verification.md](docs/studio-verification.md). Why
-Studio will not turn a URL into a pipecat client for you:
-[studio/README.md](studio/README.md).
+time zero), `#/connection` (attach a real `PipecatClient`). Which route
+validates which layer, and why Studio will not turn a URL into a pipecat client
+for you: [studio/README.md](studio/README.md).
 
 Studio always drives the production behavior and wire adapters, never a
 demo-only state machine. It is absorbing the static rig pages under `demo/rig/`,
