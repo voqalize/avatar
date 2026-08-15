@@ -241,6 +241,61 @@ describe("the docs", () => {
     expect(stale, "referenced but not in the repo").toEqual([]);
   });
 
+  /**
+   * The third kind of claim, and the last one that is mechanically checkable:
+   * a section. These docs cross-reference each other by heading constantly —
+   * `[internal-mixer.md § Smoothing](internal-mixer.md)` — and a heading is
+   * renamed far more often than a file is. Nothing caught it, because the path
+   * check above deliberately drops the fragment; a `[Direction](#direction)`
+   * self-link survived in `authoring-a-face.md` long after that heading became
+   * "Adding a new avatar", and the § form is invisible to a link checker
+   * entirely, being prose.
+   *
+   * Both spellings this repo uses are checked: `[file § Heading](file.md)` and
+   * `[file](file.md) § Heading`, plus real `](#anchor)` fragments.
+   *
+   * Prefix matching in both directions, because a reference legitimately
+   * abbreviates ("§ The PyPI side is four artifacts" for a heading that runs
+   * on) and a sentence legitimately continues past the heading it names. What
+   * that still catches is the thing worth catching: a heading that no longer
+   * starts the way the citation says it does.
+   */
+  it("cites no section the target does not have", () => {
+    const stale: string[] = [];
+    // GitHub's slugger: lowercase, drop everything but letters, digits, spaces
+    // and hyphens, then one hyphen per space — so an em dash leaves two.
+    const slug = (h: string) => h.toLowerCase().replace(/[^a-z0-9 -]/g, "").trim().replace(/ /g, "-");
+    const norm = (s: string) => s.toLowerCase().replace(/[`*_\\]/g, "").replace(/\s+/g, " ").trim();
+    const headings = (file: string): string[] | null => {
+      if (!existsSync(file)) return null; // the path check owns missing files
+      return [...readFileSync(file, "utf8").matchAll(/^#{1,6}\s+(.+?)\s*$/gm)].map((m) => m[1]);
+    };
+
+    for (const file of docFiles()) {
+      const text = readFileSync(file, "utf8");
+      const at = (needle: string) => text.slice(0, text.indexOf(needle)).split("\n").length;
+
+      const own = (headings(file) ?? []).map(slug);
+      for (const [, anchor] of text.matchAll(/\]\(#([^)\s]+)\)/g)) {
+        if (own.includes(anchor)) continue;
+        stale.push(`${relative(ROOT, file)}:${at("](#" + anchor + ")")}  #${anchor}`);
+      }
+
+      const cite = (target: string, section: string) => {
+        const hs = headings(join(dirname(file), target));
+        if (!hs) return;
+        const want = norm(section);
+        if (!want) return;
+        if (hs.some((h) => norm(h).startsWith(want) || want.startsWith(norm(h)))) return;
+        stale.push(`${relative(ROOT, file)}:${at(section)}  ${target} § ${section}`);
+      };
+      for (const m of text.matchAll(/\[[^\]]*?§\s*([^\]]+)\]\((?!https?:)([^)#\s]+\.md)\)/g)) cite(m[2], m[1]);
+      for (const m of text.matchAll(/\]\((?!https?:)([^)#\s]+\.md)\)\s*§\s*([^)\n,.;]+)/g)) cite(m[1], m[2]);
+    }
+
+    expect(stale, "cited but not a heading there").toEqual([]);
+  });
+
   it("has paths to check against", () => {
     // Same guard as above: a referencedPaths() that matches nothing would make
     // the check pass by looking at no paths at all.
