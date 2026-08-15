@@ -8,10 +8,14 @@ tmp/
 # only the TypeScript client does.
 client/dist/
 studio/dist/
-# Third-party JS the pipecat demo pre-bundles so a browser can load it
-# (`npm run demo:vendor`). Nothing of ours is in it — see vendor.entry.js.
-demo/pipecat/vendor/
+# Third-party JS the local server pre-bundles so a browser can load it
+# (`pnpm run server:vendor`). Nothing of ours is in it — see vendor.entry.js.
+server/vendor/
 __pycache__/
+# The piper voice `server/record.py` fetches to re-record the canned corpus.
+# ~60 MB, and needed only to change what the server says — the WAVs it produces
+# ARE committed, so a clone can hear the avatar without fetching a speech model.
+server/.voices/
 # Staged by py/scripts/stage_native.py just before a wheel build: the aligner
 # library and its 56 MB model tree. It is a build input, never a source file —
 # the canonical copies are produced by .github/workflows/wheels.yml.

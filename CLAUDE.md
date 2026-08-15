@@ -140,7 +140,8 @@ node tools/sweep.mjs      # rig conformance gate — run before committing src/
 pnpm test                 # client/: dispatcher + jsdom package boundary
 pnpm run studio:dev       # Avatar Studio — the review environment
 cd py && uv run pytest     # backend, against the real avatarsync library
-cd py && uv run --group demo python ../demo/pipecat/server.py   # a real call
+cd server && uv run --project ../py --group server --group dev python -m pytest
+cd py && uv run --group server python ../server/server.py   # a real call
 ```
 
 Headless render/screenshot/diff/motion tooling: [tools/README.md](tools/README.md).
@@ -148,7 +149,7 @@ Which Studio route validates which layer: [studio/README.md](studio/README.md).
 
 Three things no suite will tell you:
 
-- **Lipsync is only ever verified in [`demo/pipecat/`](demo/pipecat/README.md)**
+- **Lipsync is only ever verified in [`server/`](server/README.md)**
   — a real call, your microphone, live TTS, `AvatarProcessor()` seated between
   the TTS and the transport. Nothing else exercises the streaming accurate leg:
   Studio and `demo/rig/lipsync-review.html` play *baked* cue tracks, so they

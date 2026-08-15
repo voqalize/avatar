@@ -53,23 +53,32 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
 ]
-# The live demo, and nothing else, gets to name services. `dependencies` above
-# stays transport- and vendor-free on purpose — this group is how the demo picks
-# its vendors without the library acquiring an opinion. The Google half is
-# reachable with one `gcloud auth application-default login`: STT, TTS and the
-# LLM are all ADC.
-demo = [
-    # `cartesia` is here for vql-speech, which speaks Cartesia's protocol —
-    # `--tts vql-speech` is `CartesiaTTSService` pointed at a different host.
-    "pipecat-ai[google,silero,webrtc,cartesia]>=1.7,<2",
-    # The demo serves its own page rather than pipecat's prebuilt client, so it
+# The local server, and nothing else, gets to name services. `dependencies`
+# above stays transport- and vendor-free on purpose — these groups are how the
+# server picks its vendors without the library acquiring an opinion.
+#
+# Nothing here needs a credential. That is the whole point of the split below:
+# `--tts canned` is the default, so the install that gets someone their first
+# talking head must not drag in an SDK for a service they have no account with.
+server = [
+    "pipecat-ai[silero,webrtc]>=1.7,<2",
+    # The server serves its own page rather than pipecat's prebuilt client, so it
     # owns the web server too. FastAPI is already in the graph — SmallWebRTC's
     # request handler imports `HTTPException` — but naming it here is what makes
     # `uvicorn` available and the dependency honest.
     "fastapi>=0.115",
     "uvicorn>=0.34",
+]
+# Opt-in, and only for one job: checking lipsync against a real streaming
+# generator, which the canned service cannot be (server/README.md § Verifying
+# lipsync). Every import of these lives inside its own factory in bot.py, so the
+# server runs with this group absent.
+server-vendors = [
+    # `cartesia` is here for vql-speech, which speaks Cartesia's protocol —
+    # `--tts vql-speech` is `CartesiaTTSService` pointed at a different host.
+    "pipecat-ai[google,cartesia]>=1.7,<2",
     # vql-speech takes a self-minted RS256 JWT rather than a static key, so the
-    # demo has to sign one. `[crypto]` is the half that can do RS256.
+    # server has to sign one. `[crypto]` is the half that can do RS256.
     "pyjwt[crypto]>=2.8",
 ]
 

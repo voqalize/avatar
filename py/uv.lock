@@ -2237,15 +2237,18 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
-demo = [
-    { name = "fastapi" },
-    { name = "pipecat-ai", extra = ["google", "webrtc"] },
-    { name = "pyjwt", extra = ["crypto"] },
-    { name = "uvicorn" },
-]
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
+]
+server = [
+    { name = "fastapi" },
+    { name = "pipecat-ai", extra = ["webrtc"] },
+    { name = "uvicorn" },
+]
+server-vendors = [
+    { name = "pipecat-ai", extra = ["google"] },
+    { name = "pyjwt", extra = ["crypto"] },
 ]
 
 [package.metadata]
@@ -2255,15 +2258,18 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-demo = [
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "pipecat-ai", extras = ["google", "silero", "webrtc", "cartesia"], specifier = ">=1.7,<2" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8" },
-    { name = "uvicorn", specifier = ">=0.34" },
-]
 dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
+]
+server = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "pipecat-ai", extras = ["silero", "webrtc"], specifier = ">=1.7,<2" },
+    { name = "uvicorn", specifier = ">=0.34" },
+]
+server-vendors = [
+    { name = "pipecat-ai", extras = ["google", "cartesia"], specifier = ">=1.7,<2" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8" },
 ]
 
 [[package]]

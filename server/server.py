@@ -1,6 +1,6 @@
 """Serves the demo page and answers its WebRTC offer.
 
-    cd py && uv run --group demo python ../demo/pipecat/server.py
+    cd py && uv run --group server python ../server/server.py
     open http://localhost:7860
 
 Two jobs, and they are separate on purpose:
@@ -66,7 +66,7 @@ class NoStore(StaticFiles):
 #
 # `/vendor` is the exception, and it is third-party only: pipecat's browser
 # packages ship ESM that still contains bare specifiers, so they are pre-bundled
-# by `npm run demo:vendor`. See vendor.entry.js.
+# by `pnpm run server:vendor`. See vendor.entry.js.
 MOUNTS = {
     "/src": REPO / "src",
     "/client/dist": REPO / "client" / "dist",
@@ -76,7 +76,7 @@ MOUNTS = {
 MISSING = {
     "/src": "the repo looks incomplete",
     "/client/dist": "run `npm install && npm run build`",
-    "/vendor": "run `npm run demo:vendor`",
+    "/vendor": "run `pnpm run server:vendor`",
 }
 
 

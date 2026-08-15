@@ -147,6 +147,15 @@ jobs:
         # re-resolve at each end of the range rather than replay the lockfile.
         run: uv run --resolution "$UV_RESOLUTION" pytest -q
 
+      # The local server is not part of the package and has no aligner in the
+      # loop, so it rides the resolved leg only — what it checks is the frame
+      # contract between our two canned services and pipecat's, and that
+      # contract does not vary with the dependency floor.
+      - name: server frame contract
+        if: matrix.pipecat == 'resolved'
+        working-directory: server
+        run: uv run --project ../py --group server --group dev python -m pytest -q
+
       - name: distributions build and validate
         if: matrix.pipecat == 'resolved'
         working-directory: py
