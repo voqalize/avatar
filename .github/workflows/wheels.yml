@@ -183,9 +183,11 @@ jobs:
           path: py/dist/*.whl
           if-no-files-found: error
 
-      # The bare library, so `native/avatarsync/bin/<platform>/` in the repo can
-      # be refreshed from a canonical build rather than from somebody's laptop:
-      #   gh run download <id> -n avatarsync-<platform> -D native/avatarsync/bin/<platform>
+      # The bare library, for inspecting a build without unzipping a 44 MB wheel
+      # — `nm`, `strings`, a glibc-symbol check. Not a distribution channel:
+      # run artifacts expire after 90 days, so anyone who wants this library on
+      # their machine runs `native/avatarsync/get.sh`, which unpacks it from the
+      # published wheel and stays pinnable.
       - uses: actions/upload-artifact@v4
         with:
           name: avatarsync-${{ matrix.id }}

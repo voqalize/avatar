@@ -6,16 +6,15 @@ returns nothing, cue tracks that are structurally valid and nonsense
 phonetically, a phone that does not belong to the shape carrying it — are all
 failures a stubbed aligner would happily reproduce as passes.
 
-The library is committed per platform under `native/avatarsync/bin/`, but its
-56 MB model tree is not — `native/avatarsync/build.sh --res-only` regenerates it.
-So every library-dependent test skips with a message naming exactly what is
-missing rather than failing, and a checkout that has not run the script yet is
-still green. **A run with skips in it has not tested this subsystem**; that
-applies just as much to a platform with no committed library as to a missing
-model tree. Regenerate, or build, and re-run before believing it.
+Neither the library nor its 56 MB model tree is in git — `native/avatarsync/get.sh`
+unpacks both from a published wheel, `native/avatarsync/build.sh` compiles them.
+Until one of those has run, every library-dependent test skips with a message
+naming exactly what is missing rather than failing, so a fresh checkout is green
+having tested none of this. **A run with skips in it has not tested this
+subsystem.** Fetch, or build, and re-run before believing it.
 
 That was a docstring asking to be believed, and it was not: CI ran on Linux with
-no Linux library committed, so ~40 tests — every one that touches the decoder —
+no Linux library available, so ~40 tests — every one that touches the decoder —
 skipped on every run and the job went green anyway. `AVATAR_REQUIRE_ALIGNER=1`
 is the enforcement. Set it and the skip becomes a failure that names the missing
 path. CI sets it; a laptop without the model tree does not have to.

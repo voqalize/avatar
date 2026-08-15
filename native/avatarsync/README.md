@@ -11,10 +11,11 @@ Upstream is [rhubarb-lip-sync](https://github.com/DanielSWolf/rhubarb-lip-sync)
 **1.14.0**, MIT-licensed. `UPSTREAM-LICENSE.md` here is upstream's own licence
 file, copied out of the tarball by `build.sh` and **committed** — it carries the
 third-party notices for pocketsphinx, sphinxbase, flite, webrtc, cppformat, GSL,
-Boost and the CMU acoustic model, all of which are statically linked into the
-libraries in `bin/`. Those libraries are distributed, so the notices travel with
-them. This repo's own code is AGPL-3.0-only (`/LICENSE`); upstream's terms are
-upstream's.
+Boost and the CMU acoustic model, all of which are statically linked into every
+library built from these sources. Those libraries are distributed inside the
+wheels, so the notices have to travel with them, and a file in git is the only
+copy that can. This repo's own code is AGPL-3.0-only (`/LICENSE`); upstream's
+terms are upstream's.
 
 **The upstream source is not vendored in git.** The tag tarball is 85 MB, most
 of it a 52 MB acoustic model, and a repo-sized copy of it buys nothing a pinned
@@ -32,10 +33,24 @@ before it will touch a byte of it. What we own and commit is:
 | `src/core.h`, `src/core.cpp` | the engine — both legs, the decoder pool, the warm-up |
 | `src/avatarsync.h`, `src/capi.cpp` | the `extern "C"` ABI, which is the entire public surface |
 | `data/phone_weights.json` | fitted per-phone duration weights (the fast leg) |
-| `bin/<platform>/libavatarsync.<so\|dylib>` | prebuilt libraries, so a dev clone runs without a compiler |
 | `build.sh` | fetch → verify → patch → compile → install |
+| `get.sh` | fetch library + `res/` out of a published wheel |
 
-`.build/`, `.cache/` and `res/` are generated and gitignored.
+`.build/`, `.cache/`, `bin/` and `res/` are generated and gitignored.
+
+**No prebuilt library is committed either**, on the same reasoning one step
+further: a committed library was never sufficient by itself. `res/` — the 56 MB
+model tree the engine opens at startup — is far too large for git, so a clone
+that did carry a `bin/darwin-arm64/libavatarsync.dylib` still died at open on a
+missing cmudict, and `./build.sh --res-only` was required before it could align a
+syllable. Those 2 MB, about a fifth of the repository, bought half a solution.
+`get.sh` produces both halves in one command, and nothing has ever produced only
+the half a git tree can hold.
+
+Those 2 MB are still in the pack, and stay there. Dropping a blob from `HEAD`
+does not drop it from history, and rewriting the history of a public repo breaks
+every clone anyone already has — so a new clone still pays for a file no checkout
+of it contains. That is the accepted price of not rewriting.
 
 **There is no native command-line program here.** The only artifact is the shared
 library. The tool you run by hand is `voqalize-avatar` (`py/src/voqalize_avatar/cli.py`),
@@ -113,44 +128,64 @@ warm-up clip failed VAD and the first request will pay it. Open runs one
 synthetic amplitude-modulated noise clip for exactly this reason — recognition
 runs VAD first, so warming up on silence would initialise nothing.
 
-## Building
+## Getting a library
+
+There are two ways to end up with one, and which is right turns on a single
+question: are you changing the C++?
+
+If you are not — and most work in this repo is not — fetch it:
+
+```sh
+./get.sh                   # the version this checkout releases as
+./get.sh --version 0.3.1   # some other published release
+./get.sh --check           # say what would be fetched, write nothing
+```
+
+`get.sh` unpacks the library *and* `res/` out of the `voqalize-avatar` wheel
+published for this platform, defaulting to the version in `py/pyproject.toml`.
+No compiler, no Boost, no 85 MB tarball, and both halves in one command. It
+deliberately writes no `bin/<platform>/avatarsync.recipe`: a recipe is a claim
+about a local compile, and one invented for a fetched library would make the one
+file whose job is provenance lie.
+
+If you are changing `src/*.cpp` or the patch, only a compile can reflect what you
+just wrote:
 
 ```sh
 ./build.sh              # fetch, patch, compile, install
-./build.sh --res-only   # just materialise res/ (what a dev clone needs)
+./build.sh --res-only   # just materialise res/
 ./build.sh --clean      # discard .build/ first
 ```
 
 A full `--clean` build is ~16 s on an M4 (49 translation units — only our
 dependency subset, not upstream's CLI or GUI), plus a one-time 85 MB fetch. It is
-also reproducible: rebuilding produces a byte-identical library, so a rebuild
-does not show up as a diff on the committed one.
+also reproducible: the same sources compile to a byte-identical library, so two
+machines that agree on `--recipe-id` can be compared byte for byte, and a
+published wheel can be reproduced from the tag it was built at.
 
 Build natively. The published upstream macOS binary is x86_64 and costs ~2.6x
 under Rosetta; our arm64 build is the whole reason the numbers above are what
 they are.
 
-`res/` is 56 MB and identical on every platform, so it is regenerated rather
-than committed: cmudict (fast leg), `en-us-phone.lm.bin` and the CMU acoustic
-model (accurate leg). Upstream's CMake also stages `en-us.lm.bin` (26 MB word
-LM) and a second acoustic model; neither leg reads them, so `build.sh` leaves
-them out.
+`res/` is 56 MB and identical on every platform, so it is produced on demand
+rather than committed: cmudict (fast leg), `en-us-phone.lm.bin` and the CMU
+acoustic model (accurate leg). Upstream's CMake also stages `en-us.lm.bin` (26 MB
+word LM) and a second acoustic model; neither leg reads them, so `build.sh`
+leaves them out. Both scripts write the tree, so `--res-only` is for the one case
+where a library is already in place and only the models are gone.
 
-**A dev clone needs `./build.sh --res-only` once.** The library is committed; the
-models are not.
+### Building for linux
 
-### Rebuilding the linux libraries
+`build.sh` is platform-agnostic and nothing in the patch or in `src/` is
+macOS-specific — a linux library needs a linux *builder*, not a code change.
 
-`bin/<platform>/` is committed, so a clone runs without a compiler and nothing
-compiles in CI. `build.sh` is platform-agnostic and nothing in the patch or in
-`src/` is macOS-specific — a new linux library needs a linux *builder*, not a
-code change.
-
-A platform with no committed library is not an error: `AvatarsyncPaths.check()`
-names the missing file and the Python tests skip rather than fail. That is a
-comfortable failure mode and therefore a dangerous one — a CI leg on a platform
-whose library is missing goes green having tested none of this. Check the skip
-count, not just the exit code.
+A machine with no library at all is not an error: `AvatarsyncPaths.check()` names
+the missing file and the Python tests skip rather than fail. That is a
+comfortable failure mode and therefore a dangerous one — a CI leg with no library
+went green having tested none of this, which is why `.github/workflows/ci.yml`
+builds the aligner itself, caches it on `build.sh --recipe-id`, and turns a
+missing one from a skip into a failure. Locally you have no such guard: check the
+skip count, not just the exit code.
 
 The build deps are wider than they look, and every one of them was found the
 hard way when the mac build turned out to be leaning on Homebrew:
@@ -165,15 +200,10 @@ hard way when the mac build turned out to be leaning on Homebrew:
 On an Apple-silicon mac a linux image runs under qemu emulation, which turns a
 ~2 minute compile into a very long one. So the linux libraries are built on real
 hosts by `.github/workflows/wheels.yml`, which is also what builds the wheels —
-one workflow, so the library a developer refreshes is the library a user gets:
-
-```sh
-gh workflow run wheels.yml
-for p in linux-x64 linux-arm64 darwin-arm64; do
-  rm -f "bin/$p"/libavatarsync.* "bin/$p/avatarsync.recipe"  # gh refuses to overwrite
-  gh run download <id> -n "avatarsync-$p" -D "bin/$p"
-done
-```
+one workflow, so the library `get.sh` hands you is the library a user gets.
+Fetch a release rather than a workflow run: a run's artifacts expire after 90
+days, so a `gh run download` line written into a README stops working on a
+schedule, while a published version is pinnable for good.
 
 That workflow builds **inside the `manylinux_2_28` image**, not on the runner.
 The runner is Ubuntu 24.04 (glibc 2.39), and a library built there cannot load on
@@ -213,17 +243,19 @@ strings bin/linux-x64/libavatarsync.so | grep -o 'GLIBC_[0-9.]*'   | sort -uV | 
 strings bin/linux-x64/libavatarsync.so | grep -o 'GLIBCXX_[0-9.]*' | sort -uV | tail -1
 ```
 
-**Change `src/` or `patches/` and you MUST rebuild every committed library.**
-Nothing in CI compiles, so a source edit alone changes what the tree *says* and
-not what a deployment *runs*: the tree looks new, the library is the old compile,
-and there is no error anywhere. Green build, unchanged behaviour — exactly the
-shape of the bug that left visemes dark for weeks.
+**Change `src/` or `patches/` and whatever is sitting in `bin/` is stale.** A
+source edit alone changes what the tree *says* and not what the machine *runs*:
+the tree looks new, the library is an older compile or a fetched release, and
+there is no error anywhere. Green tests, unchanged behaviour — exactly the shape
+of the bug that left visemes dark for weeks.
 
-So each library is committed with a `bin/<platform>/avatarsync.recipe` beside it
-— a hash of `src/` + `patches/` + `build.sh`, written by `build.sh` only after a
-real compile. Compare it against `./build.sh --recipe-id` before trusting a
-library, and wire that comparison into whatever packages a deployment. Rebuild on
-each platform and commit the library and its `.recipe` together.
+So a compile stamps `bin/<platform>/avatarsync.recipe` beside the library — a
+hash of `src/` + `patches/` + `build.sh`, written by `build.sh` and by nothing
+else, so a library carrying one has by construction been through this compile.
+Compare it against `./build.sh --recipe-id` before trusting a library, and wire
+that comparison into whatever packages a deployment. A library `get.sh` fetched
+carries no recipe at all, which is the right answer rather than a gap: it was not
+compiled from this tree and must not be able to claim it was.
 
 ## How this reaches a user
 
@@ -233,12 +265,13 @@ flattened into `voqalize_avatar/_native/`, so `pip install voqalize-avatar` is
 the entire installation procedure and `build_viseme_engine` needs no argument.
 A deployment ships nothing extra.
 
-**`.github/workflows/wheels.yml` is canonical**, and it compiles rather than
-packaging a committed library. `build.sh` is the local loop — it is how you
-iterate on `src/` on your own machine, and it takes the same portability flags so
-a local build is debuggable against the published one, but nothing it produces is
-ever distributed. The committed libraries exist so a clone runs without a
-compiler; they are a development convenience, not the artifact.
+**`.github/workflows/wheels.yml` is canonical**, and it compiles from the pinned
+tarball rather than packaging anything out of a checkout. `build.sh` is the local
+loop — it is how you iterate on `src/` on your own machine, and it takes the same
+portability flags so a local build is debuggable against the published one, but
+nothing it produces is ever distributed. What `get.sh` puts in `bin/` is that
+same wheel coming back the other way: a development convenience carrying the
+exact bytes a user gets, and never a source of them.
 
 A source checkout is found by walking up to `native/avatarsync`
 (`AvatarsyncPaths.discover`), and a deploy that unpacks this directory itself can
@@ -253,5 +286,6 @@ rule.
 
 ```sh
 ./build.sh --recipe-id   # what the sources currently hash to; builds nothing
-cat bin/linux-x64/avatarsync.recipe   # what that library was compiled from
+cat bin/linux-x64/avatarsync.recipe   # what that library was compiled from,
+                                      # or no such file if it was fetched
 ```

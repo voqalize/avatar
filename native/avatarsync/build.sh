@@ -14,12 +14,14 @@
 # which the binary and the library disagree.
 #
 # Outputs, all relative to this directory:
-#   bin/<platform>/libavatarsync.<so|dylib>   the library (committed)
-#   bin/<platform>/avatarsync.recipe          what it was compiled FROM (committed)
+#   bin/<platform>/libavatarsync.<so|dylib>   the library
+#   bin/<platform>/avatarsync.recipe          what it was compiled FROM
 #   res/sphinx/…                              cmudict + phonetic LM + acoustic
-#                                             model (NOT committed — 56 MB, and
-#                                             identical on every platform, so
-#                                             build.sh regenerates it)
+#                                             model (56 MB, identical on every
+#                                             platform)
+#
+# None of it is committed — `bin/` and `res/` are both gitignored. Either this
+# script produces them, or `get.sh` unpacks them from a published wheel.
 #
 # The upstream source is 85 MB and is NOT vendored in git. It is fetched from
 # GitHub and checked against a pinned sha256; the only upstream bytes we own are
@@ -65,11 +67,13 @@ fi
 # read from disk at runtime, so editing them takes effect without a recompile,
 # and folding them in here would demand a pointless rebuild.
 #
-# It exists so a committed binary can say what it was built from. build.sh
-# writes it beside the binary after a real compile; build-rhubarb.sh compares it
-# before packaging one, and refuses on a mismatch. Without that, editing
-# core.cpp and forgetting to rebuild ships the OLD library under a NEW artifact
-# id — green build, stale behaviour, no error anywhere.
+# It exists so a library sitting in bin/ can say what it was built from. This
+# script writes it after a real compile and nothing else writes it at all — so
+# a library with no recipe beside it was fetched, not built here, and one whose
+# recipe differs from `--recipe-id` is an older compile. Compare before trusting
+# it. Nothing enforces that comparison today; it is the check you run, or wire
+# into whatever packages a deployment. Skip it and editing core.cpp without
+# rebuilding runs the OLD library against NEW source — no error anywhere.
 #
 # Defined here rather than in build-rhubarb.sh so there is exactly one
 # definition: two copies of a hash that must agree would eventually disagree,
@@ -217,8 +221,8 @@ case "$PLATFORM" in
 esac
 
 # Stamp what it was built from, right next to it. This is the ONLY thing that
-# writes a .recipe — so a binary carrying one has, by construction, been through
-# this compile. Commit the two together or the guard fires.
+# writes a .recipe — so a library carrying one has, by construction, been through
+# this compile, and one carrying none came from get.sh.
 recipe_hash > "$HERE/bin/$PLATFORM/avatarsync.recipe"
 
 echo "$HERE/bin/$PLATFORM/$LIB"
