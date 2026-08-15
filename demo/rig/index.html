@@ -2,12 +2,12 @@
 <!--
   Index for the avatar-development harnesses.
 
-  These are not entry points to the product. The product has two —
-  `demo/call.html`, the call to show people, and `index.html`, the full
-  control harness — and everything in this directory exists for the occasions
-  when someone is *building or repairing a rig*, which is a different job with a
-  different rhythm. They were sitting alongside the demos and reading as six more
-  ways in; they are one way in, from here.
+  These are not entry points to the product. A call to show people is
+  `server/` — a real pipecat process with a real transport — and `index.html`
+  is the full control harness; everything in this directory exists for the
+  occasions when someone is *building or repairing a rig*, which is a different
+  job with a different rhythm. They were sitting alongside the demos and reading
+  as six more ways in; they are one way in, from here.
 
   Nothing here loads unless you open it, so the cost of keeping them is a
   directory listing. The cost of not keeping them is finding the G/B viseme
@@ -136,8 +136,12 @@
   <h2>Not here</h2>
   <ul>
     <li>
-      <a href="../call.html">demo/call.html</a>
-      <p class="d">The Meet-style call — the page to show people.</p>
+      <a href="http://localhost:7860/">server/</a>
+      <p class="d">
+        A real call, driven by a real pipecat process. Run
+        <code>cd py &amp;&amp; uv run --group server python ../server/server.py</code>
+        first; nothing here starts it for you.
+      </p>
     </li>
     <li>
       <a href="../../index.html">index.html</a>

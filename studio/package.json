@@ -13,7 +13,8 @@
     "@pipecat-ai/client-js": "catalog:",
     "@pipecat-ai/small-webrtc-transport": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "@voqalize/avatar": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

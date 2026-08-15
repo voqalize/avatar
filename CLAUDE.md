@@ -178,10 +178,13 @@ Three things no suite will tell you:
   renderer, deliberately: the one that existed implemented the rig contract
   instead of the wire and is why that page now opens with a warning box
   ([removed.md § The Rive proof](docs/removed.md)).
-- **Studio is absorbing the static rig pages.** `demo/rig/*` and `index.html`
-  stay as reference tools until the matching Studio route reaches parity.
-  Studio always drives production behavior and wire adapters — never a
-  demo-only state machine.
+- **Studio is not a rig workbench, and no longer pretends to be.** It imports
+  `@voqalize/avatar` and nothing else from this repo — no `src/`, no
+  `/internal` — so a thing it cannot do is a thing a consumer cannot do
+  ([studio/README.md](studio/README.md)). Its two routes drive a real
+  `SmallWebRTCTransport` call against `server/`; there is no fake clock, no
+  trace fixture and no demo-only state machine anywhere in it. Rig authoring
+  lives in `demo/rig/*` and root `index.html`, which are moving to `authoring/`.
 - **The vocabulary is the seven core states, everywhere above the mixer.** The
   render-state pass-throughs (`TYPING`, `CANT_HEAR`, `WANTS_IN`, …) are gone
   from `src/behavior.js`; `CANT_HEAR` and friends are still real states *in*

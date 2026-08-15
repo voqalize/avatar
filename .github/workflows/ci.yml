@@ -43,6 +43,15 @@ jobs:
       - name: unit tests
         run: pnpm test
 
+      - name: studio typecheck and build
+        # `build` is `tsc --noEmit && vite build`, so this is the typecheck too.
+        # Studio resolves `@voqalize/avatar` through the workspace link — the
+        # real `exports` map, out of `client/dist` — so a build failing here is
+        # usually the published entrypoint being wrong rather than the IDE:
+        # it is the only thing in CI that consumes the package as a consumer
+        # does, from outside.
+        run: pnpm run studio:build
+
       - name: rig conformance sweep
         # Every state, emotion, gaze and interjection on every registered
         # avatar, asserting finite params and a connected SVG. A crash here is

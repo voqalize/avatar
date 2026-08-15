@@ -10,10 +10,10 @@ can recover from git."*
 
 It has since become the standing catalogue for anything cut from the public
 surface, so several entries below name a later tag; read the entry, not the
-heading. The backend's whole transport was replaced in the 0.3 cycle, and
-because that is one coherent swap rather than a set of independent cuts it has
-its own section at the end — [Removed in 0.3](#removed-in-03--the-backend-transport),
-recovering from **`v0.2.2`**.
+heading. The 0.3 cycle made two coherent swaps rather than sets of independent
+cuts, so each has its own section at the end, both recovering from **`v0.2.2`**:
+[the backend transport](#removed-in-03--the-backend-transport) and
+[the demo surfaces](#removed-in-03--the-demo-surfaces).
 
 This file is the recovery map. Nothing below is lost; **`v0.1.0` is the tag
 where these still work** unless the entry says otherwise, so the general move
@@ -99,8 +99,8 @@ answers are wrong in some deployment.
 
 **Note:** `avatar.perform(actions, {audio, clock})` is **not** removed — it is
 still the composition surface, still documented in internal-mixer.md, and
-`demo/floor.js` still drives every scripted turn through it. What went away is
-a *server* being able to send one over the wire.
+`demo/rig/expression-lab.html` still drives every scripted turn through it. What
+went away is a *server* being able to send one over the wire.
 
 **Recover:** `git show v0.1.0:client/src/AvatarClient.ts` (`handlePerform`,
 `resolveClock`) and the `AvatarPerformCmd` / `AvatarPerformAction` types in
@@ -591,3 +591,52 @@ argument then, with the caller that wants it.
 **Recover:** `git show v0.2.2:py/src/voqalize_avatar/visemes.py` for
 `join_audio_chunks`; the rest were added and removed inside the 0.3 cycle and
 live only in this file's history.
+
+---
+
+# Removed in 0.3 — the demo surfaces
+
+0.3 also cut the browser pages that *pretended* to be a call. The repo had
+grown three answers to "show me the avatar" — a fake call, a control harness
+and an IDE built on hand-written traces — and only one of them ever exercised
+the wire. What replaced them is one real pipecat process in `server/` and one
+IDE in `studio/` that speaks to it through the published `createAvatar` seam.
+
+Everything below still works at **`v0.2.2`**: `git show v0.2.2:<path>`,
+`git checkout v0.2.2 -- <path>`.
+
+---
+
+## The fake call (`demo/call.html`, `demo/floor.js`, `demo/vad.js`)
+
+**Was:** a Meet-style call page, the one to show people. `demo/call.html` drew
+the tile and the controls; `demo/floor.js` was a turn-taking floor manager that
+played `demo/perf-clips.json` — baked audio, cues and `perform` beats — as
+scripted agent turns; `demo/vad.js` loaded `@ricky0123/vad-web` and
+onnxruntime-web from jsDelivr so the user's microphone could take the floor
+back.
+
+**Why it went:** none of it was the library. The floor manager decided when the
+agent spoke, which is the one decision CLAUDE.md says the client never makes —
+so the page demonstrated an architecture the shipped code does not have, and
+demonstrated it convincingly enough to be believed. The wire was never
+involved: no `claim`, no `action`, no `cues` message crossed anything, because
+there was no server. And it was the repo's only runtime fetch from a CDN, in a
+project whose `src/` is dependency-free on purpose.
+
+**Instead:** `server/` — a real pipecat pipeline with canned LLM and TTS
+services, so it needs no API key, and a real `SmallWebRTCTransport`. Turn-taking
+is pipecat's, the wire is the wire, and the microphone is the browser's.
+`server/index.html` is the 30-second look; `studio/` is the same call with the
+`createAvatar` options exposed and the wire decoded beside it.
+
+**Worth recovering on purpose:** the tile treatment. `call.html` painted the
+surround transparent and feathered the drawing's two vertical edges with a
+mask, because peep's white shirt is drawn to run off its own frame and
+otherwise stops in mid-air. Nothing in the repo does that now — `server/` and
+`studio/` both letterbox the drawing in a flat tile. A host that wants the
+edges to dissolve should read the original.
+
+**Recover:** `git checkout v0.2.2 -- demo/call.html demo/floor.js demo/vad.js`.
+The clips it played are still checked in at `demo/perf-clips.json`, because
+`demo/rig/expression-lab.html` plays them too.

@@ -198,11 +198,13 @@ Palettes: there is no barrel `THEME` export — each face module owns its
 palette, and `api.theme` returns the mounted avatar's. A host needs it
 whenever it paints anything *around* the widget: every rig is drawn portrait,
 so a 16:9 call tile leaves a margin either side of the drawing, and the host
-chooses that surrounding surface. `demo/call.html` does exactly that — tile
-transparent around its artwork, plus a mask feathering the drawing's two
-vertical edges, because peep's white shirt is drawn to run off its own frame
-and otherwise stops in mid-air. Reshaping the art to fit a host's box is the
-wrong fix; the widget does not control the box. peep has
+chooses that surrounding surface. `server/index.html` and `studio/src/styles.css`
+both do the plain version — a tile in the palette, the drawing letterboxed
+inside it. The elaborate version is a mask feathering the drawing's two vertical
+edges, because peep's white shirt is drawn to run off its own frame and
+otherwise stops in mid-air; that lived in the demo call page and is recoverable
+from it ([removed.md](removed.md)). Reshaping the art to fit a host's box is the
+wrong fix either way; the widget does not control the box. peep has
 no dark palette **by decision** (inverting two-value line art recolours the
 hair and ages the character; that is geometry wearing a palette's clothes) —
 its theme keys stay overridable, but do not add a `dark` selector.

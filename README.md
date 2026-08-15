@@ -293,7 +293,6 @@ unchanged, and travels with that directory.
 | [Open Peeps](https://www.openpeeps.com/) | the drawing *idiom* `peep` is authored in — no artwork is copied | CC0 |
 | Rhubarb Lip Sync 1.14.0 | `native/avatarsync/` (fetched at build time, not vendored) | MIT; see `UPSTREAM-LICENSE.md` |
 | [piper](https://github.com/OHF-Voice/piper1-gpl) voices `en_US-ljspeech-high`, `en_US-libritts_r-medium` | spoke every wav in `demo/*-audio/` and `py/tests/fixtures/` | LJSpeech public domain; LibriTTS-R CC BY 4.0 |
-| [`@ricky0123/vad-web`](https://github.com/ricky0123/vad) + onnxruntime-web | loaded from jsDelivr by `demo/vad.js`, demo only — nothing in `src/` fetches it | MIT |
 
 The three avatars are original drawings. All demo audio is synthesised from
 text written for this repo.

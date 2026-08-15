@@ -71,6 +71,9 @@ importers:
       '@pipecat-ai/small-webrtc-transport':
         specifier: 'catalog:'
         version: 1.10.6(@pipecat-ai/client-js@1.13.0)
+      '@voqalize/avatar':
+        specifier: workspace:*
+        version: link:..
       react:
         specifier: 'catalog:'
         version: 18.3.1
