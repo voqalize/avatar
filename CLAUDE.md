@@ -137,8 +137,8 @@ The rig is judged by eye; the packages are judged by test.
 
 ```
 node tools/sweep.mjs      # rig conformance gate — run before committing src/
-npm test                  # client/: dispatcher + jsdom package boundary
-npm run studio:dev        # Avatar Studio — the review environment
+pnpm test                 # client/: dispatcher + jsdom package boundary
+pnpm run studio:dev       # Avatar Studio — the review environment
 cd py && uv run pytest     # backend, against the real avatarsync library
 cd py && uv run --group demo python ../demo/pipecat/server.py   # a real call
 ```

@@ -10,15 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@pipecat-ai/client-js": "1.7.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@pipecat-ai/client-js": "catalog:",
+    "@pipecat-ai/small-webrtc-transport": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "typescript": "^5.7.3",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:",
     "vite": "^7.3.6"
   }
 }

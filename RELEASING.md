@@ -82,7 +82,7 @@ and everything after it is automatic.
 #    https://www.npmjs.com/org/create   ->   name: voqalize
 # b. from a clean checkout of the tag, as a member of that org:
 npm login
-npm ci
+pnpm install --frozen-lockfile   # runs `prepare`, which compiles client/dist
 npm publish --access public
 ```
 

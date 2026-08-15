@@ -57,14 +57,20 @@ jobs:
       id-token: write # mints the OIDC token npm exchanges for a publish grant
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          cache: pnpm
       # Trusted publishing landed in npm 11.5.1; the runner's bundled npm is
-      # usually newer, but pinning the floor makes the failure legible.
+      # usually newer, but pinning the floor makes the failure legible. The
+      # workspace installs with pnpm and publishes with npm on purpose: the
+      # OIDC trusted-publishing exchange below is npm's, and `npm publish` reads
+      # the manifest, not the store.
       - run: npm install -g npm@latest
-      - run: npm ci
+      # Runs `prepare`, which compiles client/dist — the tarball's entrypoint.
+      - run: pnpm install --frozen-lockfile
       # --provenance signs an attestation linking the tarball to this workflow
       # run and this commit. Free on a public repo, and the only way a consumer
       # can check that what they installed came from what they can read.

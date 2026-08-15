@@ -235,8 +235,8 @@ states, test an avatar you are building, and connect to a live pipecat call to
 see how it all works together.
 
 ```sh
-npm install && npm --prefix studio install
-npm run studio:dev
+pnpm install          # one workspace: the package, the IDE and the rig tooling
+pnpm run studio:dev
 open http://127.0.0.1:4173/#/rig
 ```
 
@@ -257,7 +257,7 @@ need a server, and it must be `python3 serve.py 8777` rather than
 
 ```sh
 node tools/sweep.mjs      # rig conformance gate — run before committing src/
-npm test                  # client: dispatcher + jsdom package boundary
+pnpm test                 # client: dispatcher + jsdom package boundary
 cd py && uv run pytest    # backend, against the real avatarsync library
 ```
 

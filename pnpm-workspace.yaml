@@ -1,0 +1,39 @@
+# One lockfile for the whole repo.
+#
+# There were three (`package-lock.json` at the root, in `studio/` and in
+# `tools/`), which meant three resolutions of `typescript`, `react` and
+# `@types/*` that could drift apart silently — and did: the root pinned
+# `@pipecat-ai/client-js` at 1.7.0 while `studio/` resolved its own copy, so the
+# IDE and the package under test could have been running different transports.
+#
+# The root package IS `@voqalize/avatar` (published); the other two are private
+# dev tooling that never ships.
+packages:
+  - "studio"
+  - "tools"
+
+# The versions that must agree across the workspace, named once. `catalog:` in a
+# manifest resolves to the entry here, so the root package and the IDE cannot
+# end up on different pipecat clients — which is what happened under three
+# lockfiles, and which npm reported as nothing at all.
+#
+# `@pipecat-ai/small-webrtc-transport` tracks `client-js` with a `~` peer, so
+# these two move together or not at all. They sit at the TOP of the
+# `>=1.4 <2` range this package declares in `peerDependencies`; the floor is
+# checked by the `client floor` job in ci.yml.
+catalog:
+  "@pipecat-ai/client-js": "1.13.0"
+  "@pipecat-ai/small-webrtc-transport": "1.10.6"
+  react: "^18.3.1"
+  react-dom: "^18.3.1"
+  "@types/react": "^18.3.3"
+  "@types/react-dom": "^18.3.0"
+  typescript: "^5.7.3"
+
+# puppeteer downloads a browser and esbuild unpacks its platform binary; both
+# are no-ops without their install script, and `node tools/sweep.mjs` fails with
+# a missing-Chrome error that reads like a bug in the sweep. pnpm blocks install
+# scripts by default, so the two that genuinely need one are named here.
+onlyBuiltDependencies:
+  - esbuild
+  - puppeteer

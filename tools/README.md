@@ -6,7 +6,8 @@ loads a page in headless Chromium, and treats any page error, `console.error`
 or failed request as fatal: a screenshot of a broken page looks like evidence.
 
 ```
-cd tools && npm install     # once; puppeteer bundles its own Chromium
+pnpm install                # once, from the repository root; puppeteer
+                            # downloads its own Chromium on install
 ```
 
 ## The four commands

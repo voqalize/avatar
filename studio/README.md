@@ -5,8 +5,8 @@ avatar you are building, and connect to a live pipecat call to see how it all
 works together. Renderer-neutral — SVG is only the current built-in rig.
 
 ```sh
-npm install && npm --prefix studio install    # once
-npm run studio:dev                            # from the repository root
+pnpm install                                  # once, from the repository root
+pnpm run studio:dev
 open http://127.0.0.1:4173/#/rig              # AVATAR_STUDIO_PORT overrides
 ```
 
