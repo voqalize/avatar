@@ -45,6 +45,40 @@ supposed to look like that.
 
 Flags: `--tts`, `--port`, `--host`.
 
+## Driving it by hand
+
+Waiting for the round-robin to reach the line you wanted is a bad way to look at
+a gesture. The **Drive the call** panel says one line by name, claims a state,
+sends any action in the vocabulary, and — the part worth the code — sends the
+wrong thing on purpose.
+
+Every button is an HTTP request to the server, never a message the page
+composes: `POST /api/say`, `/api/claim`, `/api/action`, `/api/misbehave`, all
+acting on the one call in progress, with `GET /api/lines` returning the corpus
+and both vocabularies so the buttons cannot drift from the Python enums. A page
+that could make the avatar nod on its own would be a client deciding what the
+agent is doing, which is the one thing this project does not allow. So what
+lands in the wire log is what the *server* sent — which is how you tell a
+command the face ignored from one that never arrived.
+
+The five misbehaviours are there because the authority model
+([pipecat-lifecycle-protocol.md § Authority model](../docs/pipecat-lifecycle-protocol.md))
+is a claim about the *renderer*, and until now nothing exercised it: every
+message this server sent was well-formed and sent at the right moment. Each
+button names what to watch for.
+
+| kind | what should happen |
+|---|---|
+| `claim-during-speech` | the face keeps speaking — observed playout outranks server intent |
+| `stale-claim` | a claim arriving after its turn ended does not resurface |
+| `unknown-action` | ignored, and the face keeps rendering |
+| `unknown-claim` | same bar: ignored, not rendered, not fatal |
+| `action-storm` | no queue of twelve nods still draining after the burst |
+
+`curl` works too, and the endpoints answer `409` with no call up and `404` for a
+name that is not in the vocabulary — including on `/api/action`, so a typo there
+does not quietly become a conformance test.
+
 ## What it says
 
 Turn-taking here is voice activity plus a timeout, not understanding. The agent

@@ -44,14 +44,48 @@
   /* --- the wire, as it arrives ------------------------------------------- */
   #side {
     border-left: 1px solid var(--line); display: grid;
-    grid-template-rows: auto 1fr; min-height: 0;
+    /* Four children, four tracks: heading, controls, heading, log. Leave one
+       out and the second heading takes the `1fr`, dropping the log into an
+       implicit auto row where it grows instead of scrolling. */
+    grid-template-rows: auto auto auto 1fr; min-height: 0;
+    /* `minmax(0, 1fr)`, not the implied `auto`: an auto column is sized to its
+       max-content and is *not* clamped to the container, so one nowrap log line
+       or one unwrapped button row makes every child 600px wide inside this
+       340px panel — and `body { overflow: hidden }` turns that into controls
+       you cannot reach rather than a scrollbar. */
+    grid-template-columns: minmax(0, 1fr);
   }
   #side h2 {
     margin: 0; padding: 14px 16px 10px; font-size: 12px; font-weight: 600;
     letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
   }
+
+  /* --- driving the call by hand ------------------------------------------ */
+  #drive {
+    border: 0; margin: 0; padding: 0 16px 14px;
+    /* Flex column, not grid, for the same reason `#side` names its column
+       explicitly — a column that sizes to its widest child is what breaks. */
+    display: flex; flex-direction: column; gap: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  #drive select:disabled { opacity: .45; }
+  #drive .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  #drive select {
+    font: inherit; font-size: 12px; flex: 1 1 auto; min-width: 0;
+    padding: 5px 8px; border-radius: 6px;
+    background: var(--tile); color: var(--ink); border: 1px solid var(--line);
+  }
+  #drive button {
+    padding: 5px 11px; font-size: 12px; font-weight: 500;
+    background: var(--tile); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 999px;
+  }
+  #drive button:hover:not(:disabled) { border-color: var(--live); color: var(--live); }
+  #drive button.go { background: var(--live); color: #11131a; border-color: var(--live); }
+  #drive button.bad { border-color: var(--hot); color: var(--hot); }
+  #watch { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.45; }
   #log {
-    margin: 0; padding: 0 16px 16px; overflow-y: auto; min-height: 0;
+    margin: 0; padding: 0 16px 16px; overflow: auto; min-height: 0;
     font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
     list-style: none; color: var(--dim);
   }
@@ -83,6 +117,25 @@
     <div id="mount"></div>
   </div>
   <div id="side">
+    <h2>Drive the call</h2>
+    <!-- Not a `fieldset`, which would bulk-disable for free: its anonymous
+         content box is sized to max-content and is not selectable, so the
+         action row refuses to wrap and this 340px column grows to 633px —
+         which `body { overflow: hidden }` turns into unreachable, not untidy.
+         The controls are disabled one at a time in JS instead. -->
+    <div id="drive">
+      <div class="row">
+        <select id="lines" aria-label="Line to say"></select>
+        <button id="say" class="go">Say</button>
+      </div>
+      <div class="row" id="claims" aria-label="Claim a state"></div>
+      <div class="row" id="actions" aria-label="Send an action"></div>
+      <div class="row">
+        <select id="misbehaviours" aria-label="Misbehaviour"></select>
+        <button id="misbehave" class="bad">Break it</button>
+      </div>
+      <p id="watch"></p>
+    </div>
     <h2>Avatar wire</h2>
     <ul id="log"></ul>
   </div>
@@ -138,13 +191,98 @@ function logAvatar(raw) {
   }
 }
 
+// --- driving the call by hand ----------------------------------------------
+//
+// Every control below is an HTTP request to the *server*, never a message this
+// page composes. The server owns intent: a page that could make the avatar nod
+// on its own would be a client deciding what the agent is doing. So what shows
+// up in the log is what the server sent — not what the button asked for, which
+// is how you tell a command the face ignored from one that never arrived.
+const drive = document.getElementById("drive");
+const watch = document.getElementById("watch");
+
+/** Every control in the panel needs a call to act on; without one they 409. */
+function driveable(on) {
+  for (const el of drive.querySelectorAll("button, select")) el.disabled = !on;
+}
+
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) return;
+  const detail = await res.json().then((d) => d.detail).catch(() => res.statusText);
+  say("action", `${path} → ${res.status} ${detail}`);
+}
+
+function control(row, label, onClick) {
+  const el = document.createElement("button");
+  el.textContent = label;
+  el.addEventListener("click", onClick);
+  document.getElementById(row).appendChild(el);
+}
+
+function options(select, entries) {
+  for (const [value, label] of entries) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  }
+}
+
+// The page asks the server what this call can say and do rather than hardcoding
+// either — the vocabularies live in the Python package, and a button list that
+// drifted from them would be a UI testing a wire format that no longer exists.
+const corpus = await fetch("/api/lines").then((r) => r.json());
+
+const lines = document.getElementById("lines");
+options(lines, corpus.lines.map((n) => [n.id, `${n.tag} · ${n.text}`]));
+document.getElementById("say")
+  .addEventListener("click", () => post("/api/say", { id: lines.value }));
+
+// `null` clears the claim, and clearing is a real command rather than a missing
+// one — the face has to be told the agent stopped thinking.
+for (const state of corpus.claims) {
+  control("claims", state.toLowerCase(), () => post("/api/claim", { state }));
+}
+control("claims", "clear", () => post("/api/claim", {}));
+
+for (const action of corpus.actions) {
+  // The vocabulary prefixes are what group them; the verb is what you press.
+  const label = action.replace(/^(ACK|GESTURE|RESPONSE)_/, "").toLowerCase();
+  control("actions", label, () => post("/api/action", { action }));
+}
+
+const misbehaviours = document.getElementById("misbehaviours");
+options(misbehaviours, Object.keys(corpus.misbehaviours).map((k) => [k, k]));
+// The description is the whole feature: these send the wrong thing on purpose
+// and are worthless unless you know what the face is supposed to do about it.
+const explain = () => { watch.textContent = corpus.misbehaviours[misbehaviours.value]; };
+misbehaviours.addEventListener("change", explain);
+explain();
+document.getElementById("misbehave")
+  .addEventListener("click", () => post("/api/misbehave", { kind: misbehaviours.value }));
+
+driveable(false);
+
 const client = new PipecatClient({
   transport: new SmallWebRTCTransport(),
   enableMic: true,
   enableCam: false,
   callbacks: {
-    onConnected: () => { badge.textContent = "live"; badge.className = "live"; },
-    onDisconnected: () => { badge.textContent = "offline"; badge.className = ""; },
+    onConnected: () => {
+      badge.textContent = "live"; badge.className = "live";
+      // Gated on the transport rather than on the button, because the server
+      // has nothing to drive until the peer connection is actually up.
+      driveable(true);
+    },
+    onDisconnected: () => {
+      badge.textContent = "offline"; badge.className = "";
+      driveable(false);
+    },
     onBotReady: () => say("claim", "bot ready"),
     onTrackStarted: (track, participant) => {
       if (participant?.local || track.kind !== "audio") return;

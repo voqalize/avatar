@@ -55,6 +55,7 @@ from pipecat.workers.runner import WorkerRunner
 
 from voqalize_avatar import AvatarProcessor
 
+import control
 from canned import CannedLines, CannedLLMService, CannedTTSService
 
 #: The corpus. Sentences plus the WAV recorded for each; see canned.py.
@@ -264,6 +265,13 @@ async def run_bot(connection: SmallWebRTCConnection, tts_name: str = DEFAULT_TTS
         logger.info("client disconnected")
         await worker.cancel()
 
-    runner = WorkerRunner(handle_sigint=False)
-    await runner.add_workers(worker)
-    await runner.run()
+    # Registered before the pipeline runs, so a control request that arrives
+    # while the browser is still negotiating queues instead of 409-ing.
+    session = control.Session(lines=lines, llm=llm, worker=worker)
+    control.register(session)
+    try:
+        runner = WorkerRunner(handle_sigint=False)
+        await runner.add_workers(worker)
+        await runner.run()
+    finally:
+        control.unregister(session)

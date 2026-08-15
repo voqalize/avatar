@@ -3,7 +3,7 @@
     cd py && uv run --group server python ../server/server.py
     open http://localhost:7860
 
-Two jobs, and they are separate on purpose:
+Three jobs, and they are separate on purpose:
 
 - **The page.** Served from this repo's working tree — `src/` and
   `client/dist/`, plus one pre-bundled copy of pipecat's browser packages, all
@@ -22,6 +22,12 @@ Two jobs, and they are separate on purpose:
   default. Each new peer connection starts one `run_bot` task; when the browser
   goes away the transport's disconnect handler cancels it.
 
+- **The control plane.** `/api/lines`, `/api/say`, `/api/claim`, `/api/action`
+  and `/api/misbehave`, all acting on the one call in progress. They live on the
+  server because intent does: a page that could make the avatar nod by itself
+  would be a client deciding what the agent is doing. See control.py, which also
+  explains what each misbehaviour is trying to break.
+
 Pipecat's own runner (`pipecat.runner.run`) would do the signalling half of this
 in one line, but it serves its prebuilt client UI, and the page *is* what is
 being demonstrated here.
@@ -34,8 +40,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
-from bot import DEFAULT_TTS, TTS_SERVICES, run_bot
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -45,9 +50,33 @@ from pipecat.transports.smallwebrtc.request_handler import (
     SmallWebRTCRequest,
     SmallWebRTCRequestHandler,
 )
+from pydantic import BaseModel
+from voqalize_avatar import AvatarAction, AvatarClaim
+
+import control
+from bot import DEFAULT_TTS, LINES, TTS_SERVICES, run_bot
+from canned import CannedLines
+
+
+class Say(BaseModel):
+    id: str
+
+
+class Claim(BaseModel):
+    #: Absent or null clears the claim — see the endpoint.
+    state: str | None = None
+
+
+class Action(BaseModel):
+    action: str
+
+
+class Misbehave(BaseModel):
+    kind: str
+
 
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parent.parent
+REPO = HERE.parent
 
 
 class NoStore(StaticFiles):
@@ -115,6 +144,73 @@ def build_app(tts_name: str) -> FastAPI:
     async def trickle(request: SmallWebRTCPatchRequest):
         await handler.handle_patch_request(request)
         return {"status": "success"}
+
+    # ─── The control plane ──────────────────────────────────────────────
+    #
+    # The server owns intent, so driving the avatar by hand is an HTTP request
+    # to the server — not a message the page invents. A page that could make the
+    # avatar nod on its own would be a client deciding what the agent is doing,
+    # which is the one thing this project does not allow (CLAUDE.md § Constraints).
+    # These endpoints are also what the wire panel drives; see control.py.
+
+    @app.get("/api/lines")
+    async def corpus():
+        """What this call can say, and what it can be told to do wrong."""
+        lines = CannedLines.load(LINES)
+        return {
+            "lines": [
+                {"id": n.id, "tag": n.tag, "text": n.text, "ms": sum(s.ms for s in n.sentences)}
+                for n in lines.lines
+            ],
+            "claims": [str(c) for c in AvatarClaim],
+            "actions": [str(a) for a in AvatarAction],
+            "misbehaviours": control.MISBEHAVIOURS,
+        }
+
+    def _live() -> control.Session:
+        session = control.live()
+        if session is None:
+            raise HTTPException(status_code=409, detail="no call in progress")
+        return session
+
+    @app.post("/api/say")
+    async def say(body: Say):
+        try:
+            line = await _live().say(body.id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"no line {body.id!r}") from None
+        return {"said": line.id, "text": line.text}
+
+    @app.post("/api/claim")
+    async def claim(body: Claim):
+        # `None` clears. That is a real command, not a missing one, which is why
+        # the field is optional rather than the endpoint being two endpoints.
+        try:
+            state = AvatarClaim(body.state) if body.state else None
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"no claim {body.state!r}") from None
+        await _live().claim(state)
+        return {"claimed": body.state}
+
+    @app.post("/api/action")
+    async def action(body: Action):
+        # Rejected here rather than passed through, because the endpoint that
+        # sends an unknown action on purpose is `/api/misbehave` — a typo in this
+        # one should be a 404, not an unwitting conformance test.
+        try:
+            action = AvatarAction(body.action)
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"no action {body.action!r}") from None
+        await _live().action(action)
+        return {"acted": body.action}
+
+    @app.post("/api/misbehave")
+    async def misbehave(body: Misbehave):
+        try:
+            await _live().misbehave(body.kind)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"no misbehaviour {body.kind!r}") from None
+        return {"misbehaved": body.kind, "watch": control.MISBEHAVIOURS[body.kind]}
 
     return app
 
