@@ -69,7 +69,21 @@ def sentence(text: str, ctx: str = "1.1") -> AggregatedTextFrame:
 def word(text: str, ctx: str = "1.1") -> TTSTextFrame:
     """One karaoke word. Subclasses the announcement frame and carries the same
     `will_be_spoken`, which is why the avatar's discriminator is a negative
-    isinstance check."""
+    isinstance check.
+
+    `aggregated_by="word"` is not decoration — it is what pipecat's own word
+    builder stamps, and it is the field that separates these from `said()`."""
+    frame = TTSTextFrame(text=text, aggregated_by="word", context_id=ctx)
+    frame.will_be_spoken = True
+    return frame
+
+
+def said(text: str, ctx: str = "1.1") -> TTSTextFrame:
+    """A whole sentence's text frame, from a TTS with no word timestamps.
+
+    The base class appends this to the audio context once `run_tts` has finished
+    yielding, so it arrives behind the sentence's samples — the same boundary
+    `spoken()` carries, from the only signal such a service emits."""
     frame = TTSTextFrame(text=text, aggregated_by="sentence", context_id=ctx)
     frame.will_be_spoken = True
     return frame

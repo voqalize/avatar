@@ -205,13 +205,17 @@ Three things no suite will tell you:
   up to the mark. From the graded 2026-08 review: adopted ballistic head-follow
   braking and smile-corner decay during speech; deferred the turn-morph
   experiment (PR #1) and viseme salience ordering, with reasons on record.
-- **One open backend question, seen on the wire and not yet chased.** A single
-  3.4 s utterance produced ~171 `cues` chunks, every one of them `from_ms: 0`.
-  `from_ms` means "discard queued cues at or after this, then append these", so
-  a stream of zeroes is the accurate leg rewriting the whole track ~50×/s
-  instead of splicing at the edge it has reached. The mouth looks right, which
-  is why it survived this long; it is still either a real defect in the
-  streaming leg or a `from_ms` that means less than the docs say it does.
+- **A boundary the library reads from pipecat has two spellings, and reading
+  only one was a real defect.** A 3.4 s utterance put ~171 `cues` chunks on the
+  wire, every one `from_ms: 0` — the accurate leg republishing the whole turn
+  ~50×/s instead of splicing at the current sentence. The cause was not the
+  splice logic: `AvatarProcessor` counted a sentence complete only from
+  `AggregatedTextProgressFrame`, which pipecat emits from the *karaoke* path
+  alone. A TTS with no word timestamps — most of them, including `server/`'s —
+  says the same thing with one whole-sentence `TTSTextFrame`, and that went
+  unread, so the splice point never left zero. Fixed; the cost is quadratic in
+  the turn and the mouth looks right either way, which is why only counting the
+  wire found it (`server/test_canned.py`, the avatar seat).
 - **New avatars follow the staged process** in
   [authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md) — the
   stakeholder's reference image is the identity spec, then production

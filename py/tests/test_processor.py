@@ -36,7 +36,7 @@ from pipecat.processors.frameworks.rtvi import RTVIServerMessageFrame
 
 from voqalize_avatar import AVATAR_MESSAGE_TYPE, AvatarClaim, AvatarControlFrame, AvatarMessage, AvatarProcessor
 from voqalize_avatar.state_machine import AvatarStateMachine
-from tests.helpers import AvatarPipe, sentence, spoken, word
+from tests.helpers import AvatarPipe, said, sentence, spoken, word
 
 pytestmark = pytest.mark.asyncio
 
@@ -339,11 +339,46 @@ async def test_the_last_word_of_a_slot_is_a_boundary_and_nothing_more(
         assert engine.spoken == ["1.1"]
 
 
-async def test_a_service_with_no_word_stream_never_signals_a_boundary(
+async def test_a_service_with_no_word_stream_signals_the_boundary_in_text(
     engine: RecordingEngine,
 ) -> None:
-    """No progress frames at all. Nothing is lost — the audio was fed either
-    way — and the predicted tail keeps its estimated sentence offsets."""
+    """The other half of the boundary, and the common one.
+
+    Most TTS services have no word timestamps and emit no progress frames at
+    all. What they do emit is one whole-sentence `TTSTextFrame`, appended to the
+    audio context after `run_tts` has finished yielding — behind the samples,
+    same as the progress frame. Reading only the karaoke half leaves the splice
+    point pinned at the turn's start for the whole turn, so the accurate leg
+    republishes every sentence on every audio frame: quadratic in the turn, and
+    invisible until you count the wire (`server/test_canned.py` counts it).
+    """
+    async with AvatarPipe() as pipe:
+        await pipe.push(sentence("One.", "1.1"), sentence("Two.", "1.1"))
+        await pipe.queue(pcm(b"a", 300), said("One.", "1.1"))
+        await pipe.queue(TTSStoppedFrame(context_id="1.1"))
+        await pipe.settle()
+        assert engine.spoken == ["1.1"]
+        assert engine.closed == ["1.1"]
+
+
+async def test_a_karaoke_word_is_not_a_boundary_either(engine: RecordingEngine) -> None:
+    """The two halves must not both fire on a word-timestamp service, or every
+    word would advance the splice point past audio nobody has heard. `said` and
+    `word` differ only in `aggregated_by`, which is what pipecat stamps and what
+    the discriminator reads."""
+    async with AvatarPipe() as pipe:
+        await pipe.push(sentence("Take your time.", "1.1"))
+        await pipe.queue(pcm(b"a", 100), word("Take", "1.1"), word("your", "1.1"))
+        await pipe.settle()
+        assert engine.spoken == []
+
+
+async def test_a_service_with_no_boundary_at_all_still_speaks(
+    engine: RecordingEngine,
+) -> None:
+    """Neither signal. The audio was fed either way and the predicted tail keeps
+    its estimated sentence offsets — the turn costs more wire than it should and
+    nothing else."""
     async with AvatarPipe() as pipe:
         await pipe.push(sentence("One.", "1.1"), sentence("Two.", "1.1"))
         await pipe.queue(pcm(b"a", 300), TTSStoppedFrame(context_id="1.1"))

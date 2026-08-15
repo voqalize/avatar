@@ -39,6 +39,9 @@ from pipecat.processors.frame_processor import (
 )
 from pipecat.utils.asyncio.task_manager import TaskManager, TaskManagerParams
 
+from pipecat.processors.frameworks.rtvi.frames import RTVIServerMessageFrame
+from voqalize_avatar import AvatarProcessor
+
 from canned import CannedLines, CannedLLMService, CannedTTSService
 
 LINES = Path(__file__).parent / "lines.json"
@@ -83,7 +86,7 @@ class Capture(FrameProcessor):
 
 
 class Chain:
-    """`up ← llm → mid → tts → out`, set up the way a pipeline sets them up.
+    """`up ← llm → mid → tts → [avatar] → out`, set up the way a pipeline does.
 
     Three capture points because the three contracts under test are observed at
     three different places. `mid` sees what the LLM emits, before the TTS eats
@@ -91,25 +94,30 @@ class Chain:
     emits. `up` sees what travels back the other way — `push_error_frame` is
     upstream-only, so a downstream-only harness would report a missing clip as
     no error at all.
+
+    `avatar=True` seats a real `AvatarProcessor` where `bot.py` seats it, and
+    `out` then also captures the wire. Off by default: most of what is tested
+    here is the canned services' own frame contract, and an extra processor in
+    the chain is another thing that could be why a test failed.
     """
 
-    def __init__(self, lines: CannedLines, *, speed: float = 0) -> None:
+    def __init__(self, lines: CannedLines, *, speed: float = 0, avatar: bool = False) -> None:
         self.lines = lines
         self.up = Capture()
         self.llm = CannedLLMService(lines=lines)
         self.mid = Capture()
         self.tts = CannedTTSService(lines=lines, speed=speed)
+        self.avatar = AvatarProcessor() if avatar else None
         self.out = Capture()
 
     @property
     def _all(self) -> tuple[FrameProcessor, ...]:
-        return (self.up, self.llm, self.mid, self.tts, self.out)
+        seats = (self.up, self.llm, self.mid, self.tts, self.avatar, self.out)
+        return tuple(p for p in seats if p is not None)
 
     async def __aenter__(self) -> Chain:
-        self.up.link(self.llm)
-        self.llm.link(self.mid)
-        self.mid.link(self.tts)
-        self.tts.link(self.out)
+        for a, b in zip(self._all, self._all[1:]):
+            a.link(b)
         setup = FrameProcessorSetup(
             clock=SystemClock(),
             task_manager=_task_manager(),
@@ -342,3 +350,59 @@ async def test_pacing_hands_audio_over_gradually(lines: CannedLines) -> None:
 
     assert elapsed > spoken_ms / 8000 * 0.5, "audio arrived instantly — no pacing"
     assert elapsed < spoken_ms / 1000, "audio arrived no faster than real time"
+
+
+# --- the avatar seat --------------------------------------------------------
+
+
+async def test_the_sentence_boundary_reaches_the_avatar(lines: CannedLines) -> None:
+    """A real pipeline, not a synthetic frame — because this is the one fact the
+    library cannot check for itself.
+
+    `py/tests` drives `AvatarProcessor` with hand-built boundary frames, so it
+    proves what the processor does *given* one. Whether a stock pipecat TTS
+    actually emits one is a property of pipecat, and it depends on the service:
+    the karaoke path emits `AggregatedTextProgressFrame` per word, and everything
+    else emits a whole-sentence `TTSTextFrame` once the audio is queued. Miss the
+    second case and nothing breaks visibly — the mouth still moves — but every
+    accurate-leg rewrite splices at 0, so the wire carries the whole turn again on
+    every audio frame and grows with the square of the turn (`visemes.py`, the
+    comment above `splice_ms`). This canned TTS has no word timestamps, which is
+    exactly the case that regressed.
+    """
+    line = next(l for l in lines.lines if len(l.sentences) > 1)
+    async with Chain(lines, avatar=True) as chain:
+        await chain.llm.say(line)
+        await chain.settle()
+        # Generation finishing is not the last emission: the accurate leg's
+        # closing rewrite rides `final`, from a decode still in flight.
+        await chain.until(lambda: any(_cues(chain, final=True)))
+
+    splices = [c["from_ms"] for c in _cues(chain)]
+    assert splices, "the avatar seat emitted no cues at all"
+
+    # `max() > 0` is not the assertion, and that is the trap: the *predicted* leg
+    # splices a later sentence at an estimated offset with or without a boundary,
+    # and the closing chunk always splices at the end. Both are nonzero while the
+    # accurate leg is still rewriting from zero. What only a counted boundary can
+    # produce is a rewrite of the LAST sentence alone, which is the second-to-last
+    # chunk here — the last one is `final`.
+    assert splices[-2] > 0, (
+        f"the closing rewrite spliced at 0 over {len(splices)} emissions — the "
+        f"boundary never reached the processor, so every chunk carried the whole turn"
+    )
+    # And quantitatively, since the failure is a volume one: only the first
+    # sentence may be rewritten from zero. Measured 27 of 166 with the boundary
+    # counted, 169 of 171 without — a wide enough gap that half is a safe floor
+    # for a two-sentence line of any length.
+    assert splices.count(0) < len(splices) / 2, (
+        f"{splices.count(0)} of {len(splices)} chunks spliced at 0"
+    )
+
+
+def _cues(chain: Chain, *, final: bool | None = None) -> list[dict]:
+    return [
+        f.data
+        for f in chain.out.of(RTVIServerMessageFrame)
+        if f.data.get("cmd") == "cues" and (final is None or f.data["final"] is final)
+    ]

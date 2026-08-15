@@ -40,20 +40,23 @@ halves of the viseme pipeline on the wire, and has since our declared floor:
   accurate leg is a live decode, so a frame is worth feeding the moment it
   exists; nothing here accumulates or waits for a boundary.
 - **That sentence's audio is complete** is `AggregatedTextProgressFrame` with an
-  empty `remaining_text` — the last word of the slot. It is derived from the word
-  stream, so it is appended to the same per-context audio queue as the samples and
-  arrives strictly *behind* them, which is what makes it exact. It is pure
-  bookkeeping now: it tells the engine where a *later* sentence's predicted cues
-  start, and nothing about the audio, which was already fed.
+  empty `remaining_text` — the last word of the slot — or, from a TTS with no
+  word timestamps, the whole-sentence `TTSTextFrame` the base class appends once
+  `run_tts` has finished yielding. Either way it rides the same per-context audio
+  queue as the samples and arrives strictly *behind* them, which is what makes it
+  exact. It says nothing about the audio, which was already fed; it says where
+  the *boundary* is, and both legs need that (see `_is_sentence_completion`).
 - **The sample rate** is `TTSAudioRawFrame.sample_rate`, not
   `StartFrame.audio_out_sample_rate`. The start frame carries what the
   *transport* wants; a TTS service is free to synthesise at its own rate and let
   pipecat resample downstream, and taking the pipeline's number there put every
   cue in such a turn at the wrong time by exactly that ratio.
 
-A TTS service with no word timestamps emits no progress frames. Nothing is lost
-on the accurate leg — it never used them — and the predicted tail keeps its
-estimated sentence offsets, which is what it had before word streams existed.
+A TTS service with no sentence boundary at all — no progress frames and no
+whole-sentence text frame — still speaks and still lipsyncs. What it loses is the
+splice point: the accurate leg then rewrites from the turn's start on every audio
+frame instead of from the current sentence's, which is quadratic in the turn
+length and was the whole reason `visemes.py` splices per sentence.
 
 ## What it does not do
 
@@ -85,6 +88,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi.frames import RTVIServerMessageFrame
+from pipecat.utils.text.base_text_aggregator import AggregationType
 
 from .messages import AvatarMessage
 from .state_machine import AvatarStateMachine
@@ -105,6 +109,27 @@ def _is_sentence_announcement(frame: Frame) -> bool:
         isinstance(frame, AggregatedTextFrame)
         and not isinstance(frame, TTSTextFrame)
         and frame.will_be_spoken
+    )
+
+
+def _is_sentence_completion(frame: Frame) -> bool:
+    """The same "that sentence's audio is complete" fact, for a TTS with no word
+    timestamps — which is most of them.
+
+    Those services never emit `AggregatedTextProgressFrame`; instead the base
+    class appends one whole-sentence `TTSTextFrame` to the audio context *after*
+    `run_tts` has finished yielding, so it arrives behind the samples it
+    describes with the same guarantee the progress frame has. The two paths are
+    mutually exclusive at the source (`push_text_frames` is exactly the "no word
+    timestamps" switch), so no boundary is ever counted twice.
+
+    `aggregated_by` is the discriminator: the karaoke path stamps `WORD` on every
+    one of its frames, and a word is not a sentence.
+    """
+    return (
+        isinstance(frame, TTSTextFrame)
+        and frame.will_be_spoken
+        and str(frame.aggregated_by) != str(AggregationType.WORD)
     )
 
 
@@ -173,6 +198,8 @@ class AvatarProcessor(FrameProcessor):
                 # sentences may well have been announced already, since text runs
                 # ahead of audio.
                 await self._sentence_spoken(frame)
+        elif _is_sentence_completion(frame):
+            await self._sentence_spoken(frame)
         elif isinstance(frame, TTSStoppedFrame):
             # Generation for this context is over: the cue track will not grow
             # again. Playout has not finished (that is BotStoppedSpeaking,
@@ -258,12 +285,15 @@ class AvatarProcessor(FrameProcessor):
             self._open_ctxs.append(ctx)
         await self._engine.on_audio(ctx, frame.audio, sample_rate=frame.sample_rate)
 
-    async def _sentence_spoken(self, frame: AggregatedTextProgressFrame) -> None:
+    async def _sentence_spoken(
+        self, frame: AggregatedTextProgressFrame | TTSTextFrame
+    ) -> None:
         """The oldest un-counted sentence's audio is all behind us.
 
-        Bookkeeping only — the samples were fed as they arrived. This tells the
-        engine that the *next* sentence's predicted cues start at the measured
-        boundary rather than an estimated one.
+        The samples were fed as they arrived, so nothing about *this* sentence
+        changes. What moves is the boundary: the next sentence's predicted cues
+        start at a measured offset rather than an estimated one, and the accurate
+        leg splices its rewrites there instead of at the turn's start.
         """
         if self._engine is None:
             return
