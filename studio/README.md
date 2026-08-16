@@ -105,17 +105,35 @@ not a `createAvatar` argument — it is which voice `server/` speaks in, and it
 reaches the face only as audio ([server/README.md § Two voices](../server/README.md)).
 It is there at all because the two have to agree: a voice that contradicts the
 face is read as a mistake long before any animation defect is. It is fixed once
-a call is up, since a TTS opens its context with a voice id. When the pair
-disagrees a single line says so — and that line is **Studio's own opinion**,
-a hardcoded map in `Build.tsx`. The package holds no view about which voice
-belongs with which drawing, because holding one would be the library having an
-opinion about a TTS it deliberately has none of. It warns rather than prevents:
-hearing what a mismatch costs is a legitimate reason to be on this page.
+a call is up, since a TTS opens its context with a voice id.
+
+**The voice follows the face by default.** Pick a drawing between calls and
+Studio picks the voice with it — `peep` male, `wren` and `myna` female — by
+`POST /api/voice`, the same request the buttons make. It also aligns once when
+the server's vocabulary first arrives, because the stored voice is whatever the
+last session left and the page always opens on `peep`. That pairing is
+**Studio's own opinion**, the `READS` map in `Build.tsx`: the package holds no
+view about which voice belongs with which drawing, because holding one would be
+the library having an opinion about a TTS it deliberately has none of.
+
+It is a default and not a lock. Choose a voice yourself and it stands, and the
+one-line mismatch note appears under the buttons — so that line now means *you
+meant this*, rather than *Studio has a suggestion*. Hearing what a mismatch
+costs is a legitimate reason to be on this page. The other way to reach it is to
+change the face mid-call, when the voice cannot follow: `/api/voice` is answered
+only between calls, and the line says which voice the new face wanted.
 
 ## The call, on the left
 
-The **captions** are video subtitles rather than a transcript: at most two
-sentences, clamped to two lines, the previous one faded. They come from
+The **captions** are video subtitles rather than a transcript, and they are
+drawn as ones: no box, no border, no card — centred text straight on the page
+under the frame, a little larger than the chrome around it, held off the dark
+ground by a text shadow rather than by a plate. They used to sit in a filled
+rounded rectangle, which read as a chat bubble, and a chat bubble asks to be
+read back instead of watched. At most two sentences, clamped to two lines, the
+previous one nearly gone; the two-line height is reserved whether or not there
+are words in it, so nothing under the captions moves as a turn starts and ends.
+They come from
 `usePipecatConversation()` and render the kit's karaoke split — the spoken part
 of the sentence in full ink, the tail ahead of playout dimmed, the boundary
 advancing as it is said. That is a real check on the server, not a decoration:

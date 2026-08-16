@@ -52,12 +52,16 @@ pipeline = Pipeline([..., tts, AvatarProcessor(), transport.output()])`;
  * `src/face-*.js` say male, female, female — copied by hand, because Studio
  * imports `@voqalize/avatar` and never `src/`.
  *
- * It buys exactly one quiet sentence. A mismatch is worth noticing and not
- * worth preventing: the reason both controls are on this page is that you can
- * hear what a mismatched pair costs, and CLAUDE.md ranks that above every
- * animation defect.
+ * It used to buy one quiet sentence after the fact. It is now the *default*:
+ * picking a face between calls picks the voice with it (`App.tsx`), because the
+ * pairing was right almost every time and the person who has to act on a hint
+ * is the one least placed to judge it — CLAUDE.md ranks a voice/face mismatch
+ * above every animation defect, so the page should not open on one. Applying it
+ * is still not preventing it: override the voice afterwards and the sentence
+ * comes back, which is what makes hearing a mismatch a thing you can come here
+ * for.
  */
-const READS: Record<FaceName, string> = { peep: "male", wren: "female", myna: "female" };
+export const READS: Record<FaceName, string> = { peep: "male", wren: "female", myna: "female" };
 
 /**
  * The call you would write for this build, with the defaults left out.
@@ -177,7 +181,10 @@ export function Build({
 
   // Studio's own reading of the drawing against the voice on the wire — see
   // READS. Silent until the server's vocabulary has arrived and until the two
-  // actually differ.
+  // actually differ, and picking a face between calls moves the voice with it —
+  // so a difference is never something Studio just did. It is either a voice
+  // chosen deliberately against the face, or a face changed mid-call, when the
+  // voice is fixed for the duration and the line is the explanation.
   const pairs = READS[look.face];
   const wanted = voices.find((v) => v.name === pairs);
   const mismatch =
@@ -338,7 +345,9 @@ export function Build({
         <p className="note">
           Not a <code>createAvatar</code> argument — this is which voice <code>server/</code> speaks in,
           and it reaches the face only as audio. It is here anyway because the two have to agree: a voice
-          that contradicts the face is read as a mistake long before any animation defect is.
+          that contradicts the face is read as a mistake long before any animation defect is. So it{" "}
+          <b>follows the face by default</b> — pick a drawing above and this moves with it. Change it
+          yourself to hear what a mismatched pair costs.
         </p>
         <div className="choices">
           {voices.map((option) => (
@@ -362,7 +371,7 @@ export function Build({
         <p className="why">
           {live
             ? "Fixed for this call. A TTS opens its context with a voice id, so swapping mid-call would mean one sentence in each — hang up to change it."
-            : `Chosen before the call. ${voices.find((v) => v.name === voice)?.id ?? ""} — vql-speech's own ids, which is what a production call asks for.`}
+            : `Set from the face, and yours to change until you dial. ${voices.find((v) => v.name === voice)?.id ?? ""} — vql-speech's own ids, which is what a production call asks for.`}
         </p>
       </section>
     </>

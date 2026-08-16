@@ -504,17 +504,25 @@ a:hover {
 /* ─── the captions ───────────────────────────────────────────────────────── */
 
 /*
- * Subtitles, not a transcript. Two sentences at most and two lines at most,
- * held at exactly that height so the button under it never moves. A panel you
- * could scroll would invite reading the conversation; the thing worth watching
- * is the face.
+ * Subtitles, not a transcript — and not a text box either. There is no card
+ * here on purpose: a filled rounded rectangle under the frame reads as a chat
+ * bubble, and a chat bubble invites you to read the conversation instead of
+ * watching the face. So the words sit straight on the page, centred under the
+ * drawing, the way subtitles sit on a video: no background, no border, one
+ * shadow doing the work a plate would have done.
+ *
+ * Larger than everything else in this column because it is the only prose in
+ * it — but only a little, and at normal weight, because it sits directly under
+ * the avatar and the avatar is the thing being judged. Two sentences at most
+ * and two lines at most, held at exactly that height so the button under it
+ * never moves as words arrive.
  */
 .captions {
-  padding: 0.5rem 0.625rem;
-  border-radius: 0.5rem;
-  background: var(--color-muted);
-  font-size: 0.8125rem;
-  line-height: 1.45;
+  padding: 0.125rem 0.25rem;
+  text-align: center;
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  letter-spacing: 0.005em;
 }
 
 .caption-clamp {
@@ -524,20 +532,27 @@ a:hover {
   -webkit-line-clamp: 2;
   line-clamp: 2;
   overflow: hidden;
-  /* Two lines of the above, always, so an empty caption is a held space rather
-     than a jump when the first word arrives. */
-  min-height: calc(2 * 1.45em);
+  /* Two lines of the above, always, so a caption arriving, ending or being
+     replaced is a change of words and never a change of height. */
+  min-height: calc(2 * 1.4em);
   text-wrap: pretty;
 }
 
 .cap {
   color: var(--color-foreground);
+  /* What a subtitle has instead of a box. Two shadows, both soft: the tight one
+     keeps the stems legible where the letterform is thin, the wide one lifts
+     the line off the ground so it does not need a plate behind it. */
+  text-shadow:
+    0 1px 1px rgb(0 0 0 / 55%),
+    0 0 12px rgb(0 0 0 / 40%);
   transition: opacity 400ms ease;
 }
 
-/* The sentence before this one, on its way out. */
+/* The sentence before this one, on its way out — nearly gone. It is context for
+   half a second, not something to read back. */
 .cap-past {
-  opacity: 0.4;
+  opacity: 0.22;
 }
 
 /* Written but not yet spoken — the TTS has not reached it, so the mouth should

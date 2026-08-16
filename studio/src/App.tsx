@@ -26,12 +26,12 @@
  * screen of controls.
  */
 
-import { useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { PipecatClientAudio, PipecatClientProvider, usePipecatClientTransportState } from "@pipecat-ai/client-react";
 import { useCall, type Call } from "./call";
 import { useCorpus } from "./corpus";
-import { DEFAULT_LOOK, type Look } from "./look";
-import { Build, BuildSummary } from "./Build";
+import { DEFAULT_LOOK, type FaceName, type Look } from "./look";
+import { Build, BuildSummary, READS } from "./Build";
 import { Drive } from "./Drive";
 import { DEFAULT_SIZE, Stage, type Size } from "./Stage";
 
@@ -77,6 +77,49 @@ function Studio({ call }: { call: Call }) {
   const voice = corpus?.voice ?? "";
   const voiceLabel = voices.find((v) => v.name === voice)?.label ?? voice;
 
+  /**
+   * The voice follows the face — Studio's opinion (`READS`), applied.
+   *
+   * A face and a voice that contradict each other is the first thing anyone
+   * notices, before a single nod is judged (CLAUDE.md), so the pair the page is
+   * sitting on should be right without anybody acting on a hint. It is a
+   * default and not a lock: the voice buttons still take a click, and the line
+   * in the Voice band comes back when the pair is made to disagree on purpose.
+   *
+   * Nothing happens mid-call, and that is `server/`'s rule rather than a
+   * caution — a TTS opens its context with a voice id, so `/api/voice` is
+   * answered only between calls. Change the face during one and the pair
+   * legitimately disagrees until you hang up.
+   */
+  const pairVoice = useCallback(
+    (face: FaceName) => {
+      const want = READS[face];
+      if (live || !corpus || corpus.voice === want) return;
+      // The server owns the vocabulary; a voice this build has never heard of
+      // is not something to POST at it.
+      if (!corpus.voices.some((v) => v.name === want)) return;
+      void chooseVoice(want);
+    },
+    [live, corpus, chooseVoice],
+  );
+
+  // Once, when the server's vocabulary lands. The stored voice is whatever the
+  // last session left behind and the page always opens on `peep`, so the two
+  // can disagree before anything has been touched. After this the newest fact
+  // is the user's own choice, and re-aligning would be overruling it.
+  const aligned = useRef(false);
+  useEffect(() => {
+    if (!corpus || aligned.current) return;
+    aligned.current = true;
+    pairVoice(look.face);
+  }, [corpus, look.face, pairVoice]);
+
+  // A face change is also a voice change; every other option is only itself.
+  const chooseLook = (next: Look) => {
+    if (next.face !== look.face) pairVoice(next.face);
+    setLook(next);
+  };
+
   return (
     <div className="studio">
       <Header live={live} />
@@ -107,7 +150,7 @@ function Studio({ call }: { call: Call }) {
           ) : (
             <Build
               look={look}
-              onLook={setLook}
+              onLook={chooseLook}
               voices={voices}
               voice={voice}
               onVoice={(name) => void chooseVoice(name)}
@@ -149,7 +192,7 @@ function Header({ live }: { live: boolean }) {
       <ol className="steps">
         {(
           [
-            ["Build", "Pick the face and the voice. These are arguments to createAvatar; the snippet on the right is your call."],
+            ["Build", "Pick the face — the voice follows it, and you can change that too. These are arguments to createAvatar; the snippet on the right is your call."],
             ["Connect", "Dial the local pipecat server and talk. Turn-taking is voice activity — it answers when you stop — so this needs a microphone. No credential, no API key."],
             ["Drive", "Make the server claim a state, send a gesture, or send something wrong. The face never invents any of it."],
           ] as const
