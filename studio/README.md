@@ -33,11 +33,16 @@ Two consequences that read as limitations and are not:
 - **There are no setters.** Every option is a remount, because the public
   surface is `createAvatar(options) -> { destroy() }` and has nothing else on
   it ([design-avatar-interface.md](../docs/design-avatar-interface.md)).
-- **There is no state readout.** `createAvatar` returns no resolved state,
-  deliberately, so an integration cannot come to depend on one. The status line
-  under the frame reads the *transport* — who is speaking, which is a pipecat
-  fact — never the avatar. What the face decided is a thing you judge by
-  looking at the face.
+- **Nothing here asks the avatar anything.** `createAvatar` returns no resolved
+  state, deliberately, so an integration cannot come to depend on one. The
+  status line under the frame names a state, but it worked that state out
+  itself, from the same events and the same `serverMessage` traffic the face
+  reads — `studio/src/presence.ts`, written from
+  [contract-wire.md](../docs/contract-wire.md) and
+  [pipecat-lifecycle-protocol.md § Authority model](../docs/pipecat-lifecycle-protocol.md)
+  rather than from `AvatarClient`. That is what makes it worth having: it is a
+  second, independent reading of the call, and when the word and the drawing
+  disagree, the disagreement is the finding.
 
 Studio also does not compose wire messages. Every control that drives the avatar
 is an HTTP request to `server/`, which then sends the message — a page that could
@@ -53,7 +58,7 @@ because that is when the interesting question changes:
 | when | the panel | what it validates |
 |---|---|---|
 | disconnected | **Your createAvatar call** — face, the three gains, the hand and its side, and the voice | the option surface of `createAvatar`, which is yours to decide and nobody else's. Every control rewrites a live snippet of the call you would paste, and at the defaults it writes `createAvatar({ mount, client })` and nothing more — which is the argument for the library in one screen |
-| in a call | **Drive the server** — pre-speech beats, interjections, misbehaviours | [contract-wire.md](../docs/contract-wire.md), from the sending end. The beats arm the next turn (`THINKING`, then `WORKING`, then speech); the interjections are one-shot `action`s; the misbehaviours are the ones the face is supposed to refuse — a claim that contradicts playout, an action storm, a claim that arrives too late |
+| in a call | **Drive the server** — the quiet between turns, interjections, misbehaviours | [contract-wire.md](../docs/contract-wire.md), from the sending end. The beats make the server take as long as a real one would and announce nothing, so `THINKING` and `WORKING` are *inferred* from ordinary frames; hold thinking past the reply grace and it becomes `STRAINING`. The interjections are one-shot `action`s. The mute toggle is the one control that puts nothing on the avatar wire at all. The misbehaviours are what the face is supposed to refuse — a claim that contradicts playout, an action storm, a claim that arrives too late |
 
 Mode is read from the transport, once, in one place — `usePipecatClientTransportState()`
 — so the button, the panel and every disabled control cannot disagree about
@@ -91,11 +96,19 @@ The one rule worth knowing is written in `Captions.tsx` — an empty spoken half
 means *no karaoke on this TTS*, not *nothing said yet*, and reading it the other
 way dims every caption a timestamp-free vendor produces.
 
-The **status** under the frame — Talking, Listening, Idle — is derived from
-`RTVIEvent` speaking events and the transport state, not from the avatar. The
-meter over the frame is the kit's `VoiceVisualizer` on the bot track; the mic
-control under the button is its `UserAudioControl`, which is the device picker
-and your own level in one thing, usable before you dial.
+The **status** under the frame is the library's own state name — `SPEAKING`,
+`LISTENING`, `STRAINING`, `THINKING`, `WORKING`, `MUTED`, `IDLE` — rather than a
+friendlier synonym, so the word on screen is the word you can grep for. Most of
+them describe the stretch where nobody is making a sound, which is the stretch
+worth watching: it used to read `Idle` throughout, and `Idle` is almost always
+the wrong answer there
+([pipecat-lifecycle-protocol.md § The silence problem](../docs/pipecat-lifecycle-protocol.md)).
+`OFFLINE` and `DEGRADED` never appear — before a call the transport says where
+it has got to, in its own words, next to the button that acts on it.
+
+The meter over the frame is the kit's `VoiceVisualizer` on the bot track; the
+mic control under the button is its `UserAudioControl`, which is the device
+picker and your own level in one thing, usable before you dial.
 
 The chrome comes from [`@pipecat-ai/voice-ui-kit`](https://github.com/pipecat-ai/voice-ui-kit)
 — the same components a pipecat developer already has. Studio's own layout is

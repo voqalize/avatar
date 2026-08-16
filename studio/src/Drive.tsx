@@ -64,6 +64,10 @@ export function Drive({
 }) {
   const [think, setThink] = useState<Beat>({ on: true, ms: 700 });
   const [work, setWork] = useState<Beat>({ on: false, ms: FALLBACK_MS });
+  // Optimistic, and it has to be: the mute lives in the pipeline, and a call
+  // that ended took it with it. Reset on hang-up rather than remembered, so the
+  // button never offers to unmute a microphone nobody is holding.
+  const [muted, setMuted] = useState(false);
   // One hint line per band rather than one for the panel: the sentence has to
   // sit next to the buttons it describes, or you are reading an explanation of
   // something two sections away.
@@ -72,6 +76,10 @@ export function Drive({
 
   // The server's own defaults, once they arrive, so the panel opens agreeing
   // with the call it is about to drive rather than guessing at it.
+  useEffect(() => {
+    if (!live) setMuted(false);
+  }, [live]);
+
   const beats = corpus?.beats;
   useEffect(() => {
     if (!beats) return;
@@ -133,12 +141,13 @@ export function Drive({
     <>
       <section className="band">
         <header className="band-head">
-          <h2>Before it speaks</h2>
+          <h2>While nobody is talking</h2>
         </header>
         <p className="note">
-          A real agent takes a moment to think, and longer if it runs a tool. Switch these on and the
-          server holds each state in turn, clears them, and only then starts talking — so the face has
-          something to do during the pause instead of sitting in the listening pose.
+          The hard part of the call. A real agent takes a moment to think, longer if it runs a tool,
+          and a face that goes blank through it reads as disconnected rather than busy. Switch these
+          on and the server takes as long as a real one would — it announces nothing, so what the
+          face does in the gap is inferred from the same frames any pipeline emits.
         </p>
 
         {(
@@ -183,8 +192,33 @@ export function Drive({
         </div>
         <p className="why">
           One turn, to scale. Talk to it and watch — turn-taking is voice activity, so it takes its turn
-          when you stop.
+          when you stop. Drag thinking past the library's reply grace and it stops waiting: the claim
+          turns to <code>STRAINING</code> and the face leans in to hear you better.
         </p>
+
+        {/* The one control on this page that sends no avatar command. Mute is a
+            pipecat fact with its own frames, so the face learns about it from
+            the browser client rather than from anything the library says — and
+            the way to prove that is to have the server say nothing. */}
+        <div className="beat">
+          <Button
+            size="sm"
+            variant={muted ? "active" : "outline"}
+            aria-pressed={muted}
+            disabled={!live}
+            onClick={() => {
+              setMuted(!muted);
+              void post("/api/mute", { on: !muted });
+            }}
+          >
+            Mute the user
+          </Button>
+          <small>
+            Closes your microphone from the agent's side, the way a mute strategy does — pipecat's own
+            frames, read off the client, nothing on the avatar wire. This pipeline has no aggregator to
+            suppress with, so it announces the mute without enforcing it: stay quiet to read the pose.
+          </small>
+        </div>
       </section>
 
       <section className="band">

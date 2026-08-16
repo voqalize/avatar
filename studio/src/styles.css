@@ -327,10 +327,25 @@ code {
   color: var(--color-inactive);
 }
 
+/* The stretch where nobody is making a sound but something is happening —
+   straining, thinking, working. Deliberately quieter than the two floor
+   colours: it is the *absence* of speech being accounted for, and a third
+   saturated colour would make the strip compete with the face above it. */
+.doing-waiting {
+  color: color-mix(in oklch, var(--color-agent) 55%, var(--color-muted-foreground));
+}
+
 .doing-listening .doing-dot,
 .doing-talking .doing-dot {
   opacity: 1;
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* Slower than the speech pulse, and that is the read: something is running, and
+   it is not audible. */
+.doing-waiting .doing-dot {
+  opacity: 1;
+  animation: pulse 2.6s ease-in-out infinite;
 }
 
 @keyframes pulse {

@@ -21,14 +21,13 @@
  * of a meter next to a picker that might be about a different device.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { PipecatClient } from "@pipecat-ai/client-js";
-import { RTVIEvent } from "@pipecat-ai/client-js";
-import { useRTVIClientEvent } from "@pipecat-ai/client-react";
 import { ConnectButton, UserAudioControl, VoiceVisualizer } from "@pipecat-ai/voice-ui-kit";
 import { createAvatar } from "@voqalize/avatar";
 import { Captions } from "./Captions";
 import { faceValue, type Look } from "./look";
+import { usePresence, type Presence } from "./presence";
 
 export function Stage({
   client,
@@ -110,45 +109,55 @@ function Frame({ client, look }: { client: PipecatClient; look: Look }) {
 }
 
 /**
- * What the avatar is doing, in the words the library uses for it.
+ * What the avatar is doing, in the library's own names for it.
  *
- * Derived from transport state and the two speaking events, because there is no
- * "what is the avatar doing" to read: the face is downstream of the same events
- * and holds no state a caller may query — `createAvatar` returns `{ destroy }`.
- * So this is a second, independent reading of the call rather than a report from
- * the avatar, and when the two disagree the disagreement is the finding.
+ * The state is resolved by `usePresence`, which reads the same events and the
+ * same wire the face does rather than asking it anything — there is nothing to
+ * ask, `createAvatar` returns `{ destroy }`. So this is a second, independent
+ * reading of the call, and when it and the drawing disagree the disagreement is
+ * the finding.
+ *
+ * The word shown is the state name off the wire, not a friendlier synonym.
+ * `THINKING` is greppable in this repo and in a consumer's logs; "Pondering"
+ * would be one more spelling of a vocabulary CLAUDE.md keeps exactly one copy
+ * of. Before the call there is no state to name, so the transport says where it
+ * has got to, in its own words.
  */
 function Doing({ live, transport }: { live: boolean; transport: string }) {
-  const [botSpeaking, setBotSpeaking] = useState(false);
-  const [userSpeaking, setUserSpeaking] = useState(false);
+  const presence = usePresence(live);
 
-  useRTVIClientEvent(RTVIEvent.BotStartedSpeaking, useCallback(() => setBotSpeaking(true), []));
-  useRTVIClientEvent(RTVIEvent.BotStoppedSpeaking, useCallback(() => setBotSpeaking(false), []));
-  useRTVIClientEvent(RTVIEvent.UserStartedSpeaking, useCallback(() => setUserSpeaking(true), []));
-  useRTVIClientEvent(RTVIEvent.UserStoppedSpeaking, useCallback(() => setUserSpeaking(false), []));
-
-  useEffect(() => {
-    if (!live) {
-      setBotSpeaking(false);
-      setUserSpeaking(false);
-    }
-  }, [live]);
-
-  const [tone, label] =
-    !live
-      ? transport === "disconnected" || transport === "initialized"
-        ? (["idle", "Idle"] as const)
-        : ([transport === "error" ? "error" : "busy", transport] as const)
-      : botSpeaking
-        ? (["talking", "Talking"] as const)
-        : userSpeaking
-          ? (["listening", "Listening"] as const)
-          : (["idle", "Idle"] as const);
+  if (presence === null) {
+    const settled = transport === "disconnected" || transport === "initialized";
+    const tone = settled ? "idle" : transport === "error" ? "error" : "busy";
+    return (
+      <p className={`doing doing-${tone}`}>
+        <span className="doing-dot" aria-hidden="true" />
+        {settled ? "Not connected" : transport}
+      </p>
+    );
+  }
 
   return (
-    <p className={`doing doing-${tone}`}>
+    <p className={`doing doing-${TONES[presence]}`}>
       <span className="doing-dot" aria-hidden="true" />
-      {label}
+      {presence}
     </p>
   );
 }
+
+/**
+ * Colour is the whole signal at this size, so it carries the distinction that
+ * matters rather than one per name: who has the floor (the kit's two semantic
+ * colours), versus the run of states where nobody does. The three claims share
+ * one tone deliberately — telling `THINKING` from `WORKING` is what the word is
+ * for, and giving each its own colour would make the strip a legend to learn.
+ */
+const TONES: Record<Presence, string> = {
+  SPEAKING: "talking",
+  LISTENING: "listening",
+  STRAINING: "waiting",
+  THINKING: "waiting",
+  WORKING: "waiting",
+  MUTED: "error",
+  IDLE: "idle",
+};
