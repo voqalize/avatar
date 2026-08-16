@@ -12,17 +12,61 @@ No video track, no per-minute avatar vendor, no second media path. Three SVG
 faces ship with it — one drawing per entry point, so you pay for the one you
 import — and you can author your own.
 
-`createAvatar({ mount, client }) -> { destroy() }` is the entire public
-interface: the avatar is an embodiment of your `PipecatClient` and reacts to it.
-To ship a different one — a Rive rig, a WebGL head, anything — publish a module
-that exports `createAvatar` and import yours instead of ours. There is no
-registry and no plug-in system, and that is the design:
-[design-avatar-interface.md](docs/design-avatar-interface.md).
+<p>
+  <img src="docs/assets/readme-peep-speaking.png" alt="peep, mid-utterance" width="180">
+  <img src="docs/assets/readme-wren-listening.png" alt="wren, listening" width="180">
+  <img src="docs/assets/readme-myna-thinking.png" alt="myna, thinking" width="180">
+</p>
+
+`peep` speaking, `wren` listening, `myna` thinking — rendered from this repo by
+`authoring/tools/shot.mjs`, at roughly the size they ship at. They move, and a
+still frame is the one thing this README cannot show you; a call with
+[`server/`](server/README.md) takes about a minute and needs no API key. A
+hosted demo is planned and does not exist yet.
+
+**Licence: AGPL-3.0-only.** Use, modify and self-host freely; a modified version
+offered to users over a network has to offer them its source too, and embedding
+the widget in a closed-source product is not what this licence permits. The
+full position, and what to do if you need something else, is under
+[License](#license).
+
+## Works with
+
+| | |
+|---|---|
+| pipecat, pipeline side | `pipecat-ai>=1.4,<2`. Base pipecat only — no transport, STT or TTS extras, because this package sits in somebody else's pipeline. The suite runs at the floor as well as at the resolved version ([py/README.md § Compatibility](py/README.md)). |
+| Python | 3.12+ |
+| pipecat, browser side | `@pipecat-ai/client-js` at `>=1.4 <2`, declared an **optional** peer: the package imports its types only, so nothing fails to load without it. React `>=18` is likewise optional, and only for `@voqalize/avatar/react`. |
+| Node | 20+. The browser half is ESM with no runtime dependencies and ships its own types. |
+| transports | Any. Nothing in either package names a transport: the three commands ride the RTVI data channel your client already has, and no video track is added or asked for. The two surfaces in this repo run on `SmallWebRTCTransport`. |
+| lipsync wheels | Linux x86-64 and aarch64 (manylinux — RHEL 8+, Debian 10+, Ubuntu 18.04+) and macOS arm64 (macOS 11+). No Intel macOS, for an upstream reason: pipecat requires `onnxruntime`, which publishes no macOS x86-64 wheel, so nothing depending on pipecat installs there at all. |
+
+The wheel is ~44 MB because it carries the aligner and its acoustic model; the
+platform tag is derived from the compiled binary rather than declared, and
+`.github/workflows/wheels.yml` is the canonical list
+([py/README.md § Mouth shapes](py/README.md)).
+
+**Everywhere else installs the sdist, which carries no binary, and that is an
+ordinary condition rather than a failure.** `AvatarProcessor` catches, logs
+once, and runs the session state-channel only. The degradation is bounded and it
+is exactly one thing: the face still listens, thinks, claims the floor and
+yields it; its mouth does not move while it speaks. There is no client-side
+lipsync to fall back on.
+
+## Install
 
 ```sh
 npm install @voqalize/avatar      # the browser half
 pip install voqalize-avatar       # the pipecat half
 ```
+
+They are the two ends of one wire format and publish in lockstep from one tag,
+because a version pair that can drift is a protocol mismatch waiting to be
+debugged in production ([RELEASING.md](RELEASING.md)).
+
+## Getting started
+
+In the browser, wherever your app already renders the bot's tile:
 
 ```js
 import { createAvatar } from '@voqalize/avatar';
@@ -37,6 +81,9 @@ import { wren } from '@voqalize/avatar/faces/wren';   // `peep` is the default
 <Avatar client={pipecatClient} options={{ face: wren }} className="call-tile" />
 ```
 
+In the pipeline, between the TTS service and the transport's output — the seat
+where it can see the audio that is about to be spoken, at generation speed:
+
 ```python
 from voqalize_avatar import AvatarProcessor
 
@@ -46,33 +93,65 @@ pipeline = Pipeline([..., tts, AvatarProcessor(), transport.output()])
 That is the integration, both halves of it. Neither takes an argument: the
 processor infers what the agent is doing from frames already flowing past it,
 `StartFrame` supplies the sample rate, and the aligner rides inside the wheel.
+`createAvatar` returns `{ destroy() }` and nothing else — the avatar is an
+embodiment of your `PipecatClient` and reacts to it, so there is no avatar to
+drive and no state to read back
+([design-avatar-interface.md](docs/design-avatar-interface.md)).
 
-## The map
+One optional line: forwarding your RTVI processor's `on_client_ready` event to
+`avatar.on_client_ready()` re-announces the current state once the browser's
+data channel exists. Skipping it costs the widget its opening pose, nothing
+more — [`server/bot.py`](server/bot.py) does it in three lines.
 
-Two of these are contracts — a format someone outside this repo implements or
-depends on. The rest are our own internals, and are named so.
+### Seeing it move
 
-| layer | owns | code | reference |
-|---|---|---|---|
-| **wire** | `claim` / `action` / `cues`, nothing else | `client/src/AvatarClient.ts` | **[contract-wire.md](docs/contract-wire.md)** |
-| **avatar** | `createAvatar({mount, client})`, the only public seam | `client/src/createAvatar.ts` | **[design-avatar-interface.md](docs/design-avatar-interface.md)** |
-| lifecycle | effective-state precedence, cue-clock anchor | `client/src/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
-| behavior | states, actions | `src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
-| backend | state inference from stock pipecat frames, the viseme legs | [`py/`](py/README.md) | [`py/README.md`](py/README.md) |
-| aligner | A–H+X letters from text *and* from audio | [`native/avatarsync/`](native/avatarsync/README.md) | its own README |
-| mixer | layer order, per-channel smoothing, gaze, idle, clips | `src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
-| rig | `apply({pose, hand})` / `destroy()`, our SVG renderer's internals | `src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
-| SVG faces | the drawings | `src/face-*.js` | [authoring-a-face.md](docs/authoring-a-face.md) |
+`server/` is one pipecat process with canned LLM and TTS services behind the
+real pipecat interfaces, so the frames the avatar reads are the frames a
+production pipeline produces. No API key, no account, no model download
+([server/README.md](server/README.md)):
 
-The two bold rows are the contracts, and only they carry a semver promise.
-Everything below them is named `internal-*` for the same reason it ships under
-`@voqalize/avatar/internal`: a future renderer must not plug into the wrong
-seam, and one already did ([removed.md § The Rive proof](docs/removed.md)).
+```sh
+pnpm install && pnpm -w run build && pnpm -w run server:vendor
+cd py && uv run --group server python ../server/server.py
+open http://localhost:7860/          # click Start call; the bot speaks first
+```
 
-Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
-Why a library rather than a product, and what each published artifact owns:
-the same document. What 0.2 and 0.3 cut from the public surface, and how to get
-any of it back: [removed.md](docs/removed.md).
+**Avatar Studio** is the IDE for `createAvatar`, pointed at that same server. One
+screen, and the connection picks the mode. Disconnected, it drives the published
+option surface — face, the three gains, the hand and its side — and writes the
+`createAvatar` call you would paste as you change them; at the defaults that is
+one line. In a call, that panel gives way to what the *server* can do to the
+face: the pre-speech beats, the interjections, and the misbehaviours it sends on
+purpose.
+
+```sh
+pnpm -w run studio:dev               # with server/ running in another terminal
+open http://127.0.0.1:4173/
+```
+
+Studio imports `@voqalize/avatar` and nothing else from this repo — no `src/`,
+no `/internal` — so a thing it cannot do is a thing a consumer cannot do:
+[studio/README.md](studio/README.md).
+
+## What you get for free
+
+Without any customization, most of the avatar works on any pipecat application
+— not because integrations were enumerated, but because the behaviour is
+derived from frames and events a pipecat pipeline already emits. `SPEAKING`,
+`LISTENING`, `MUTED`, `OFFLINE` and `DEGRADED` come from your `PipecatClient`
+with no backend involvement at all; `THINKING`, `WORKING` and `STRAINING` come
+from `AvatarProcessor` watching turn boundaries, LLM response boundaries and
+function-call frames; lipsync comes from the same karaoke frames pipecat already
+pushes for word-level captions; blink, breath, gaze aversion and idle motion are
+always the renderer's.
+
+What is left over is small, specific, and each item is a case the library
+refuses to guess at — a deliberate nod or greeting, a tool whose calls never
+enter your pipeline, a pose richer than the nine states, a backend that is not
+ours. **[docs/architecture.md](docs/architecture.md) is the canonical page for
+all of this**: how the pieces relate, the five principles they rest on, and the
+free/costs-a-line table in full. Read it before deciding whether this fits your
+pipeline.
 
 ## TTS to visemes
 
@@ -150,17 +229,41 @@ Precedence table: [contract-behavior.md § Effective-state precedence](docs/cont
 What the client reads straight off pipecat, and what it deliberately refuses to
 infer: [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md).
 
-## The frontend contract
+## The faces
 
-There is one, and it is small: `createAvatar({ mount, client }) -> { destroy() }`
-([design-avatar-interface.md](docs/design-avatar-interface.md)). An avatar is an
-embodiment of your `PipecatClient` and reacts to it. No methods to drive it, no
-callbacks to observe it, no state to read back.
+Three ship today, all hand-authored line art in `src/face-*.js`: **`peep`** (the
+default and the one under active work), **`wren`**, **`myna`**. Each is its own
+entry point, and you pass the value rather than a name:
 
-What an avatar author actually needs to understand is therefore the *wire* —
+```js
+import { myna } from '@voqalize/avatar/faces/myna';
+
+createAvatar({ mount, client, face: myna });
+```
+
+A name would need a table, and a table is a dynamic index no bundler can shake
+— three drawings in every consumer's bundle to render one. `src/faces.js` still
+has that table, for tooling that genuinely wants all of them.
+
+Authoring a face of your own is a staged process that starts from a reference
+image rather than a text brief:
+[authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md).
+
+## Shipping your own avatar
+
+A whole different rendering technology is not a face; it is a different
+`createAvatar`, published as its own module — that is the design, and why there
+is no registry ([design-avatar-interface.md](docs/design-avatar-interface.md)).
+The interface is small enough to state in one line:
+
+```ts
+createAvatar({ mount, client, ...yourOptions }) -> { destroy() }
+```
+
+What such an implementation actually needs to understand is the *wire* —
 [contract-wire.md](docs/contract-wire.md) and
 [contract-behavior.md](docs/contract-behavior.md) — because states, actions and
-cues are all the avatar is ever told. `VisemeTrack` in
+cues are all an avatar is ever told. `VisemeTrack` in
 `@voqalize/avatar/internal` turns a cue array plus a clock into the mouth shape
 for the current frame; every renderer needs that and none should write it twice.
 
@@ -172,10 +275,64 @@ the wire had already stated plainly ([removed.md](docs/removed.md)).
 Designing a second public contract stays premature until a second renderer says
 what it needs.
 
+---
+
+The rest of this page is about working on the library rather than using it.
+
+## Working on the library
+
+Two of these layers are contracts — a format someone outside this repo
+implements or depends on. The rest are our own internals, and are named so.
+
+| layer | owns | code | reference |
+|---|---|---|---|
+| **wire** | `claim` / `action` / `cues`, nothing else | `client/src/AvatarClient.ts` | **[contract-wire.md](docs/contract-wire.md)** |
+| **avatar** | `createAvatar({mount, client})`, the only public seam | `client/src/createAvatar.ts` | **[design-avatar-interface.md](docs/design-avatar-interface.md)** |
+| lifecycle | effective-state precedence, cue-clock anchor | `client/src/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
+| behavior | states, actions | `src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
+| backend | state inference from stock pipecat frames, the viseme legs | [`py/`](py/README.md) | [`py/README.md`](py/README.md) |
+| aligner | A–H+X letters from text *and* from audio | [`native/avatarsync/`](native/avatarsync/README.md) | its own README |
+| mixer | layer order, per-channel smoothing, gaze, idle, clips | `src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
+| rig | `apply({pose, hand})` / `destroy()`, our SVG renderer's internals | `src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
+| SVG faces | the drawings | `src/face-*.js` | [authoring-a-face.md](docs/authoring-a-face.md) |
+
+The two bold rows are the contracts, and only they carry a semver promise.
+Everything below them is named `internal-*` for the same reason it ships under
+`@voqalize/avatar/internal`: a future renderer must not plug into the wrong
+seam, and one already did ([removed.md § The Rive proof](docs/removed.md)).
+
+Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
+Why a library rather than a product, and what each published artifact owns:
+the same document. What 0.2 and 0.3 cut from the public surface, and how to get
+any of it back: [removed.md](docs/removed.md).
+
+Drawing or repairing an avatar happens somewhere else again — `authoring/` is
+the workshop, no build step, served by `python3 authoring/serve.py 8777`
+([authoring/README.md](authoring/README.md)). The hero images above came out of
+its headless tooling.
+
+### Verifying
+
+```sh
+pnpm test                 # client, package boundary, and the rig conformance sweep
+cd py && uv run pytest    # backend, against the real avatarsync library
+```
+
+Headless render, screenshot and pixel-diff tooling — including a real
+"prove this refactor changed nothing on screen" workflow —
+is in [authoring/tools/README.md](authoring/tools/README.md).
+
+The conformance sweep passing is not evidence a change looks good: it catches
+dead avatars, NaN leaks and detached SVGs, and nothing else. Every defect this
+project has found was found by looking at a rendered page.
+
+Releasing both packages from one tag: [RELEASING.md](RELEASING.md).
+
 ## Design
 
-Four decisions the rest of the system rests on. Each one is short because the
-code is the reference.
+Four decisions the SVG renderer rests on. Each one is short because the code is
+the reference; the system-level principles are
+[docs/architecture.md](docs/architecture.md) instead.
 
 **The face is a vector, not a set of drawings.** Everything the avatar can do is
 a point in a ~30-dimensional parameter space ([`src/params.js`](src/params.js));
@@ -208,86 +365,6 @@ encoder real bitrate for no communicative gain, and deliberate stillness is
 itself a cue. Where the constants come from:
 [research-biomechanics.md](docs/research-biomechanics.md) (how it moves) and
 [research-perception.md](docs/research-perception.md) (how it is read).
-
-## The faces
-
-Three ship today, all hand-authored line art in `src/face-*.js`: **`peep`** (the
-default and the one under active work), **`wren`**, **`myna`**. Each is its own
-entry point, and you pass the value rather than a name:
-
-```js
-import { myna } from '@voqalize/avatar/faces/myna';
-
-createAvatar({ mount, client, face: myna });
-```
-
-A name would need a table, and a table is a dynamic index no bundler can shake
-— three drawings in every consumer's bundle to render one. `src/faces.js` still
-has that table, for tooling that genuinely wants all of them.
-
-A whole different rendering technology is not a face; it is a different
-`createAvatar`, published as its own module — that is the design, and why there
-is no registry ([design-avatar-interface.md](docs/design-avatar-interface.md)).
-
-Authoring a face is a staged process that starts from a reference image rather
-than a text brief:
-[authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md).
-
-## Trying it
-
-Three surfaces, none of which wants an API key, and each answers one question.
-*Does it work in a real call?* — `server/`. *Is the published interface
-enough?* — `studio/`. *Does the drawing read?* — `authoring/`.
-
-`server/` is one pipecat process
-with canned LLM and TTS services behind the real pipecat interfaces, so the
-frames the avatar reads are the frames a production pipeline produces
-([server/README.md](server/README.md)):
-
-```sh
-pnpm install          # one workspace: the package, the IDE and the rig tooling
-cd py && uv run --group server python ../server/server.py
-open http://localhost:7860/          # the 30-second look — a real call, no build step
-```
-
-**Avatar Studio** is the IDE for `createAvatar`, pointed at that same server. One
-screen, and the connection picks the mode. Disconnected, it drives the published
-option surface — face, the three gains, the hand and its side — and writes the
-`createAvatar` call you would paste as you change them; at the defaults that is
-one line. In a call, that panel gives way to what the *server* can do to the
-face: the pre-speech beats, the interjections, and the misbehaviours it sends on
-purpose. The avatar keeps the left of the screen throughout, at the size it
-ships at, with the sentence it is saying captioned under it.
-
-```sh
-pnpm -w run studio:dev               # with server/ running in another terminal
-open http://127.0.0.1:4173/
-```
-
-Studio imports `@voqalize/avatar` and nothing else from this repo — no `src/`,
-no `/internal` — so a thing it cannot do is a thing a consumer cannot do:
-[studio/README.md](studio/README.md).
-
-Drawing or repairing an avatar happens somewhere else again — `authoring/` is
-the workshop, no build step, served by `python3 authoring/serve.py 8777`
-([authoring/README.md](authoring/README.md)).
-
-## Verifying
-
-```sh
-pnpm test                 # client, package boundary, and the rig conformance sweep
-cd py && uv run pytest    # backend, against the real avatarsync library
-```
-
-Headless render, screenshot and pixel-diff tooling — including a real
-"prove this refactor changed nothing on screen" workflow —
-is in [authoring/tools/README.md](authoring/tools/README.md).
-
-The conformance sweep passing is not evidence a change looks good: it catches
-dead avatars, NaN leaks and detached SVGs, and nothing else. Every defect this
-project has found was found by looking at a rendered page.
-
-Releasing both packages from one tag: [RELEASING.md](RELEASING.md).
 
 ## License
 
