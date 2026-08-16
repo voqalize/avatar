@@ -121,16 +121,18 @@ gets, and what a platform outside the wheel matrix gets. The degradation is
 bounded and it is exactly one thing: the face still listens, thinks, claims the
 floor and yields it; its mouth does not move while it speaks.
 
-### 3. Distribution: public registries, restrictive licence
+### 3. Distribution: public registries, permissive licence
 
-The repo is **public at `voqalize/avatar` under AGPL-3.0-only**, and both
-halves publish to public registries: `@voqalize/avatar` on npm,
-`voqalize-avatar` on PyPI. The licence is the restrictive end of open source
-deliberately — self-hosting and modification are free, offering a modified
-version over a network is not — and it is a starting position, not a final one.
-Voqalize holds all the copyright, so relicensing permissively later is a
-decision rather than a project; the reverse is not true, which is why the
-restrictive end is the safe place to start.
+The repo is **public at `voqalize/avatar` under MIT**, and both halves publish
+to public registries: `@voqalize/avatar` on npm, `voqalize-avatar` on PyPI.
+
+It opened at AGPL-3.0-only, on the reasoning that Voqalize holds all the
+copyright and so relicensing permissively later would be a decision rather than
+a project, while the reverse would not. That is what happened. Worth keeping the
+asymmetry in view now that it has been spent: **the move was one-way.** A
+version already published under MIT stays MIT for whoever fetched it, so a
+future tightening would bind only new code, and every consumer this repo picks
+up in the meantime is one it cannot un-permit.
 
 Public registries were also the cheapest answer operationally. The alternative
 considered was private git dependencies for both halves, and its own strongest

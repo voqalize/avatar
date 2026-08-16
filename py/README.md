@@ -167,6 +167,9 @@ not have an opinion about which services they chose.
 
 ## License
 
-AGPL-3.0-only. `LICENSE` here is a copy of the repository's, kept beside the
-package because a wheel carries its own license file. Commercial licensing: open
-an issue.
+MIT. `LICENSE` here is a copy of the repository's, kept beside the package
+because a wheel carries its own license file.
+
+The wheel also carries the aligner and its acoustic model, whose upstream
+notices are `native/avatarsync/UPSTREAM-LICENSE.md` — all permissive (MIT, BSD,
+Boost), and they have to travel with the binary.

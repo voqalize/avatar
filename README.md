@@ -24,11 +24,8 @@ still frame is the one thing this README cannot show you; a call with
 [`server/`](server/README.md) takes about a minute and needs no API key. A
 hosted demo is planned and does not exist yet.
 
-**Licence: AGPL-3.0-only.** Use, modify and self-host freely; a modified version
-offered to users over a network has to offer them its source too, and embedding
-the widget in a closed-source product is not what this licence permits. The
-full position, and what to do if you need something else, is under
-[License](#license).
+**Licence: MIT.** Use it anywhere, including in closed-source products. The
+third-party attributions that travel with it are under [License](#license).
 
 ## Works with
 
@@ -368,13 +365,13 @@ itself a cue. Where the constants come from:
 
 ## License
 
-**AGPL-3.0-only.** Open source, and deliberately the restrictive end of it: you
-may use, modify and self-host this freely, but a modified version offered to
-users over a network has to offer them its source too. That is a starting
-position taken while the project is young, not a final one — Voqalize holds the
-copyright on all of it, so relicensing to something permissive later is a
-decision we can simply make. Embedding the widget in a closed-source product is
-not what this licence permits; if that is what you need, open an issue.
+**MIT.** Use, modify, embed and redistribute it, in open- or closed-source
+products, with no obligation beyond keeping the copyright notice. Voqalize holds
+the copyright on all of it; `/LICENSE` is the whole of our terms.
+
+What follows is not a restriction on this project — it is the attribution that
+travels with material we did not write, and the reason `UPSTREAM-LICENSE.md` is
+committed rather than fetched.
 
 The `avatarsync` aligner in `native/avatarsync/` is a fork of
 [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) (MIT). Its
@@ -387,7 +384,7 @@ unchanged, and travels with that directory.
 |---|---|---|
 | [Open Peeps](https://www.openpeeps.com/) | the drawing *idiom* `peep` is authored in — no artwork is copied | CC0 |
 | Rhubarb Lip Sync 1.14.0 | `native/avatarsync/` (fetched at build time, not vendored) | MIT; see `UPSTREAM-LICENSE.md` |
-| [piper](https://github.com/OHF-Voice/piper1-gpl) voices `en_US-ljspeech-high`, `en_US-libritts_r-medium` | spoke every wav in `authoring/*-audio/` and `py/tests/fixtures/` | LJSpeech public domain; LibriTTS-R CC BY 4.0 |
+| [piper](https://github.com/OHF-Voice/piper1-gpl) voices `en_US-ljspeech-high`, `en_US-libritts_r-medium` | spoke every clip in `authoring/*-audio/` (wav) and `py/tests/fixtures/` (pcm) | LJSpeech public domain; LibriTTS-R CC BY 4.0 — the one row here that asks for attribution |
 
 The three avatars are original drawings. All demo audio is synthesised from
 text written for this repo; `server/audio/` is Voqalize's own `omnivoice`

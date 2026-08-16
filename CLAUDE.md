@@ -6,7 +6,7 @@ rig only renders** — that precedence is the design
 ([pipecat-lifecycle-protocol.md § Authority model](docs/pipecat-lifecycle-protocol.md)).
 
 Library, not product; two live consumers, both pipecat voice agents. Public at
-`voqalize/avatar` under AGPL-3.0-only — **everything committed here is public**.
+`voqalize/avatar` under MIT — **everything committed here is public**.
 `@voqalize/avatar` (npm) and `voqalize-avatar` (PyPI) are two ends of one wire
 format and publish in lockstep from one `v<semver>` tag ([RELEASING.md](RELEASING.md)).
 Both of those are reframings of a narrower original brief — a talking head for

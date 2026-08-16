@@ -405,8 +405,9 @@ module, reading the wire. Nothing about it goes through our mixer.
 **On the asset.** `demo/rive/bob.riv` was
 `28111-53105-bob-lip-sync-character-system-in-rive.riv`, a Rive community file
 under **CC BY 4.0**. That licence is not the reason it went — CC BY permits
-redistribution and modification, including in a public AGPL-3.0 repository, and
-an earlier draft of this entry saying otherwise was wrong. What was missing was
+redistribution and modification, including in a public repository under this
+project's licence, AGPL-3.0-only as it then was and MIT as it is now, and an
+earlier draft of this entry saying otherwise was wrong. What was missing was
 the thing CC BY actually asks for: no author credit, no licence notice, no
 source URL, anywhere in the repo. `rive-proof.md` also described the file as
 "only a symlink to the Downloads copy" — it was not. It was committed as a real

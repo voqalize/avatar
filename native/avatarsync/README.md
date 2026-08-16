@@ -14,8 +14,9 @@ third-party notices for pocketsphinx, sphinxbase, flite, webrtc, cppformat, GSL,
 Boost and the CMU acoustic model, all of which are statically linked into every
 library built from these sources. Those libraries are distributed inside the
 wheels, so the notices have to travel with them, and a file in git is the only
-copy that can. This repo's own code is AGPL-3.0-only (`/LICENSE`); upstream's
-terms are upstream's.
+copy that can. This repo's own code is MIT (`/LICENSE`); upstream's terms are
+upstream's. Both are permissive, which makes the notices the whole of the
+obligation — they still have to ship.
 
 **The upstream source is not vendored in git.** The tag tarball is 85 MB, most
 of it a 52 MB acoustic model, and a repo-sized copy of it buys nothing a pinned

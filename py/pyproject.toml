@@ -4,7 +4,7 @@ version = "0.2.2"
 description = "Drive a browser talking-head avatar from a pipecat pipeline"
 readme = "README.md"
 requires-python = ">=3.12"
-license = "AGPL-3.0-only"
+license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Voqalize" }]
 keywords = ["avatar", "lipsync", "viseme", "rhubarb", "pipecat", "voice-agent"]
@@ -15,6 +15,11 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
+    # No `License ::` classifier, deliberately. `license = "MIT"` above is a
+    # PEP 639 SPDX expression, and PyPI *rejects* an upload that carries both a
+    # License-Expression and a license classifier. Neither hatchling nor
+    # `twine check` catches it — the failure is at the registry, on the one
+    # command that cannot be retried against a version already published.
     "Typing :: Typed",
 ]
 dependencies = [
