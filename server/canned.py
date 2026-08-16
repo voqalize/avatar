@@ -68,11 +68,19 @@ def _key(text: str) -> str:
 
 @dataclass(frozen=True)
 class Sentence:
-    """One sentence and the audio recorded for it."""
+    """One sentence, the audio recorded for it, and what vql-speech said it did.
+
+    `words` is the service's own word timestamps from the recording session, as
+    `(word, start_ms)` pairs relative to the start of this clip — not an estimate
+    made here. Nothing in this file knows how to place a word inside a clip, and
+    that is the point: the karaoke the default path shows is the karaoke a live
+    `--tts vql-speech` call would show.
+    """
 
     text: str
     audio: Path
     ms: float
+    words: tuple[tuple[str, float], ...]
 
 
 @dataclass(frozen=True)
@@ -157,14 +165,18 @@ class CannedLines:
         # for one voice cannot go missing for the other — it goes missing for
         # both, loudly, at load.
         root = path.parent / "audio" / name
+        timings = _load_timings(root)
 
         lines: list[Line] = []
         for entry in raw["lines"]:
             sentences = []
             for s in entry["sentences"]:
                 audio = root / s["audio"]
+                ms = _probe(audio, sample_rate)
                 sentences.append(
-                    Sentence(text=s["text"], audio=audio, ms=_probe(audio, sample_rate))
+                    Sentence(
+                        text=s["text"], audio=audio, ms=ms, words=_words(timings, audio, ms)
+                    )
                 )
             lines.append(
                 Line(id=entry["id"], tag=entry.get("tag", ""), sentences=tuple(sentences))
@@ -198,27 +210,35 @@ def _probe(audio: Path, sample_rate: int) -> float:
         return w.getnframes() / w.getframerate() * 1000.0
 
 
-def _word_times(text: str, ms: float) -> list[tuple[str, float]]:
-    """Where each word starts inside a clip whose length is already known.
+def _load_timings(root: Path) -> dict:
+    """The word timestamps `record.py` captured from vql-speech for this voice."""
+    path = root / "timings.json"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} missing — re-run server/record.py; the WAVs alone are not a corpus"
+        )
+    return json.loads(path.read_text())["sentences"]
 
-    A real TTS reports where its own synthesiser put each word. There is no
-    alignment for a recording, so the words are spread by character share —
-    the same character-rate assumption `voqalize_avatar.durations` fits against
-    real audio, except applied inside a duration that was *measured* rather than
-    predicted, which is the half that usually goes wrong.
 
-    Good enough for what it is for: a transcript that highlights roughly in time
-    with the voice. It is not an alignment and nothing downstream treats it as
-    one — the avatar's own accurate leg reads the samples, not this.
+def _words(timings: dict, audio: Path, ms: float) -> tuple[tuple[str, float], ...]:
+    """One clip's word timings, insisted on being about *this* clip.
+
+    The two files are written in the same pass and can only disagree if one of
+    them was replaced without the other — a re-recording that skipped
+    `timings.json`, or the reverse. That drift is silent in a call: the mouth and
+    the audio are still right, and only the transcript slides, by however much
+    the two recordings differed. Checking the duration catches it at load, where
+    the fix is one command.
     """
-    words = text.split()
-    total = sum(len(w) for w in words) or 1
-    times: list[tuple[str, float]] = []
-    at = 0.0
-    for word in words:
-        times.append((word, at / 1000.0))
-        at += ms * len(word) / total
-    return times
+    entry = timings.get(audio.name)
+    if entry is None:
+        raise FileNotFoundError(f"{audio.name} has no entry in {audio.parent}/timings.json")
+    if abs(float(entry["ms"]) - ms) > 1.0:
+        raise ValueError(
+            f"{audio}: {ms:.0f} ms of audio against {entry['ms']:.0f} ms of timings — "
+            f"the two were recorded separately; re-run server/record.py"
+        )
+    return tuple(zip(entry["words"], (float(v) for v in entry["start_ms"])))
 
 
 class CannedTTSService(TTSService):
@@ -283,9 +303,19 @@ class CannedTTSService(TTSService):
         self._lines = lines
         self._speed = speed
         self._word_timings = word_timings
+        #: How much audio this turn has already handed over, per context. See
+        #: `run_tts` — a word timestamp is not about its own sentence, it is
+        #: about the turn.
+        self._spoken_ms: dict[str, float] = {}
 
     def can_generate_metrics(self) -> bool:
         return False
+
+    async def on_audio_context_completed(self, context_id: str) -> None:
+        self._spoken_ms.pop(context_id, None)
+
+    async def on_audio_context_interrupted(self, context_id: str) -> None:
+        self._spoken_ms.pop(context_id, None)
 
     async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame | None, None]:
         sentence = self._lines.find(text)
@@ -309,8 +339,24 @@ class CannedTTSService(TTSService):
         # holds them until the first sample establishes the playout baseline, so
         # they are stamped against when the audio actually left, not when this
         # coroutine happened to run.
+        #
+        # **That baseline is the turn's, not the sentence's.** One audio context
+        # spans a whole completion, and `start_word_timestamps` fixes the zero
+        # point on its first audio frame — so a timestamp handed over here is an
+        # offset from the *first* sentence of the turn. Cartesia's own frames are
+        # cumulative for exactly this reason, and vql-speech offsets each
+        # sentence by the audio already streamed on the context. Replaying
+        # per-clip times unshifted put every sentence after the first back on the
+        # first one's clock: on `greet`, the second sentence began highlighting
+        # at 0 ms rather than 890, and the transcript finished 1.4 s ahead of the
+        # voice. Nothing about the mouth or the audio changes, which is why it
+        # survived a real call.
         if self._word_timings:
-            await self.add_word_timestamps(_word_times(text, sentence.ms), context_id)
+            spoken_ms = self._spoken_ms.get(context_id, 0.0)
+            await self.add_word_timestamps(
+                [(word, (spoken_ms + at) / 1000.0) for word, at in sentence.words], context_id
+            )
+            self._spoken_ms[context_id] = spoken_ms + sentence.ms
 
         for offset in range(0, len(pcm), chunk):
             if delay:

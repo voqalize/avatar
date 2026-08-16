@@ -200,8 +200,8 @@ which is the point of judging here.
 
 ## The audio is committed
 
-`audio/` — 72 WAVs, 8.6 MB, one directory per voice — is in git deliberately,
-which is the opposite call
+`audio/` — 72 WAVs, 8.6 MB, one directory per voice, each with a
+`timings.json` — is in git deliberately, which is the opposite call
 from the aligner in `native/avatarsync/`, whose library and model tree were taken
 out of git in favour of `native/avatarsync/get.sh`.
 
@@ -227,6 +227,15 @@ A voice name as an argument records only that row. It writes every sentence into
 back silent — that and a missing file are the two failures the corpus re-checks
 at load, and both look identical in a call: the mouth moves and no sound comes
 out, which reads as a lipsync bug and is not one.
+
+The same pass writes `audio/<voice>/timings.json`: the **service's own** word
+timestamps, `(word, start_ms)` per clip, alongside the clip's duration. They are
+recorded rather than re-derived because a canned TTS with plausible-looking
+karaoke is worse than one with none — the karaoke path in `AvatarProcessor` is
+exactly what a wrong timeline exercises, and the mouth stays right while the
+transcript slides, so a call does not catch it. `canned.py` refuses to load a
+clip whose recorded duration and WAV disagree by more than a millisecond, which
+is what re-recording the audio without the timings (or the reverse) looks like.
 
 Recording needs the same credential a live `--tts vql-speech` call needs, and
 neither the key nor the host has a default here — both would be Voqalize's

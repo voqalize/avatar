@@ -7,26 +7,26 @@ frame agreement while a 20% error costs ~35
 the fast leg's quality ceiling; a regression here is invisible in every other
 test and obvious on someone's face.
 
-The held-out set is every 5th clip in manifest order, excluded from the fit by
-the same deterministic stride in `scripts/fit_durations.py`, so these numbers are
+The held-out set is every 5th clip in corpus order, excluded from the fit by the
+same deterministic stride in `scripts/fit_durations.py`, so these numbers are
 genuinely out-of-sample.
 
-Measured at the time of writing (240 clips, both voices):
+Measured at the time of writing (96 held-out clips, both shipped voices):
 
-    voice         n     median   p75     p90     worst
-    reference/a   120   6.0%     10.0%   15.1%   27.8%
-    reference/b   120   4.8%     9.6%    13.4%   30.5%
-    both          240   5.2%     9.7%    13.9%   30.5%
+    voice               n     median   p90     worst
+    omnivoice/gauri     48    7.4%     11.6%   17.8%
+    omnivoice/gaurav    48    4.5%     15.7%   28.3%
+    both                96    6.5%     13.8%   28.3%
 
-The worst cases are all one-word utterances — "Okay.", "Yes." — under-predicted
-because the fitted onset, weighted to minimise *relative* error across the whole
-range, cannot also be right at 500 ms. They are also the cases the accurate leg
-overwrites soonest, since a 500 ms sentence's audio has fully landed almost
-immediately.
+The worst cases are all one-word utterances — "Okay.", "Yes." — where the fitted
+onset, weighted to minimise *relative* error across the whole range, cannot also
+be right at 800 ms. They are also the cases the accurate leg overwrites soonest,
+since a short sentence's audio has fully landed almost immediately.
 
 The gate is a 10% median, which is roughly double the measured value — loose
-enough that re-fitting on a different corpus does not fail the build, tight
-enough that losing the fit (or regressing to a flat rate) does.
+enough that re-fitting on a re-measured corpus does not fail the build, tight
+enough that losing the fit fails it. The estimator this replaced, a mean over two
+piper voices the library could never name, sat at 19.1% against these same clips.
 """
 
 from __future__ import annotations
@@ -37,27 +37,36 @@ import pytest
 
 from voqalize_avatar.durations import (
     MIN_DURATION_MS,
+    MS_PER_CHAR,
+    ONSET_MS,
     estimate_duration_ms,
-    model_for,
 )
 
 from .conftest import load_holdout
 
+VOICES = ["omnivoice/gauri", "omnivoice/gaurav"]
+
 
 def relative_errors(voice: str | None = None) -> list[float]:
     return [
-        abs(estimate_duration_ms(str(clip["text"]), str(clip["voice"]), str(clip["lang"])) - ms)
-        / ms
+        abs(estimate_duration_ms(str(clip["text"])) - ms) / ms
         for clip in load_holdout()
         if (ms := float(clip["audio_ms"])) > 0 and (voice is None or clip["voice"] == voice)
     ]
 
 
-@pytest.mark.parametrize("voice", ["reference/a", "reference/b"])
+@pytest.mark.parametrize("voice", VOICES)
 def test_held_out_median_error_is_under_ten_percent(voice: str) -> None:
+    """Per voice, not just pooled.
+
+    One model serves both, because the library is never told which one is
+    speaking. That is only acceptable while it fits both: a pooled median that
+    looks fine by averaging a good voice against a bad one would be the fast leg
+    silently degrading for half the corpus.
+    """
     errors = relative_errors(voice)
 
-    assert len(errors) > 100, "the holdout fixture is too small to mean anything"
+    assert len(errors) > 40, "the holdout is too small to mean anything"
     median = statistics.median(errors)
     assert median < 0.10, f"{voice}: median relative error {median:.1%}"
 
@@ -70,47 +79,26 @@ def test_the_tail_stays_bounded_too() -> None:
     assert p90 < 0.25, f"p90 relative error {p90:.1%}"
 
 
-def test_both_shipped_voices_are_fitted_not_fallen_back_to() -> None:
-    a = model_for("reference/a")
-    b = model_for("reference/b")
-
-    assert a != b, "one of the two voices is resolving to the fallback"
-    for model in (a, b):
-        assert 20 < model.ms_per_char < 80
-        # onset_ms is the fixed lead-in every utterance pays before the first
-        # phone is fully articulated. A bare rate model badly under-predicts
-        # interjections without it, so a fit that collapses it to ~0 is broken.
-        assert 100 < model.onset_ms < 900
-
-
-def test_an_unknown_voice_falls_back_to_the_mean_of_the_known_ones() -> None:
-    unknown = model_for("reference/nobody")
-    known = [model_for("reference/a"), model_for("reference/b")]
-
-    assert unknown.ms_per_char == pytest.approx(
-        sum(m.ms_per_char for m in known) / len(known), rel=1e-9
-    )
-    assert model_for(None).ms_per_char == unknown.ms_per_char
-
-
-def test_an_unknown_language_keeps_the_voice() -> None:
-    # The character rate is as much a property of the speaker as of the
-    # language, so a known voice in an unknown language beats the cross-voice
-    # mean.
-    assert model_for("reference/b", "hi") == model_for("reference/b", "en")
+def test_the_constants_are_a_fit_and_not_a_guess() -> None:
+    assert 20 < MS_PER_CHAR < 80
+    # The fixed lead-in every utterance pays before the first phone is fully
+    # articulated. A bare rate model badly under-predicts interjections without
+    # it, so a fit that collapses it to ~0 is broken — and interjections are the
+    # thing this avatar says most.
+    assert 100 < ONSET_MS < 900
 
 
 def test_the_estimate_is_speech_only_and_never_degenerate() -> None:
     # No inter-sentence pad: that is wire time, added by the caller when laying
-    # sentences out. A sentence of ~20 chars is ~1.2 s of speech, not 1.45.
-    assert estimate_duration_ms("That is good to hear.", "reference/a") < 1400
-    assert estimate_duration_ms("", "reference/a") >= MIN_DURATION_MS
-    assert estimate_duration_ms("Hi.", "reference/a") >= MIN_DURATION_MS
+    # sentences out.
+    assert estimate_duration_ms("That is good to hear.") < 1800
+    assert estimate_duration_ms("") >= MIN_DURATION_MS
+    assert estimate_duration_ms("Hi.") >= MIN_DURATION_MS
 
 
 def test_longer_text_never_estimates_shorter() -> None:
     previous = 0
     for text in ["Yes.", "Yes, of course.", "Yes, of course — take your time with it."]:
-        current = estimate_duration_ms(text, "reference/a")
+        current = estimate_duration_ms(text)
         assert current > previous
         previous = current

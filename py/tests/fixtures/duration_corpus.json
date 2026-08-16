@@ -1,0 +1,2405 @@
+{
+ "_": "Measured by scripts/measure_durations.py against vql-speech. audio_ms is the wire byte count at 24 kHz — the same number the service divides to place word timestamps. Fitted by scripts/fit_durations.py; see tests/fixtures/README.md.",
+ "clips": [
+  {
+   "text": "Yes.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 800.0
+  },
+  {
+   "text": "Sure.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 890.0
+  },
+  {
+   "text": "Okay.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 850.0
+  },
+  {
+   "text": "Right.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 900.0
+  },
+  {
+   "text": "Go on.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1060.0
+  },
+  {
+   "text": "Thanks.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 830.0
+  },
+  {
+   "text": "Got it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 960.0
+  },
+  {
+   "text": "All set.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1490.0
+  },
+  {
+   "text": "Perfect.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 980.0
+  },
+  {
+   "text": "Of course.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1080.0
+  },
+  {
+   "text": "No problem.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1060.0
+  },
+  {
+   "text": "One moment.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1290.0
+  },
+  {
+   "text": "Understood.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1110.0
+  },
+  {
+   "text": "Makes sense.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1180.0
+  },
+  {
+   "text": "Just a second.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1260.0
+  },
+  {
+   "text": "Take your time.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1120.0
+  },
+  {
+   "text": "The search is saved.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1910.0
+  },
+  {
+   "text": "The report is saved.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1970.0
+  },
+  {
+   "text": "The summary is saved.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1910.0
+  },
+  {
+   "text": "The report is ready now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1660.0
+  },
+  {
+   "text": "The request is ready now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1630.0
+  },
+  {
+   "text": "The schedule is ready now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1730.0
+  },
+  {
+   "text": "The schedule went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1660.0
+  },
+  {
+   "text": "The reminder went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1760.0
+  },
+  {
+   "text": "Your account is ready now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1680.0
+  },
+  {
+   "text": "Your account went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1610.0
+  },
+  {
+   "text": "This document went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1910.0
+  },
+  {
+   "text": "The file you sent is saved.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1890.0
+  },
+  {
+   "text": "The connection went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1770.0
+  },
+  {
+   "text": "The search has been updated.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2120.0
+  },
+  {
+   "text": "The reminder came back empty.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2030.0
+  },
+  {
+   "text": "That setting came back empty.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1990.0
+  },
+  {
+   "text": "That setting has been updated.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2210.0
+  },
+  {
+   "text": "The file you sent is ready now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 1940.0
+  },
+  {
+   "text": "This document has been updated.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2090.0
+  },
+  {
+   "text": "The report is already in place.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2190.0
+  },
+  {
+   "text": "This document looks correct to me.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2250.0
+  },
+  {
+   "text": "The reminder can wait until later.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2270.0
+  },
+  {
+   "text": "That setting needs one more detail.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2420.0
+  },
+  {
+   "text": "The schedule needs one more detail.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2440.0
+  },
+  {
+   "text": "The reminder needs one more detail.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2370.0
+  },
+  {
+   "text": "The summary will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2110.0
+  },
+  {
+   "text": "The request will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2330.0
+  },
+  {
+   "text": "The file you sent is already in place.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2610.0
+  },
+  {
+   "text": "The file you sent looks correct to me.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2610.0
+  },
+  {
+   "text": "I understand, that change is ready now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2680.0
+  },
+  {
+   "text": "I follow you, the summary is ready now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2420.0
+  },
+  {
+   "text": "The file you sent can wait until later.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2450.0
+  },
+  {
+   "text": "Let me check — that setting is ready now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2720.0
+  },
+  {
+   "text": "I understand, the connection went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2450.0
+  },
+  {
+   "text": "Before we continue, that setting is saved.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2930.0
+  },
+  {
+   "text": "Before we continue, the search went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3090.0
+  },
+  {
+   "text": "I follow you — the schedule came back empty.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2630.0
+  },
+  {
+   "text": "In that case, the connection came back empty.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3090.0
+  },
+  {
+   "text": "That makes sense, the connection went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3070.0
+  },
+  {
+   "text": "I understand, that change is already in place.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3150.0
+  },
+  {
+   "text": "If you like, the report needs one more detail.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3070.0
+  },
+  {
+   "text": "If you like — that setting looks correct to me.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2790.0
+  },
+  {
+   "text": "Here is what I found, that change went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2740.0
+  },
+  {
+   "text": "I follow you, this document is already in place.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3010.0
+  },
+  {
+   "text": "For what it is worth — the summary is ready now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2650.0
+  },
+  {
+   "text": "I follow you, the reminder can wait until later.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3220.0
+  },
+  {
+   "text": "Good question, the schedule is already in place.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3140.0
+  },
+  {
+   "text": "Good question, this document is already in place.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3270.0
+  },
+  {
+   "text": "One thing to note, the report is already in place.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3280.0
+  },
+  {
+   "text": "If you like, that setting will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3370.0
+  },
+  {
+   "text": "In that case, this document needs one more detail.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2920.0
+  },
+  {
+   "text": "Just to confirm, the schedule looks correct to me.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3360.0
+  },
+  {
+   "text": "I follow you — the request will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3370.0
+  },
+  {
+   "text": "Thanks for that — the report needs one more detail.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3210.0
+  },
+  {
+   "text": "Before we continue — that setting has been updated.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3270.0
+  },
+  {
+   "text": "Just to confirm — the schedule looks correct to me.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3130.0
+  },
+  {
+   "text": "Here is what I found — the connection went through.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 2930.0
+  },
+  {
+   "text": "Just to confirm — the file you sent came back empty.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3450.0
+  },
+  {
+   "text": "That makes sense, the summary needs one more detail.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3390.0
+  },
+  {
+   "text": "For what it is worth — that setting has been updated.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3170.0
+  },
+  {
+   "text": "While that runs — the report will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3390.0
+  },
+  {
+   "text": "I understand — this document will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3560.0
+  },
+  {
+   "text": "That makes sense — this document will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3570.0
+  },
+  {
+   "text": "Here is what I found — the schedule needs one more detail.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3460.0
+  },
+  {
+   "text": "For what it is worth, the file you sent looks correct to me.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3330.0
+  },
+  {
+   "text": "Here is what I found — your account will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3550.0
+  },
+  {
+   "text": "Just to confirm — your last message will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3760.0
+  },
+  {
+   "text": "For what it is worth, the file you sent is already in place.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3560.0
+  },
+  {
+   "text": "For what it is worth — the reminder will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3560.0
+  },
+  {
+   "text": "That is a fair point, the file you sent can wait until later.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4010.0
+  },
+  {
+   "text": "For what it is worth — your last message can wait until later.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4050.0
+  },
+  {
+   "text": "One thing to note — your last message will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3930.0
+  },
+  {
+   "text": "Here is what I found, the file you sent will take a few seconds.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3840.0
+  },
+  {
+   "text": "The schedule is saved, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4420.0
+  },
+  {
+   "text": "The search is saved, and I will keep an eye on it in the background.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4340.0
+  },
+  {
+   "text": "This document is saved, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 3940.0
+  },
+  {
+   "text": "The connection is saved, while I pull together the remaining details.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4720.0
+  },
+  {
+   "text": "The connection is saved, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4580.0
+  },
+  {
+   "text": "The search is ready now, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4320.0
+  },
+  {
+   "text": "That setting is saved, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4490.0
+  },
+  {
+   "text": "The summary went through, while I pull together the remaining details.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4720.0
+  },
+  {
+   "text": "The report went through, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4570.0
+  },
+  {
+   "text": "That change is saved, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4020.0
+  },
+  {
+   "text": "The request went through, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4690.0
+  },
+  {
+   "text": "That change is ready now, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4280.0
+  },
+  {
+   "text": "That setting is ready now, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4720.0
+  },
+  {
+   "text": "This document went through, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4740.0
+  },
+  {
+   "text": "That change has been updated, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4480.0
+  },
+  {
+   "text": "The report went through, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4430.0
+  },
+  {
+   "text": "That setting is saved, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5130.0
+  },
+  {
+   "text": "That change has been updated, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4740.0
+  },
+  {
+   "text": "Your account went through, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 4730.0
+  },
+  {
+   "text": "The schedule looks correct to me, while I pull together the remaining details.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5030.0
+  },
+  {
+   "text": "That setting is already in place, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5000.0
+  },
+  {
+   "text": "The connection has been updated, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5020.0
+  },
+  {
+   "text": "The reminder can wait until later, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5040.0
+  },
+  {
+   "text": "I follow you, the summary is saved, while I pull together the remaining details.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5330.0
+  },
+  {
+   "text": "This document came back empty, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5240.0
+  },
+  {
+   "text": "That change has been updated, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5070.0
+  },
+  {
+   "text": "The connection went through, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5540.0
+  },
+  {
+   "text": "That change is saved, while I pull together the remaining details. Shall I go ahead?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5430.0
+  },
+  {
+   "text": "I follow you, this document is saved, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5180.0
+  },
+  {
+   "text": "Good question, the request went through, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5350.0
+  },
+  {
+   "text": "Just to confirm, that change is saved, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5450.0
+  },
+  {
+   "text": "The schedule has been updated, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5500.0
+  },
+  {
+   "text": "The schedule went through, but let me know if you would rather take a different route.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5450.0
+  },
+  {
+   "text": "The file you sent went through, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5730.0
+  },
+  {
+   "text": "The connection is saved, and the rest of it follows the same pattern. Shall I go ahead?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5580.0
+  },
+  {
+   "text": "In that case, the summary has been updated, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5670.0
+  },
+  {
+   "text": "The file you sent came back empty, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5850.0
+  },
+  {
+   "text": "Good question, the schedule went through, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5520.0
+  },
+  {
+   "text": "Good question, the report is saved, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5690.0
+  },
+  {
+   "text": "I understand, the report went through, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5320.0
+  },
+  {
+   "text": "That makes sense, the schedule came back empty, while I pull together the remaining details.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5530.0
+  },
+  {
+   "text": "Before we continue, this document went through, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6060.0
+  },
+  {
+   "text": "I understand, the request is already in place, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5860.0
+  },
+  {
+   "text": "The file you sent can wait until later, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6010.0
+  },
+  {
+   "text": "Good question, the report needs one more detail, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6090.0
+  },
+  {
+   "text": "I follow you, the schedule is already in place, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5940.0
+  },
+  {
+   "text": "That change needs one more detail, but let me know if you would rather take a different route.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5900.0
+  },
+  {
+   "text": "Just to confirm, your account looks correct to me, while I pull together the remaining details.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5960.0
+  },
+  {
+   "text": "Here is what I found, the summary is ready now, and I will keep an eye on it in the background.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6010.0
+  },
+  {
+   "text": "Good question, your last message came back empty, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6150.0
+  },
+  {
+   "text": "Just to confirm, that change looks correct to me, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6170.0
+  },
+  {
+   "text": "For what it is worth, the summary is saved, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5950.0
+  },
+  {
+   "text": "While that runs, the search will take a few seconds, while I pull together the remaining details.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6410.0
+  },
+  {
+   "text": "If you like, the reminder will take a few seconds, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6240.0
+  },
+  {
+   "text": "Let me check, that setting came back empty, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6190.0
+  },
+  {
+   "text": "That is a fair point, the search went through, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6550.0
+  },
+  {
+   "text": "One thing to note, this document looks correct to me, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6170.0
+  },
+  {
+   "text": "I understand, the report will take a few seconds, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5590.0
+  },
+  {
+   "text": "I understand, the report needs one more detail, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6170.0
+  },
+  {
+   "text": "Here is what I found, the connection is saved, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6210.0
+  },
+  {
+   "text": "The connection is ready now, and the rest of it follows the same pattern. I can adjust any part of it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6160.0
+  },
+  {
+   "text": "I follow you, the reminder can wait until later, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6580.0
+  },
+  {
+   "text": "Just to confirm, the search is already in place, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6050.0
+  },
+  {
+   "text": "I understand, the schedule needs one more detail, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5820.0
+  },
+  {
+   "text": "While that runs, the reminder can wait until later, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6230.0
+  },
+  {
+   "text": "One thing to note, the connection will take a few seconds, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6590.0
+  },
+  {
+   "text": "The search can wait until later, though it may look slightly different than you expect. Shall I go ahead?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6710.0
+  },
+  {
+   "text": "Here is what I found, the schedule has been updated, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 5980.0
+  },
+  {
+   "text": "In that case, that setting looks correct to me, but let me know if you would rather take a different route.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6840.0
+  },
+  {
+   "text": "Just to confirm, that change will take a few seconds, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6330.0
+  },
+  {
+   "text": "Good question, your last message looks correct to me, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6880.0
+  },
+  {
+   "text": "That setting is saved, and I will keep an eye on it in the background. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6770.0
+  },
+  {
+   "text": "Thanks for that, the file you sent will take a few seconds, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7200.0
+  },
+  {
+   "text": "The reminder will take a few seconds, and I will keep an eye on it in the background. I can adjust any part of it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6810.0
+  },
+  {
+   "text": "Your account is saved, while I pull together the remaining details. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7040.0
+  },
+  {
+   "text": "This document came back empty, so there is nothing else you need to do right now. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7410.0
+  },
+  {
+   "text": "That makes sense, that change has been updated, and the rest of it follows the same pattern. Does that sound right?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7220.0
+  },
+  {
+   "text": "The request needs one more detail, so I have gone ahead and queued it up for you. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6990.0
+  },
+  {
+   "text": "The search needs one more detail, and I will keep an eye on it in the background. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6940.0
+  },
+  {
+   "text": "The search went through, and the rest of it follows the same pattern. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7170.0
+  },
+  {
+   "text": "While that runs, the request went through, while I pull together the remaining details. I can adjust any part of it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7460.0
+  },
+  {
+   "text": "Here is what I found, that setting is ready now, so there is nothing else you need to do right now. Shall I go ahead?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6970.0
+  },
+  {
+   "text": "The report is saved, unless you would prefer to handle that part yourself. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7370.0
+  },
+  {
+   "text": "This document came back empty, and the rest of it follows the same pattern. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7250.0
+  },
+  {
+   "text": "I understand, the connection is ready now, unless you would prefer to handle that part yourself. Does that sound right?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7330.0
+  },
+  {
+   "text": "That is a fair point, your last message will take a few seconds, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7410.0
+  },
+  {
+   "text": "I understand, the connection needs one more detail, and the rest of it follows the same pattern. Does that sound right?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7740.0
+  },
+  {
+   "text": "The file you sent can wait until later, so I have gone ahead and queued it up for you. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7070.0
+  },
+  {
+   "text": "The file you sent will take a few seconds, so I have gone ahead and queued it up for you. Would you like me to continue?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 6840.0
+  },
+  {
+   "text": "If you like, that setting is already in place, while I pull together the remaining details. Would you like me to continue?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7640.0
+  },
+  {
+   "text": "This document needs one more detail, and I will keep an eye on it in the background. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7490.0
+  },
+  {
+   "text": "If you like, the request has been updated, so I have gone ahead and queued it up for you. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7330.0
+  },
+  {
+   "text": "The search will take a few seconds, though it may look slightly different than you expect. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7800.0
+  },
+  {
+   "text": "The summary will take a few seconds, which should make the next step a lot simpler. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7960.0
+  },
+  {
+   "text": "Thanks for that, this document is saved, though it may look slightly different than you expect. Would you like me to continue?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8250.0
+  },
+  {
+   "text": "In that case, the request needs one more detail, and the rest of it follows the same pattern. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7580.0
+  },
+  {
+   "text": "That is a fair point, the connection came back empty, and the rest of it follows the same pattern. I can adjust any part of it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8090.0
+  },
+  {
+   "text": "Thanks for that, the connection is ready now, and I will keep an eye on it in the background. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8090.0
+  },
+  {
+   "text": "Thanks for that, the report is saved, so I have gone ahead and queued it up for you. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7650.0
+  },
+  {
+   "text": "Just to confirm, the reminder looks correct to me, though it may look slightly different than you expect. Does that sound right?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7910.0
+  },
+  {
+   "text": "I follow you, your account is ready now, while I pull together the remaining details. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7690.0
+  },
+  {
+   "text": "That is a fair point, the connection is already in place, unless you would prefer to handle that part yourself. Shall I go ahead?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8320.0
+  },
+  {
+   "text": "In that case, the schedule came back empty, which should make the next step a lot simpler. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8080.0
+  },
+  {
+   "text": "One thing to note, the request went through, though it may look slightly different than you expect. Would you like me to continue?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8040.0
+  },
+  {
+   "text": "Thanks for that, the report came back empty, but let me know if you would rather take a different route. I can adjust any part of it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8450.0
+  },
+  {
+   "text": "Just to confirm, the reminder came back empty, and I will keep an eye on it in the background. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8070.0
+  },
+  {
+   "text": "Good question, the schedule looks correct to me, and I can walk you through it whenever you are ready. Would you like me to continue?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8570.0
+  },
+  {
+   "text": "Let me check, the search came back empty, and I can walk you through it whenever you are ready. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8470.0
+  },
+  {
+   "text": "Before we continue, your last message looks correct to me, which should make the next step a lot simpler. I can adjust any part of it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8290.0
+  },
+  {
+   "text": "One thing to note, the reminder can wait until later, and I will keep an eye on it in the background. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8430.0
+  },
+  {
+   "text": "That makes sense, the file you sent is already in place, and the rest of it follows the same pattern. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8530.0
+  },
+  {
+   "text": "The schedule will take a few seconds, but let me know if you would rather take a different route. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8300.0
+  },
+  {
+   "text": "Good question, your last message is saved, but let me know if you would rather take a different route. Happy to take another pass at it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 7830.0
+  },
+  {
+   "text": "Here is what I found, your account is saved, unless you would prefer to handle that part yourself. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8240.0
+  },
+  {
+   "text": "While that runs, your account came back empty, while I pull together the remaining details. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8760.0
+  },
+  {
+   "text": "Before we continue, this document can wait until later, and I can walk you through it whenever you are ready. I can adjust any part of it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8460.0
+  },
+  {
+   "text": "I understand, this document will take a few seconds, so I have gone ahead and queued it up for you. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8710.0
+  },
+  {
+   "text": "That is a fair point, the report is saved, unless you would prefer to handle that part yourself. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8580.0
+  },
+  {
+   "text": "Before we continue, the reminder has been updated, but let me know if you would rather take a different route. I can adjust any part of it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8400.0
+  },
+  {
+   "text": "Here is what I found, the summary went through, and I can walk you through it whenever you are ready. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8170.0
+  },
+  {
+   "text": "That is a fair point, your account can wait until later, though it may look slightly different than you expect. I can adjust any part of it.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8970.0
+  },
+  {
+   "text": "Thanks for that, your account can wait until later, which should make the next step a lot simpler. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8950.0
+  },
+  {
+   "text": "Before we continue, your last message is saved, so there is nothing else you need to do right now. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8590.0
+  },
+  {
+   "text": "Before we continue, the summary came back empty, which should make the next step a lot simpler. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8900.0
+  },
+  {
+   "text": "Here is what I found, the reminder looks correct to me, while I pull together the remaining details. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8660.0
+  },
+  {
+   "text": "Let me check, the request looks correct to me, though it may look slightly different than you expect. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9050.0
+  },
+  {
+   "text": "Here is what I found, the file you sent is already in place, and the rest of it follows the same pattern. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8580.0
+  },
+  {
+   "text": "Here is what I found, the search can wait until later, which should make the next step a lot simpler. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8820.0
+  },
+  {
+   "text": "Before we continue, the schedule needs one more detail, so I have gone ahead and queued it up for you. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8980.0
+  },
+  {
+   "text": "Thanks for that, the summary needs one more detail, so there is nothing else you need to do right now. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9010.0
+  },
+  {
+   "text": "One thing to note, the request has been updated, and I can walk you through it whenever you are ready. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9050.0
+  },
+  {
+   "text": "Before we continue, the report needs one more detail, and I can walk you through it whenever you are ready. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8850.0
+  },
+  {
+   "text": "Let me check, this document looks correct to me, so there is nothing else you need to do right now. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 8870.0
+  },
+  {
+   "text": "Thanks for that, the report will take a few seconds, which should make the next step a lot simpler. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9370.0
+  },
+  {
+   "text": "That is a fair point, the file you sent can wait until later, though it may look slightly different than you expect. Would you like me to continue?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9300.0
+  },
+  {
+   "text": "Thanks for that, your last message needs one more detail, and I can walk you through it whenever you are ready. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9570.0
+  },
+  {
+   "text": "Let me check, the reminder is already in place, but let me know if you would rather take a different route. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9080.0
+  },
+  {
+   "text": "Here is what I found, your last message looks correct to me, and the rest of it follows the same pattern. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9210.0
+  },
+  {
+   "text": "That makes sense, that change came back empty, but let me know if you would rather take a different route. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9850.0
+  },
+  {
+   "text": "Before we continue, the file you sent is already in place, and I will keep an eye on it in the background. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9570.0
+  },
+  {
+   "text": "For what it is worth, the reminder will take a few seconds, so I have gone ahead and queued it up for you. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9380.0
+  },
+  {
+   "text": "Here is what I found, the reminder came back empty, though it may look slightly different than you expect. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9790.0
+  },
+  {
+   "text": "Here is what I found, your account looks correct to me, but let me know if you would rather take a different route. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9710.0
+  },
+  {
+   "text": "In that case, your last message can wait until later, unless you would prefer to handle that part yourself. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9700.0
+  },
+  {
+   "text": "Here is what I found, the connection will take a few seconds, so there is nothing else you need to do right now. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9500.0
+  },
+  {
+   "text": "Here is what I found, the summary looks correct to me, though it may look slightly different than you expect. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9270.0
+  },
+  {
+   "text": "One thing to note, the file you sent went through, but let me know if you would rather take a different route. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 10010.0
+  },
+  {
+   "text": "Just to confirm, your last message can wait until later, but let me know if you would rather take a different route. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9840.0
+  },
+  {
+   "text": "That is a fair point, the schedule has been updated, but let me know if you would rather take a different route. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 9640.0
+  },
+  {
+   "text": "One thing to note, the reminder will take a few seconds, but let me know if you would rather take a different route. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 10200.0
+  },
+  {
+   "text": "Here is what I found, your last message will take a few seconds, unless you would prefer to handle that part yourself. Is there anything you would like me to change?",
+   "voice": "omnivoice/gauri",
+   "audio_ms": 10530.0
+  },
+  {
+   "text": "Yes.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 860.0
+  },
+  {
+   "text": "Sure.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 680.0
+  },
+  {
+   "text": "Okay.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 810.0
+  },
+  {
+   "text": "Right.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 890.0
+  },
+  {
+   "text": "Go on.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 980.0
+  },
+  {
+   "text": "Thanks.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 850.0
+  },
+  {
+   "text": "Got it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 780.0
+  },
+  {
+   "text": "All set.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1060.0
+  },
+  {
+   "text": "Perfect.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 800.0
+  },
+  {
+   "text": "Of course.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1050.0
+  },
+  {
+   "text": "No problem.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1040.0
+  },
+  {
+   "text": "One moment.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1000.0
+  },
+  {
+   "text": "Understood.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1060.0
+  },
+  {
+   "text": "Makes sense.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1170.0
+  },
+  {
+   "text": "Just a second.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1490.0
+  },
+  {
+   "text": "Take your time.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1080.0
+  },
+  {
+   "text": "The search is saved.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1530.0
+  },
+  {
+   "text": "The report is saved.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1460.0
+  },
+  {
+   "text": "The summary is saved.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1880.0
+  },
+  {
+   "text": "The report is ready now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1580.0
+  },
+  {
+   "text": "The request is ready now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1890.0
+  },
+  {
+   "text": "The schedule is ready now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1980.0
+  },
+  {
+   "text": "The schedule went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1600.0
+  },
+  {
+   "text": "The reminder went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1470.0
+  },
+  {
+   "text": "Your account is ready now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1610.0
+  },
+  {
+   "text": "Your account went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1580.0
+  },
+  {
+   "text": "This document went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1710.0
+  },
+  {
+   "text": "The file you sent is saved.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1870.0
+  },
+  {
+   "text": "The connection went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1650.0
+  },
+  {
+   "text": "The search has been updated.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2090.0
+  },
+  {
+   "text": "The reminder came back empty.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2020.0
+  },
+  {
+   "text": "That setting came back empty.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2010.0
+  },
+  {
+   "text": "That setting has been updated.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2130.0
+  },
+  {
+   "text": "The file you sent is ready now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 1980.0
+  },
+  {
+   "text": "This document has been updated.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2150.0
+  },
+  {
+   "text": "The report is already in place.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2170.0
+  },
+  {
+   "text": "This document looks correct to me.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2000.0
+  },
+  {
+   "text": "The reminder can wait until later.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2110.0
+  },
+  {
+   "text": "That setting needs one more detail.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2250.0
+  },
+  {
+   "text": "The schedule needs one more detail.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2250.0
+  },
+  {
+   "text": "The reminder needs one more detail.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2250.0
+  },
+  {
+   "text": "The summary will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2170.0
+  },
+  {
+   "text": "The request will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2260.0
+  },
+  {
+   "text": "The file you sent is already in place.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2160.0
+  },
+  {
+   "text": "The file you sent looks correct to me.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2360.0
+  },
+  {
+   "text": "I understand, that change is ready now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2400.0
+  },
+  {
+   "text": "I follow you, the summary is ready now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2360.0
+  },
+  {
+   "text": "The file you sent can wait until later.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2290.0
+  },
+  {
+   "text": "Let me check — that setting is ready now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2460.0
+  },
+  {
+   "text": "I understand, the connection went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2670.0
+  },
+  {
+   "text": "Before we continue, that setting is saved.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2650.0
+  },
+  {
+   "text": "Before we continue, the search went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2770.0
+  },
+  {
+   "text": "I follow you — the schedule came back empty.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2560.0
+  },
+  {
+   "text": "In that case, the connection came back empty.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2810.0
+  },
+  {
+   "text": "That makes sense, the connection went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2460.0
+  },
+  {
+   "text": "I understand, that change is already in place.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2750.0
+  },
+  {
+   "text": "If you like, the report needs one more detail.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2810.0
+  },
+  {
+   "text": "If you like — that setting looks correct to me.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2690.0
+  },
+  {
+   "text": "Here is what I found, that change went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2360.0
+  },
+  {
+   "text": "I follow you, this document is already in place.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2840.0
+  },
+  {
+   "text": "For what it is worth — the summary is ready now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2810.0
+  },
+  {
+   "text": "I follow you, the reminder can wait until later.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2930.0
+  },
+  {
+   "text": "Good question, the schedule is already in place.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3010.0
+  },
+  {
+   "text": "Good question, this document is already in place.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3050.0
+  },
+  {
+   "text": "One thing to note, the report is already in place.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3000.0
+  },
+  {
+   "text": "If you like, that setting will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3010.0
+  },
+  {
+   "text": "In that case, this document needs one more detail.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3090.0
+  },
+  {
+   "text": "Just to confirm, the schedule looks correct to me.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 2700.0
+  },
+  {
+   "text": "I follow you — the request will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3050.0
+  },
+  {
+   "text": "Thanks for that — the report needs one more detail.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3090.0
+  },
+  {
+   "text": "Before we continue — that setting has been updated.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3120.0
+  },
+  {
+   "text": "Just to confirm — the schedule looks correct to me.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3070.0
+  },
+  {
+   "text": "Here is what I found — the connection went through.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3030.0
+  },
+  {
+   "text": "Just to confirm — the file you sent came back empty.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3090.0
+  },
+  {
+   "text": "That makes sense, the summary needs one more detail.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3200.0
+  },
+  {
+   "text": "For what it is worth — that setting has been updated.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3080.0
+  },
+  {
+   "text": "While that runs — the report will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3140.0
+  },
+  {
+   "text": "I understand — this document will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3070.0
+  },
+  {
+   "text": "That makes sense — this document will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3320.0
+  },
+  {
+   "text": "Here is what I found — the schedule needs one more detail.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3390.0
+  },
+  {
+   "text": "For what it is worth, the file you sent looks correct to me.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3320.0
+  },
+  {
+   "text": "Here is what I found — your account will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3480.0
+  },
+  {
+   "text": "Just to confirm — your last message will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3570.0
+  },
+  {
+   "text": "For what it is worth, the file you sent is already in place.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3480.0
+  },
+  {
+   "text": "For what it is worth — the reminder will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3050.0
+  },
+  {
+   "text": "That is a fair point, the file you sent can wait until later.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3310.0
+  },
+  {
+   "text": "For what it is worth — your last message can wait until later.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3510.0
+  },
+  {
+   "text": "One thing to note — your last message will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3650.0
+  },
+  {
+   "text": "Here is what I found, the file you sent will take a few seconds.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3310.0
+  },
+  {
+   "text": "The schedule is saved, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3600.0
+  },
+  {
+   "text": "The search is saved, and I will keep an eye on it in the background.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3970.0
+  },
+  {
+   "text": "This document is saved, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3730.0
+  },
+  {
+   "text": "The connection is saved, while I pull together the remaining details.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4160.0
+  },
+  {
+   "text": "The connection is saved, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4070.0
+  },
+  {
+   "text": "The search is ready now, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3370.0
+  },
+  {
+   "text": "That setting is saved, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4010.0
+  },
+  {
+   "text": "The summary went through, while I pull together the remaining details.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4060.0
+  },
+  {
+   "text": "The report went through, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4070.0
+  },
+  {
+   "text": "That change is saved, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4000.0
+  },
+  {
+   "text": "The request went through, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3770.0
+  },
+  {
+   "text": "That change is ready now, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4170.0
+  },
+  {
+   "text": "That setting is ready now, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4220.0
+  },
+  {
+   "text": "This document went through, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3660.0
+  },
+  {
+   "text": "That change has been updated, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3780.0
+  },
+  {
+   "text": "The report went through, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4270.0
+  },
+  {
+   "text": "That setting is saved, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4540.0
+  },
+  {
+   "text": "That change has been updated, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3610.0
+  },
+  {
+   "text": "Your account went through, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4200.0
+  },
+  {
+   "text": "The schedule looks correct to me, while I pull together the remaining details.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4530.0
+  },
+  {
+   "text": "That setting is already in place, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3610.0
+  },
+  {
+   "text": "The connection has been updated, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4060.0
+  },
+  {
+   "text": "The reminder can wait until later, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4580.0
+  },
+  {
+   "text": "I follow you, the summary is saved, while I pull together the remaining details.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4730.0
+  },
+  {
+   "text": "This document came back empty, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4230.0
+  },
+  {
+   "text": "That change has been updated, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4720.0
+  },
+  {
+   "text": "The connection went through, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4330.0
+  },
+  {
+   "text": "That change is saved, while I pull together the remaining details. Shall I go ahead?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5010.0
+  },
+  {
+   "text": "I follow you, this document is saved, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4550.0
+  },
+  {
+   "text": "Good question, the request went through, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 3920.0
+  },
+  {
+   "text": "Just to confirm, that change is saved, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4730.0
+  },
+  {
+   "text": "The schedule has been updated, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4690.0
+  },
+  {
+   "text": "The schedule went through, but let me know if you would rather take a different route.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5040.0
+  },
+  {
+   "text": "The file you sent went through, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4980.0
+  },
+  {
+   "text": "The connection is saved, and the rest of it follows the same pattern. Shall I go ahead?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5050.0
+  },
+  {
+   "text": "In that case, the summary has been updated, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4530.0
+  },
+  {
+   "text": "The file you sent came back empty, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4900.0
+  },
+  {
+   "text": "Good question, the schedule went through, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5170.0
+  },
+  {
+   "text": "Good question, the report is saved, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5010.0
+  },
+  {
+   "text": "I understand, the report went through, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5410.0
+  },
+  {
+   "text": "That makes sense, the schedule came back empty, while I pull together the remaining details.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5430.0
+  },
+  {
+   "text": "Before we continue, this document went through, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5000.0
+  },
+  {
+   "text": "I understand, the request is already in place, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5040.0
+  },
+  {
+   "text": "The file you sent can wait until later, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4650.0
+  },
+  {
+   "text": "Good question, the report needs one more detail, and the rest of it follows the same pattern.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4860.0
+  },
+  {
+   "text": "I follow you, the schedule is already in place, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4980.0
+  },
+  {
+   "text": "That change needs one more detail, but let me know if you would rather take a different route.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5260.0
+  },
+  {
+   "text": "Just to confirm, your account looks correct to me, while I pull together the remaining details.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5690.0
+  },
+  {
+   "text": "Here is what I found, the summary is ready now, and I will keep an eye on it in the background.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5160.0
+  },
+  {
+   "text": "Good question, your last message came back empty, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5590.0
+  },
+  {
+   "text": "Just to confirm, that change looks correct to me, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5320.0
+  },
+  {
+   "text": "For what it is worth, the summary is saved, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5070.0
+  },
+  {
+   "text": "While that runs, the search will take a few seconds, while I pull together the remaining details.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5770.0
+  },
+  {
+   "text": "If you like, the reminder will take a few seconds, which should make the next step a lot simpler.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5220.0
+  },
+  {
+   "text": "Let me check, that setting came back empty, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5770.0
+  },
+  {
+   "text": "That is a fair point, the search went through, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5310.0
+  },
+  {
+   "text": "One thing to note, this document looks correct to me, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4540.0
+  },
+  {
+   "text": "I understand, the report will take a few seconds, so there is nothing else you need to do right now.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5450.0
+  },
+  {
+   "text": "I understand, the report needs one more detail, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5470.0
+  },
+  {
+   "text": "Here is what I found, the connection is saved, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5440.0
+  },
+  {
+   "text": "The connection is ready now, and the rest of it follows the same pattern. I can adjust any part of it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5840.0
+  },
+  {
+   "text": "I follow you, the reminder can wait until later, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5990.0
+  },
+  {
+   "text": "Just to confirm, the search is already in place, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5930.0
+  },
+  {
+   "text": "I understand, the schedule needs one more detail, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5700.0
+  },
+  {
+   "text": "While that runs, the reminder can wait until later, unless you would prefer to handle that part yourself.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6070.0
+  },
+  {
+   "text": "One thing to note, the connection will take a few seconds, so I have gone ahead and queued it up for you.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 4990.0
+  },
+  {
+   "text": "The search can wait until later, though it may look slightly different than you expect. Shall I go ahead?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6050.0
+  },
+  {
+   "text": "Here is what I found, the schedule has been updated, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6070.0
+  },
+  {
+   "text": "In that case, that setting looks correct to me, but let me know if you would rather take a different route.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5470.0
+  },
+  {
+   "text": "Just to confirm, that change will take a few seconds, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6210.0
+  },
+  {
+   "text": "Good question, your last message looks correct to me, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6230.0
+  },
+  {
+   "text": "That setting is saved, and I will keep an eye on it in the background. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6420.0
+  },
+  {
+   "text": "Thanks for that, the file you sent will take a few seconds, and I can walk you through it whenever you are ready.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6450.0
+  },
+  {
+   "text": "The reminder will take a few seconds, and I will keep an eye on it in the background. I can adjust any part of it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6260.0
+  },
+  {
+   "text": "Your account is saved, while I pull together the remaining details. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6570.0
+  },
+  {
+   "text": "This document came back empty, so there is nothing else you need to do right now. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6610.0
+  },
+  {
+   "text": "That makes sense, that change has been updated, and the rest of it follows the same pattern. Does that sound right?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6350.0
+  },
+  {
+   "text": "The request needs one more detail, so I have gone ahead and queued it up for you. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6530.0
+  },
+  {
+   "text": "The search needs one more detail, and I will keep an eye on it in the background. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6320.0
+  },
+  {
+   "text": "The search went through, and the rest of it follows the same pattern. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6350.0
+  },
+  {
+   "text": "While that runs, the request went through, while I pull together the remaining details. I can adjust any part of it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6580.0
+  },
+  {
+   "text": "Here is what I found, that setting is ready now, so there is nothing else you need to do right now. Shall I go ahead?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6530.0
+  },
+  {
+   "text": "The report is saved, unless you would prefer to handle that part yourself. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6290.0
+  },
+  {
+   "text": "This document came back empty, and the rest of it follows the same pattern. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6410.0
+  },
+  {
+   "text": "I understand, the connection is ready now, unless you would prefer to handle that part yourself. Does that sound right?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6750.0
+  },
+  {
+   "text": "That is a fair point, your last message will take a few seconds, though it may look slightly different than you expect.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6200.0
+  },
+  {
+   "text": "I understand, the connection needs one more detail, and the rest of it follows the same pattern. Does that sound right?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6840.0
+  },
+  {
+   "text": "The file you sent can wait until later, so I have gone ahead and queued it up for you. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6650.0
+  },
+  {
+   "text": "The file you sent will take a few seconds, so I have gone ahead and queued it up for you. Would you like me to continue?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6230.0
+  },
+  {
+   "text": "If you like, that setting is already in place, while I pull together the remaining details. Would you like me to continue?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 5960.0
+  },
+  {
+   "text": "This document needs one more detail, and I will keep an eye on it in the background. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6440.0
+  },
+  {
+   "text": "If you like, the request has been updated, so I have gone ahead and queued it up for you. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6330.0
+  },
+  {
+   "text": "The search will take a few seconds, though it may look slightly different than you expect. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7150.0
+  },
+  {
+   "text": "The summary will take a few seconds, which should make the next step a lot simpler. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7070.0
+  },
+  {
+   "text": "Thanks for that, this document is saved, though it may look slightly different than you expect. Would you like me to continue?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7080.0
+  },
+  {
+   "text": "In that case, the request needs one more detail, and the rest of it follows the same pattern. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7140.0
+  },
+  {
+   "text": "That is a fair point, the connection came back empty, and the rest of it follows the same pattern. I can adjust any part of it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7250.0
+  },
+  {
+   "text": "Thanks for that, the connection is ready now, and I will keep an eye on it in the background. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7200.0
+  },
+  {
+   "text": "Thanks for that, the report is saved, so I have gone ahead and queued it up for you. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7170.0
+  },
+  {
+   "text": "Just to confirm, the reminder looks correct to me, though it may look slightly different than you expect. Does that sound right?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6970.0
+  },
+  {
+   "text": "I follow you, your account is ready now, while I pull together the remaining details. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6710.0
+  },
+  {
+   "text": "That is a fair point, the connection is already in place, unless you would prefer to handle that part yourself. Shall I go ahead?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7210.0
+  },
+  {
+   "text": "In that case, the schedule came back empty, which should make the next step a lot simpler. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7170.0
+  },
+  {
+   "text": "One thing to note, the request went through, though it may look slightly different than you expect. Would you like me to continue?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6470.0
+  },
+  {
+   "text": "Thanks for that, the report came back empty, but let me know if you would rather take a different route. I can adjust any part of it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7480.0
+  },
+  {
+   "text": "Just to confirm, the reminder came back empty, and I will keep an eye on it in the background. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7060.0
+  },
+  {
+   "text": "Good question, the schedule looks correct to me, and I can walk you through it whenever you are ready. Would you like me to continue?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6380.0
+  },
+  {
+   "text": "Let me check, the search came back empty, and I can walk you through it whenever you are ready. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6460.0
+  },
+  {
+   "text": "Before we continue, your last message looks correct to me, which should make the next step a lot simpler. I can adjust any part of it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7650.0
+  },
+  {
+   "text": "One thing to note, the reminder can wait until later, and I will keep an eye on it in the background. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6810.0
+  },
+  {
+   "text": "That makes sense, the file you sent is already in place, and the rest of it follows the same pattern. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7110.0
+  },
+  {
+   "text": "The schedule will take a few seconds, but let me know if you would rather take a different route. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7670.0
+  },
+  {
+   "text": "Good question, your last message is saved, but let me know if you would rather take a different route. Happy to take another pass at it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7630.0
+  },
+  {
+   "text": "Here is what I found, your account is saved, unless you would prefer to handle that part yourself. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7350.0
+  },
+  {
+   "text": "While that runs, your account came back empty, while I pull together the remaining details. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6910.0
+  },
+  {
+   "text": "Before we continue, this document can wait until later, and I can walk you through it whenever you are ready. I can adjust any part of it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7560.0
+  },
+  {
+   "text": "I understand, this document will take a few seconds, so I have gone ahead and queued it up for you. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7600.0
+  },
+  {
+   "text": "That is a fair point, the report is saved, unless you would prefer to handle that part yourself. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7720.0
+  },
+  {
+   "text": "Before we continue, the reminder has been updated, but let me know if you would rather take a different route. I can adjust any part of it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7910.0
+  },
+  {
+   "text": "Here is what I found, the summary went through, and I can walk you through it whenever you are ready. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7360.0
+  },
+  {
+   "text": "That is a fair point, your account can wait until later, though it may look slightly different than you expect. I can adjust any part of it.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7760.0
+  },
+  {
+   "text": "Thanks for that, your account can wait until later, which should make the next step a lot simpler. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8090.0
+  },
+  {
+   "text": "Before we continue, your last message is saved, so there is nothing else you need to do right now. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7580.0
+  },
+  {
+   "text": "Before we continue, the summary came back empty, which should make the next step a lot simpler. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8250.0
+  },
+  {
+   "text": "Here is what I found, the reminder looks correct to me, while I pull together the remaining details. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7310.0
+  },
+  {
+   "text": "Let me check, the request looks correct to me, though it may look slightly different than you expect. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8150.0
+  },
+  {
+   "text": "Here is what I found, the file you sent is already in place, and the rest of it follows the same pattern. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7990.0
+  },
+  {
+   "text": "Here is what I found, the search can wait until later, which should make the next step a lot simpler. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7970.0
+  },
+  {
+   "text": "Before we continue, the schedule needs one more detail, so I have gone ahead and queued it up for you. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8130.0
+  },
+  {
+   "text": "Thanks for that, the summary needs one more detail, so there is nothing else you need to do right now. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7450.0
+  },
+  {
+   "text": "One thing to note, the request has been updated, and I can walk you through it whenever you are ready. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7130.0
+  },
+  {
+   "text": "Before we continue, the report needs one more detail, and I can walk you through it whenever you are ready. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7460.0
+  },
+  {
+   "text": "Let me check, this document looks correct to me, so there is nothing else you need to do right now. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 6990.0
+  },
+  {
+   "text": "Thanks for that, the report will take a few seconds, which should make the next step a lot simpler. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8410.0
+  },
+  {
+   "text": "That is a fair point, the file you sent can wait until later, though it may look slightly different than you expect. Would you like me to continue?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8120.0
+  },
+  {
+   "text": "Thanks for that, your last message needs one more detail, and I can walk you through it whenever you are ready. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7710.0
+  },
+  {
+   "text": "Let me check, the reminder is already in place, but let me know if you would rather take a different route. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7520.0
+  },
+  {
+   "text": "Here is what I found, your last message looks correct to me, and the rest of it follows the same pattern. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8180.0
+  },
+  {
+   "text": "That makes sense, that change came back empty, but let me know if you would rather take a different route. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7840.0
+  },
+  {
+   "text": "Before we continue, the file you sent is already in place, and I will keep an eye on it in the background. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8690.0
+  },
+  {
+   "text": "For what it is worth, the reminder will take a few seconds, so I have gone ahead and queued it up for you. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8130.0
+  },
+  {
+   "text": "Here is what I found, the reminder came back empty, though it may look slightly different than you expect. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8100.0
+  },
+  {
+   "text": "Here is what I found, your account looks correct to me, but let me know if you would rather take a different route. Tell me if that is not what you meant.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8480.0
+  },
+  {
+   "text": "In that case, your last message can wait until later, unless you would prefer to handle that part yourself. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7740.0
+  },
+  {
+   "text": "Here is what I found, the connection will take a few seconds, so there is nothing else you need to do right now. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8280.0
+  },
+  {
+   "text": "Here is what I found, the summary looks correct to me, though it may look slightly different than you expect. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8780.0
+  },
+  {
+   "text": "One thing to note, the file you sent went through, but let me know if you would rather take a different route. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 7810.0
+  },
+  {
+   "text": "Just to confirm, your last message can wait until later, but let me know if you would rather take a different route. Let me know how you would like to proceed.",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8770.0
+  },
+  {
+   "text": "That is a fair point, the schedule has been updated, but let me know if you would rather take a different route. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 9120.0
+  },
+  {
+   "text": "One thing to note, the reminder will take a few seconds, but let me know if you would rather take a different route. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8550.0
+  },
+  {
+   "text": "Here is what I found, your last message will take a few seconds, unless you would prefer to handle that part yourself. Is there anything you would like me to change?",
+   "voice": "omnivoice/gaurav",
+   "audio_ms": 8810.0
+  }
+ ]
+}

@@ -1,0 +1,777 @@
+{
+ "_": "vql-speech's own word timestamps, as `add_timestamps` returned them, recorded in the same pass as the WAVs beside this file. `start_ms` is relative to the start of its own clip; the canned TTS adds the offset of the sentence within the turn, which is the baseline pipecat stamps against. Regenerate with server/record.py — never by hand.",
+ "voice": "omnivoice/gauri",
+ "sample_rate": 24000,
+ "sentences": {
+  "greet-0.wav": {
+   "ms": 890.0,
+   "words": [
+    "Hello."
+   ],
+   "start_ms": [
+    0.0
+   ]
+  },
+  "greet-1.wav": {
+   "ms": 2720.0,
+   "words": [
+    "I'm",
+    "a",
+    "talking",
+    "head",
+    "for",
+    "your",
+    "voice",
+    "agent."
+   ],
+   "start_ms": [
+    0.0,
+    247.3,
+    329.7,
+    906.7,
+    1236.4,
+    1483.6,
+    1813.3,
+    2225.5
+   ]
+  },
+  "dropin-0.wav": {
+   "ms": 2010.0,
+   "words": [
+    "I'm",
+    "one",
+    "line",
+    "in",
+    "your",
+    "pipeline."
+   ],
+   "start_ms": [
+    0.0,
+    241.2,
+    482.4,
+    804.0,
+    964.8,
+    1286.4
+   ]
+  },
+  "dropin-1.wav": {
+   "ms": 4560.0,
+   "words": [
+    "An",
+    "avatar",
+    "processor,",
+    "seated",
+    "between",
+    "the",
+    "T",
+    "T",
+    "S",
+    "and",
+    "the",
+    "transport."
+   ],
+   "start_ms": [
+    0.0,
+    172.1,
+    688.3,
+    1548.7,
+    2064.9,
+    2667.2,
+    2925.3,
+    3011.3,
+    3097.4,
+    3183.4,
+    3441.5,
+    3699.6
+   ]
+  },
+  "novideo-0.wav": {
+   "ms": 2040.0,
+   "words": [
+    "There",
+    "is",
+    "no",
+    "video",
+    "model",
+    "here."
+   ],
+   "start_ms": [
+    0.0,
+    425.0,
+    595.0,
+    765.0,
+    1190.0,
+    1615.0
+   ]
+  },
+  "novideo-1.wav": {
+   "ms": 3290.0,
+   "words": [
+    "I'm",
+    "a",
+    "drawing,",
+    "moved",
+    "by",
+    "a",
+    "small",
+    "behavior",
+    "library."
+   ],
+   "start_ms": [
+    0.0,
+    240.7,
+    321.0,
+    962.9,
+    1364.1,
+    1524.6,
+    1604.9,
+    2006.1,
+    2648.0
+   ]
+  },
+  "ack-okay-0.wav": {
+   "ms": 850.0,
+   "words": [
+    "Okay."
+   ],
+   "start_ms": [
+    0.0
+   ]
+  },
+  "lipsync-0.wav": {
+   "ms": 2130.0,
+   "words": [
+    "My",
+    "mouth",
+    "runs",
+    "on",
+    "two",
+    "clocks."
+   ],
+   "start_ms": [
+    0.0,
+    185.2,
+    648.3,
+    1018.7,
+    1203.9,
+    1481.7
+   ]
+  },
+  "lipsync-1.wav": {
+   "ms": 3350.0,
+   "words": [
+    "One",
+    "predicts",
+    "from",
+    "the",
+    "text,",
+    "the",
+    "other",
+    "measures",
+    "the",
+    "audio."
+   ],
+   "start_ms": [
+    0.0,
+    209.4,
+    767.7,
+    1046.9,
+    1256.2,
+    1605.2,
+    1814.6,
+    2163.5,
+    2721.9,
+    2931.3
+   ]
+  },
+  "legs-0.wav": {
+   "ms": 3170.0,
+   "words": [
+    "The",
+    "predicted",
+    "mouth",
+    "moves",
+    "the",
+    "instant",
+    "audio",
+    "starts."
+   ],
+   "start_ms": [
+    0.0,
+    216.1,
+    864.5,
+    1224.8,
+    1585.0,
+    1801.1,
+    2305.5,
+    2665.7
+   ]
+  },
+  "legs-1.wav": {
+   "ms": 5100.0,
+   "words": [
+    "The",
+    "measured",
+    "one",
+    "rewrites",
+    "it",
+    "a",
+    "few",
+    "frames",
+    "later,",
+    "and",
+    "you",
+    "shouldn't",
+    "see",
+    "the",
+    "seam."
+   ],
+   "start_ms": [
+    0.0,
+    231.8,
+    850.0,
+    1081.8,
+    1700.0,
+    1854.5,
+    1931.8,
+    2163.6,
+    2627.3,
+    3090.9,
+    3322.7,
+    3554.5,
+    4250.0,
+    4481.8,
+    4713.6
+   ]
+  },
+  "wire-0.wav": {
+   "ms": 2290.0,
+   "words": [
+    "Three",
+    "kinds",
+    "of",
+    "message",
+    "reach",
+    "the",
+    "browser."
+   ],
+   "start_ms": [
+    0.0,
+    327.1,
+    654.3,
+    785.1,
+    1243.1,
+    1570.3,
+    1766.6
+   ]
+  },
+  "wire-1.wav": {
+   "ms": 2370.0,
+   "words": [
+    "A",
+    "claim,",
+    "an",
+    "action,",
+    "and",
+    "mouth",
+    "cues."
+   ],
+   "start_ms": [
+    0.0,
+    81.7,
+    572.1,
+    735.5,
+    1307.6,
+    1552.8,
+    1961.4
+   ]
+  },
+  "ack-see-0.wav": {
+   "ms": 870.0,
+   "words": [
+    "I",
+    "see."
+   ],
+   "start_ms": [
+    0.0,
+    174.0
+   ]
+  },
+  "frames-0.wav": {
+   "ms": 2780.0,
+   "words": [
+    "My",
+    "states",
+    "come",
+    "from",
+    "the",
+    "frames",
+    "you",
+    "already",
+    "push."
+   ],
+   "start_ms": [
+    0.0,
+    139.0,
+    556.0,
+    834.0,
+    1112.0,
+    1320.5,
+    1737.5,
+    1946.0,
+    2432.5
+   ]
+  },
+  "frames-1.wav": {
+   "ms": 2710.0,
+   "words": [
+    "You",
+    "emit",
+    "nothing",
+    "extra",
+    "to",
+    "make",
+    "me",
+    "listen."
+   ],
+   "start_ms": [
+    0.0,
+    239.1,
+    557.9,
+    1115.9,
+    1514.4,
+    1673.8,
+    1992.6,
+    2152.1
+   ]
+  },
+  "authority-0.wav": {
+   "ms": 2300.0,
+   "words": [
+    "I",
+    "never",
+    "decide",
+    "what",
+    "the",
+    "agent",
+    "is",
+    "doing."
+   ],
+   "start_ms": [
+    0.0,
+    71.9,
+    431.2,
+    862.5,
+    1150.0,
+    1365.6,
+    1725.0,
+    1868.8
+   ]
+  },
+  "authority-1.wav": {
+   "ms": 3580.0,
+   "words": [
+    "The",
+    "server",
+    "claims",
+    "a",
+    "state,",
+    "and",
+    "the",
+    "audio",
+    "overrules",
+    "it."
+   ],
+   "start_ms": [
+    0.0,
+    238.7,
+    716.0,
+    1193.3,
+    1272.9,
+    1750.2,
+    1988.9,
+    2227.6,
+    2625.3,
+    3341.3
+   ]
+  },
+  "surface-0.wav": {
+   "ms": 3790.0,
+   "words": [
+    "The",
+    "whole",
+    "interface",
+    "is",
+    "create",
+    "avatar,",
+    "with",
+    "a",
+    "mount",
+    "and",
+    "a",
+    "client."
+   ],
+   "start_ms": [
+    0.0,
+    214.5,
+    572.1,
+    1215.7,
+    1358.7,
+    1787.7,
+    2288.3,
+    2574.3,
+    2645.8,
+    3003.4,
+    3217.9,
+    3289.4
+   ]
+  },
+  "surface-1.wav": {
+   "ms": 3140.0,
+   "words": [
+    "It",
+    "hands",
+    "back",
+    "a",
+    "destroy",
+    "function",
+    "and",
+    "nothing",
+    "else."
+   ],
+   "start_ms": [
+    0.0,
+    149.5,
+    523.3,
+    822.4,
+    897.1,
+    1420.5,
+    2018.6,
+    2242.9,
+    2766.2
+   ]
+  },
+  "ack-go-on-0.wav": {
+   "ms": 1060.0,
+   "words": [
+    "Go",
+    "on."
+   ],
+   "start_ms": [
+    0.0,
+    424.0
+   ]
+  },
+  "anytts-0.wav": {
+   "ms": 2810.0,
+   "words": [
+    "Any",
+    "T",
+    "T",
+    "S",
+    "works,",
+    "word",
+    "timings",
+    "or",
+    "not."
+   ],
+   "start_ms": [
+    0.0,
+    290.7,
+    387.6,
+    484.5,
+    581.4,
+    1162.8,
+    1550.3,
+    2228.6,
+    2422.4
+   ]
+  },
+  "anytts-1.wav": {
+   "ms": 2870.0,
+   "words": [
+    "Without",
+    "them",
+    "I",
+    "just",
+    "stay",
+    "on",
+    "the",
+    "predicted",
+    "mouth."
+   ],
+   "start_ms": [
+    0.0,
+    502.2,
+    789.2,
+    861.0,
+    1148.0,
+    1435.0,
+    1578.5,
+    1793.8,
+    2439.5
+   ]
+  },
+  "nobuild-0.wav": {
+   "ms": 2040.0,
+   "words": [
+    "The",
+    "renderer",
+    "has",
+    "no",
+    "build",
+    "step."
+   ],
+   "start_ms": [
+    0.0,
+    235.4,
+    863.1,
+    1098.5,
+    1255.4,
+    1647.7
+   ]
+  },
+  "nobuild-1.wav": {
+   "ms": 4340.0,
+   "words": [
+    "Plain",
+    "modules,",
+    "no",
+    "dependencies",
+    "—",
+    "what",
+    "you",
+    "screenshot",
+    "is",
+    "what",
+    "ships."
+   ],
+   "start_ms": [
+    0.0,
+    380.7,
+    989.8,
+    1142.1,
+    2055.8,
+    2131.9,
+    2436.5,
+    2664.9,
+    3426.3,
+    3578.6,
+    3883.2
+   ]
+  },
+  "actions-0.wav": {
+   "ms": 2330.0,
+   "words": [
+    "I",
+    "never",
+    "invent",
+    "an",
+    "acknowledgement."
+   ],
+   "start_ms": [
+    0.0,
+    77.7,
+    466.0,
+    932.0,
+    1087.3
+   ]
+  },
+  "actions-1.wav": {
+   "ms": 3930.0,
+   "words": [
+    "Every",
+    "nod",
+    "and",
+    "every",
+    "receipt",
+    "is",
+    "something",
+    "your",
+    "server",
+    "asked",
+    "for."
+   ],
+   "start_ms": [
+    0.0,
+    370.8,
+    593.2,
+    815.7,
+    1186.4,
+    1705.5,
+    1853.8,
+    2521.1,
+    2817.7,
+    3262.6,
+    3633.4
+   ]
+  },
+  "ack-got-it-0.wav": {
+   "ms": 960.0,
+   "words": [
+    "Got",
+    "it."
+   ],
+   "start_ms": [
+    0.0,
+    480.0
+   ]
+  },
+  "still-0.wav": {
+   "ms": 1750.0,
+   "words": [
+    "I",
+    "stay",
+    "deliberately",
+    "still."
+   ],
+   "start_ms": [
+    0.0,
+    76.1,
+    380.4,
+    1293.5
+   ]
+  },
+  "still-1.wav": {
+   "ms": 3090.0,
+   "words": [
+    "A",
+    "restless",
+    "face",
+    "costs",
+    "you",
+    "bitrate",
+    "and",
+    "says",
+    "nothing."
+   ],
+   "start_ms": [
+    0.0,
+    71.9,
+    646.7,
+    934.2,
+    1293.5,
+    1509.1,
+    2012.1,
+    2227.7,
+    2515.1
+   ]
+  },
+  "listen-0.wav": {
+   "ms": 2070.0,
+   "words": [
+    "Most",
+    "of",
+    "my",
+    "job",
+    "is",
+    "listening."
+   ],
+   "start_ms": [
+    0.0,
+    360.0,
+    540.0,
+    720.0,
+    990.0,
+    1170.0
+   ]
+  },
+  "listen-1.wav": {
+   "ms": 3210.0,
+   "words": [
+    "Watch",
+    "what",
+    "I",
+    "do",
+    "while",
+    "you",
+    "talk,",
+    "not",
+    "while",
+    "I",
+    "talk."
+   ],
+   "start_ms": [
+    0.0,
+    411.5,
+    740.8,
+    823.1,
+    987.7,
+    1399.2,
+    1646.2,
+    2057.7,
+    2304.6,
+    2716.2,
+    2798.5
+   ]
+  },
+  "moment-0.wav": {
+   "ms": 1290.0,
+   "words": [
+    "One",
+    "moment."
+   ],
+   "start_ms": [
+    0.0,
+    387.0
+   ]
+  },
+  "moment-1.wav": {
+   "ms": 1470.0,
+   "words": [
+    "Let",
+    "me",
+    "look",
+    "that",
+    "up."
+   ],
+   "start_ms": [
+    0.0,
+    275.6,
+    459.4,
+    826.9,
+    1194.4
+   ]
+  },
+  "close-0.wav": {
+   "ms": 1950.0,
+   "words": [
+    "That's",
+    "the",
+    "whole",
+    "library."
+   ],
+   "start_ms": [
+    0.0,
+    531.8,
+    797.7,
+    1240.9
+   ]
+  },
+  "close-1.wav": {
+   "ms": 3170.0,
+   "words": [
+    "Keep",
+    "talking,",
+    "and",
+    "I'll",
+    "start",
+    "over",
+    "from",
+    "the",
+    "top."
+   ],
+   "start_ms": [
+    0.0,
+    325.1,
+    975.4,
+    1219.2,
+    1544.4,
+    1950.8,
+    2275.9,
+    2601.0,
+    2844.9
+   ]
+  }
+ }
+}

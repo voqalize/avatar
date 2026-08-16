@@ -315,9 +315,10 @@ experiments/            server-side spikes; ships nowhere near the widget
 step" (`client/` is the first). Nothing in `src/` may depend on either — what
 you screenshot in a rig page is what ships.
 
-`py/scripts/fit_durations.py` fits the per-phone weights in
-`duration_table.json`, which the fast viseme leg reads, so it lives beside the
-table. It takes `--cache` for any `{text, audio_ms}` corpus.
+`py/scripts/measure_durations.py` speaks the duration corpus through vql-speech
+and `py/scripts/fit_durations.py` fits the two constants in `durations.py` from
+what came back — measure, then fit, then paste. Both live beside the corpus they
+read, `py/tests/fixtures/duration_corpus.json`.
 
 `client/` is compiled with plain `tsc` — no bundler, no tsup. The emitted
 modules keep their relative import of `../../src/avatar.js`, which from

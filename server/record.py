@@ -1,5 +1,20 @@
 """Record the canned corpus, once per voice. Reads `lines.json`, writes `audio/`.
 
+Two artefacts per voice, recorded in one pass so they cannot disagree: the WAVs,
+and `audio/<voice>/timings.json` — **vql-speech's own word timestamps**, asked
+for with `add_timestamps=True` and written down verbatim. The canned TTS replays
+them rather than estimating its own, which is what makes the default path's
+karaoke the same data a live `--tts vql-speech` call would carry.
+
+That mattered more than it sounds. The recorder used to save audio only, and
+`canned.py` spread each sentence's words over the clip by character share — the
+right *algorithm* (it is what vql-speech does too) applied to the wrong
+*baseline*: pipecat stamps word timings against the start of the whole turn's
+audio context, so every sentence after the first replayed the first sentence's
+clock. On the two-sentence `greet` line the second sentence's first word landed
+at 0 ms instead of 890 ms, and the transcript finished 1.4 s before the voice
+did.
+
     cd server && uv run --with "cartesia[websockets]>=3,<4" --with "pyjwt[crypto]" python record.py
     cd server && uv run --with "cartesia[websockets]>=3,<4" --with "pyjwt[crypto]" python record.py male
 
@@ -82,14 +97,28 @@ def _token() -> str:
     )
 
 
-def _synthesise(client: Any, *, text: str, voice: str, sample_rate: int) -> bytes:
-    """One sentence, one websocket turn. Raw PCM, exactly as pipecat receives it.
+def _get(obj: Any, key: str) -> Any:
+    """The SDK hands back dicts on some frames and models on others."""
+    return obj.get(key) if isinstance(obj, dict) else getattr(obj, key, None)
+
+
+def _synthesise(
+    client: Any, *, text: str, voice: str, sample_rate: int
+) -> tuple[bytes, list[str], list[float]]:
+    """One sentence, one websocket turn. Raw PCM and the service's own word times.
 
     `container: raw` rather than `wav`: the header vql-speech would write is not
     the one we want anyway (we re-declare the rate below against `lines.json`),
     and a header arriving mid-stream is a class of bug worth not having.
+
+    `add_timestamps` is what a live `--tts vql-speech` call asks for too, so what
+    comes back here is what pipecat's Cartesia service would have received. The
+    starts are relative to *this* turn because a turn is one sentence here; the
+    caller is the one that knows where the sentence sits in a line.
     """
     chunks: list[bytes] = []
+    words: list[str] = []
+    starts: list[float] = []
     ws = client.tts.websocket()
     try:
         for chunk in ws.send(
@@ -101,14 +130,22 @@ def _synthesise(client: Any, *, text: str, voice: str, sample_rate: int) -> byte
                 "encoding": "pcm_s16le",
                 "sample_rate": sample_rate,
             },
+            add_timestamps=True,
             stream=True,
         ):
-            audio = chunk.get("audio") if isinstance(chunk, dict) else getattr(chunk, "audio", None)
+            audio = _get(chunk, "audio")
             if audio:
                 chunks.append(audio)
+            timestamps = _get(chunk, "word_timestamps")
+            if timestamps is not None:
+                got = _get(timestamps, "words")
+                at = _get(timestamps, "start")
+                if got and at is not None:
+                    words += list(got)
+                    starts += [float(v) for v in at]
     finally:
         ws.close()
-    return b"".join(chunks)
+    return b"".join(chunks), words, starts
 
 
 def record(client: Any, voice: str, spec: dict, sentences: list[dict], sample_rate: int) -> int:
@@ -116,9 +153,12 @@ def record(client: Any, voice: str, spec: dict, sentences: list[dict], sample_ra
     out_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n{voice} — {spec['vql_speech']} → {out_dir}")
 
+    timings: dict[str, Any] = {}
     for s in sentences:
         out = out_dir / s["audio"]
-        pcm = _synthesise(client, text=s["text"], voice=spec["vql_speech"], sample_rate=sample_rate)
+        pcm, words, starts = _synthesise(
+            client, text=s["text"], voice=spec["vql_speech"], sample_rate=sample_rate
+        )
 
         # Every way this fails looks identical at runtime — the mouth moves and
         # no sound comes out, which reads as a lipsync bug and is not one. So
@@ -130,6 +170,15 @@ def record(client: Any, voice: str, spec: dict, sentences: list[dict], sample_ra
         if peak == 0:
             raise SystemExit(f"{voice}/{out.name}: {len(pcm)} bytes of silence for {s['text']!r}")
 
+        # A clip whose words did not arrive would replay as a sentence the
+        # karaoke path skips entirely — silent in exactly the same way as the
+        # above, one layer up.
+        if len(words) != len(s["text"].split()):
+            raise SystemExit(
+                f"{voice}/{out.name}: {len(words)} word timings for "
+                f"{len(s['text'].split())} words in {s['text']!r}"
+            )
+
         with wave.open(str(out), "wb") as w:
             w.setnchannels(1)
             w.setsampwidth(2)
@@ -137,8 +186,34 @@ def record(client: Any, voice: str, spec: dict, sentences: list[dict], sample_ra
             w.writeframes(pcm)
 
         ms = len(samples) / sample_rate * 1000
+        timings[s["audio"]] = {
+            "ms": round(ms, 1),
+            "words": words,
+            # Milliseconds, because everything downstream of here counts in
+            # them; seconds are the wire's unit, not ours.
+            "start_ms": [round(v * 1000, 1) for v in starts],
+        }
         print(f"  {out.name:28} {ms:6.0f} ms  peak {peak / 32768:.2f}  {s['text']}")
 
+    (out_dir / "timings.json").write_text(
+        json.dumps(
+            {
+                "_": (
+                    "vql-speech's own word timestamps, as `add_timestamps` returned them, "
+                    "recorded in the same pass as the WAVs beside this file. `start_ms` is "
+                    "relative to the start of its own clip; the canned TTS adds the offset "
+                    "of the sentence within the turn, which is the baseline pipecat stamps "
+                    "against. Regenerate with server/record.py — never by hand."
+                ),
+                "voice": spec["vql_speech"],
+                "sample_rate": sample_rate,
+                "sentences": timings,
+            },
+            indent=1,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
     return len(sentences)
 
 

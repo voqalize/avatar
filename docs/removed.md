@@ -319,14 +319,94 @@ perceptible, and it cost a reach into another processor's internals.
 **Instead:** subclass `AvatarStateMachine` and translate in `on_frame` — the
 documented seam, imported from `voqalize_avatar.state_machine` (deliberately
 not in the barrel; a seam should cost one extra import). `py/README.md` has the
-recipe. The fast leg still improves with a refitted `duration_table.json` —
-`py/scripts/fit_durations.py` is unchanged; it just no longer keys on a voice
-the library had to go looking for.
+recipe. The fast leg still improves with a re-fitted estimator —
+`py/scripts/fit_durations.py`, which no longer keys on a voice the library had
+to go looking for (see *The per-voice duration table*, below, for the rest of
+that thread).
 
 **Recover:** `git checkout v0.1.0 -- py/src/voqalize_avatar/wiring.py
 py/src/voqalize_avatar/error_observer.py py/tests/test_wiring.py
 py/tests/test_error_observer.py`, and `git show v0.1.0:py/src/voqalize_avatar/processor.py`
 for the constructor.
+
+---
+
+## The per-voice duration table
+
+**Was:** `py/src/voqalize_avatar/duration_table.json`, shipped as package data,
+holding `ms_per_char` / `onset_ms` / `median_rel_err` per `(voice, lang)` — and
+in `durations.py` the machinery to consult it: a `DurationModel` dataclass, two
+`lru_cache`d loaders, a `model_for(voice, lang)` with a three-step fallback
+ladder (exact key → same voice in another language → the mean of every fitted
+voice → a hardcoded pair if the table were ever empty), and
+`estimate_duration_ms(text, voice, lang)`. `scripts/fit_durations.py` wrote the
+table one entry per group and took `--cache` for "a corpus from the voices you
+actually ship"; `py/tests/fixtures/duration_holdout.json` was the piper-spoken
+holdout that scored it.
+
+**Why it went:** every one of those branches was unreachable. The voice argument
+existed for `wiring.py`, which reached into the TTS service to discover the voice
+id — and `wiring.py` went in 0.2 (the entry above). Since then the only calls are
+`estimate_duration_ms(text)` from `visemes.py` and the CLI, so the ladder
+resolved, every single time, to its last rung: the cross-voice mean of two piper
+reference voices chosen for their licences. Against 480 sentences measured
+through vql-speech that mean is **19.1% off the median** — inside the band this
+module's own table says costs the fast leg half its frame agreement, and worst
+exactly where this avatar spends most of its speech: `"Okay."` predicted at 449
+ms against a measured 810–850. The generality was not a hedge against an unknown
+TTS. It was a table nobody could reach, hiding a number nobody had checked.
+
+**Instead:** two module constants fitted once against the voices this project
+ships (`MS_PER_CHAR`, `ONSET_MS` in `durations.py`), and
+`estimate_duration_ms(text)`. Out-of-sample median error 6.5%, p90 13.8%.
+Re-fitting is `scripts/measure_durations.py` (needs the vql-speech credential;
+re-speaks `tests/fixtures/duration_corpus.json`, which is committed text and
+measured timings) followed by `scripts/fit_durations.py`, then paste the two
+numbers. If a consumer's TTS is far enough from these voices to matter, that is
+the same two commands with a different endpoint — a fork of two constants, not a
+table key they have to make the library aware of.
+
+**What did *not* go:** the fast leg itself. It is the guarantee that the mouth
+moves on the first audio sample and nothing here touches it — only how long it
+thinks the sentence is.
+
+**Recover:** `git show v0.2.2:py/src/voqalize_avatar/durations.py`,
+`git show v0.2.2:py/src/voqalize_avatar/duration_table.json`,
+`git show v0.2.2:py/scripts/fit_durations.py`,
+`git show v0.2.2:py/tests/fixtures/duration_holdout.json`.
+
+---
+
+## `canned.py`'s word-time estimator
+
+**Was:** `_word_times(text, ms)` in `server/canned.py` — the canned TTS spreading
+a sentence's words over its recorded clip by character share, because a recording
+has no alignment and pipecat's karaoke path needs one per word.
+
+**Why it went:** it was a guess standing in for data that exists.
+`server/record.py` now asks vql-speech for `add_timestamps` in the same call that
+fetches the audio and writes `audio/<voice>/timings.json` beside the WAVs, so the
+default path replays the service's own word timings rather than approximating
+them. Measured, the two agree to 0.05 ms — vql-speech lays its own words out by
+character share as well — so this swap bought no accuracy today. What it buys is
+that the number is *recorded*: the day the service gains real alignment, or
+normalises a sentence into different words than the client sent, the corpus
+follows without anyone here noticing they had a model of it.
+
+The defect fixed alongside it was **not** in the layout. Pipecat stamps word
+times against the start of the whole **turn's** audio context, and every sentence
+was handed over relative to its own clip — on the two-sentence `greet` line the
+second sentence began highlighting at 0 ms instead of 890, and the transcript ran
+out 1.4 s before the voice did. Only the transcript moved, which is why a real
+call did not catch it, and `test_word_times_are_against_the_turn_and_not_the_sentence`
+is what does now.
+
+**Instead:** `Sentence.words` from `timings.json`, offset by the audio the turn
+has already handed over (`CannedTTSService._spoken_ms`). `CannedLines.load`
+refuses a `timings.json` whose duration disagrees with its WAV by more than a
+millisecond, because the two are only separable by re-recording one of them.
+
+**Recover:** `git show v0.2.2:server/canned.py`.
 
 ---
 

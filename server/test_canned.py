@@ -277,6 +277,11 @@ def test_rejects_a_clip_that_is_not_what_the_corpus_declares(
         w.setsampwidth(2)
         w.setframerate(44100)  # the lie
         w.writeframes(r.readframes(r.getnframes()))
+    # A corpus is audio *and* timings, so the fake one needs both to get as far
+    # as the check under test.
+    (bad.parent / "timings.json").write_text(
+        json.dumps({"sentences": {"bad.wav": {"ms": src.ms, "words": ["hi"], "start_ms": [0.0]}}})
+    )
 
     manifest = tmp_path / "lines.json"
     manifest.write_text(
@@ -585,6 +590,52 @@ async def test_word_timings_put_the_words_on_the_wire_in_order(lines: CannedLine
         # And the last one says so, which is how a transcript knows to stop
         # highlighting rather than leaving a word lit for the rest of the call.
         assert frames[-1].remaining_text == ""
+
+
+async def test_word_times_are_against_the_turn_and_not_the_sentence(
+    lines: CannedLines,
+) -> None:
+    """The second sentence's first word does not start at zero.
+
+    `record.py` captures each clip's timings relative to *that clip*, because
+    that is what vql-speech reports and what a clip means on its own. Pipecat
+    stamps against the audio context, and with `reuse_context_id_within_turn`
+    one context spans the whole completion — the base class pins its zero to the
+    first audio frame of the turn and never moves it again. So a service that
+    hands over per-clip times unshifted claims every sentence begins the moment
+    the turn did, and the transcript finishes early by the length of everything
+    before the last sentence.
+
+    Silent in a call, which is why it survived: the mouth is driven by audio and
+    stays right. Only the highlight slides, and it slides *forward*, which reads
+    as an eager transcript rather than a bug.
+    """
+    line = next(l for l in lines.lines if len(l.sentences) > 1)
+    async with Chain(lines, word_timings=True) as chain:
+        await chain.llm.say(line)
+        await chain.settle()
+
+    segments: dict[int, list[AggregatedTextProgressFrame]] = {}
+    for frame in chain.out.of(AggregatedTextProgressFrame):
+        segments.setdefault(frame.segment_id, []).append(frame)
+    firsts = [frames[0].pts / 1_000_000 for frames in segments.values()]
+    assert len(firsts) == len(line.sentences)
+
+    # Each sentence starts after the one before it has been spoken. Compared
+    # against the clip lengths rather than a constant, because the corpus is
+    # re-recordable and these are real durations.
+    elapsed = 0.0
+    for sentence, start in zip(line.sentences, firsts):
+        assert start == pytest.approx(elapsed, abs=15.0), (
+            f"{sentence.text!r} claims to start at {start:.0f} ms of a turn that "
+            f"has already spoken {elapsed:.0f} ms"
+        )
+        elapsed += sentence.ms
+
+    # The whole turn's timeline, not just its starts: the last word of the last
+    # sentence lands inside the turn's audio and near its end.
+    last = max(f.pts for f in chain.out.of(AggregatedTextProgressFrame)) / 1_000_000
+    assert 0.5 * elapsed < last < elapsed
 
 
 async def test_the_sentence_boundary_reaches_the_avatar_on_the_karaoke_path(

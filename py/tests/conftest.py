@@ -49,8 +49,6 @@ CLIPS: dict[str, tuple[str, int]] = {
     "thank-you-for-your-time-today": ("Thank you for your time today.", 1639),
 }
 
-VOICE = "reference/a"
-
 
 def load_clip(name: str) -> tuple[bytes, str, int]:
     """`(pcm, text, ms)` for one fixture clip."""
@@ -58,8 +56,16 @@ def load_clip(name: str) -> tuple[bytes, str, int]:
     return (FIXTURES / f"{name}.pcm").read_bytes(), text, ms
 
 
+#: Shared with `scripts/fit_durations.py`: every 5th clip in corpus order is
+#: excluded from the fit, so the errors `test_durations.py` measures are about
+#: sentences the shipped constants have never seen.
+HOLDOUT_STRIDE = 5
+
+
 def load_holdout() -> list[dict[str, object]]:
-    return json.loads((FIXTURES / "duration_holdout.json").read_text())
+    """The clips `scripts/fit_durations.py` held out, by the same stride."""
+    clips = json.loads((FIXTURES / "duration_corpus.json").read_text())["clips"]
+    return [c for i, c in enumerate(clips) if i % HOLDOUT_STRIDE == 0]
 
 
 @pytest_asyncio.fixture(autouse=True)
