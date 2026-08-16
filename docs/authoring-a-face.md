@@ -1,35 +1,75 @@
 # Authoring an SVG avatar
 
-How to build a face for this project. The binding seam is
+How to build a face for this project, start to finish, assuming an SVG and no
+knowledge of the library. The binding seam is
 [internal-rig.md](internal-rig.md) — `apply(frame)`, `destroy()`, and the 30
 pose channels every rig renders. This document is the layer beneath it: what an
 SVG face module supplies, what `face-core.js` gives it for free, and the staged
 process for adding a new character. A non-SVG renderer needs only the rig
 contract and can ignore everything here.
 
+Shortest path: read [What you are building](#what-you-are-building), copy
+[The smallest face that works](#the-smallest-face-that-works), get it on screen,
+then come back. Everything from [Art units](#art-units) onward is about making a
+face *good*, which is a much longer job than making one *work* — the plumbing
+took an afternoon on both of the faces added since this document existed, and
+the drawing took days.
+
 *Living document. Describes the code as of `src/face*.js` on `main`;
 [Adding a new avatar](#adding-a-new-avatar) is the staged process, and CLAUDE.md
 § In flight flags what is about to change.*
 
-An avatar is a module exporting exactly this, and nothing more:
+## What you are building
+
+One `<svg>`, portrait, inside a `<div>` the host sizes. In its real setting it
+is a tile in a video call next to a screen share and a webcam, typically around
+**130 px wide** — author close up, accept at tile size, and read
+[research-perception.md](research-perception.md) before deciding that a mark is
+too small to matter.
+
+Four facts about the surrounding code, because they constrain what you can
+write:
+
+- **There is no build step, and that is deliberate.** `src/` is dependency-free
+  ES modules loaded straight into the browser: edit the file, reload the page,
+  look. Your module may import from `src/` and nothing else — not `client/`, not
+  `studio/`, no npm package. A face that needs a bundler has broken the shape of
+  the project even if it renders.
+- **Roughly sixty times a second the mixer hands you one object of ~30 floats
+  and you write it into the DOM.** There is no animation in your module: no
+  timer, no `requestAnimationFrame`, no easing, no state that survives a frame.
+- **Nothing above the face knows what a face looks like; nothing in the face
+  knows what a call is.** If a visual change needs `params.js` touched,
+  reconsider; if it needs anything outside `src/face*.js`, it's a bug.
+- **The drawing is generated markup, not an asset.** Every face here is a
+  template string built at mount time, so geometry can be computed from
+  landmarks and the ink can be re-themed per instance. There is no `.svg` file
+  to load and no asset pipeline.
+
+### The module surface
+
+A face module exports four things, and the last one is how it is passed around:
 
 ```js
-createFace(mount, theme, options?) -> { svg, apply(params), theme, destroy() }
-META = { viewBox: {x, y, w, h}, mouthCrop: {x, y, w, h} }
+createFace(mount, theme?, options?) -> { svg, apply(params), theme, destroy() }
+META  = { viewBox: {x, y, w, h}, mouthCrop: {x, y, w, h} }
+THEME = { ink: '#1b1b1b', paper: '#ffffff', … }
+export const <yourname> = { create: createFace, meta: META };
 ```
 
 - `mount` — element to render into. `destroy()` empties it.
+- `theme` — optional per-key colour overrides merged over `THEME`; the merged
+  object is returned as `theme`. Theme *keys* are per-avatar (all three line
+  rigs happen to carry the same 6 — `ink`, `paper`, `accent`, `mouthIn`,
+  `teeth`, `tongue` — where the retired rigs shared a ~25-key palette; that is
+  what the idiom costs, not a rule). Hosts that paint *around* the widget read
+  them off `api.theme` — see [Shipping a face](#shipping-a-face).
 - `options` — authoring escape hatches only, never a host surface. The one that
-  exists is `{ pitchRig: false }` on peep, for the comparison lab (see The pitch
-  rig). A face may ignore the argument entirely; wren and myna do.
-- `theme` — optional per-key colour overrides merged over the rig's palette;
-  the merged object is returned as `theme`. Theme *keys* are per-avatar
-  (all three line rigs happen to carry the same 6 — `ink`, `paper`, `accent`,
-  `mouthIn`, `teeth`, `tongue` — where the retired rigs shared a ~25-key
-  palette; that is what the idiom costs, not a rule).
-  Hosts that paint *around* the widget read them off `api.theme` — see
-  Palettes below.
-- `svg` — the live `<svg>` element.
+  exists is `{ pitchRig: false }` on peep, for the comparison lab (see
+  [The pitch rig](#the-pitch-rig--optional-and-what-makes-a-nod-a-nod)). A face
+  may ignore the argument entirely; wren and myna do.
+- `svg` — the live `<svg>` element. The hand layer appends into it, so it has to
+  be the real node and not a wrapper.
 - `apply(params)` — write one full parameter vector into the DOM. Called every
   animation frame.
 - `META` — the **avatar descriptor**: what a host or tool may know about the
@@ -37,14 +77,193 @@ META = { viewBox: {x, y, w, h}, mouthCrop: {x, y, w, h} }
   it; `createAvatar` exposes it as `api.meta`); `mouthCrop` frames the mouth
   for close inspection (the contact sheet's viseme-detail row). Deliberately
   minimal — a landmark joins META when a second consumer needs it, not before.
+- The **record** — `{ create, meta }`, named after the face. That value *is* how
+  a face is passed; there is no registry and no name to resolve
+  ([Shipping a face](#shipping-a-face)).
 
-**A face must be callable standalone.** Three rig-tooling pages call
-`FACES[name].create(mount)` directly with no mixer and drive `apply()` from
-a raw vector; a face that only works under `createAvatar` is broken.
+**A face must be callable standalone.** Three rig-tooling pages —
+`authoring/contact-sheet.html`, `authoring/torso-check.html` and
+`authoring/clip-strip.html` — call `FACES[name].create(mount)` directly with no
+mixer and drive `apply()` from a raw vector; a face that only works under
+`createAvatar` is broken.
 
-Nothing above the face knows what a face looks like; nothing in the face knows
-what a call is. If a visual change needs `params.js` touched, reconsider; if
-it needs anything outside `src/face*.js`, it's a bug.
+### What you implement, and what you get free
+
+Of the 30 channels ([internal-rig.md § The pose channels](internal-rig.md)):
+
+| | channels | who renders it |
+|---|---|---|
+| head, breath, shoulders, torso | 8 | **`poseTransforms` in `face-core.js`**, from a `POSE` spec of named numbers. You write no code for these, only constants. |
+| mouth (incl. teeth, tongue, jaw) | 10 | you |
+| eyes (lids, squint, pupils) | 6 | you |
+| brows | 6 | you |
+
+So the work is twenty-two channels landing on three features, and the shared
+module does the body. Everything above that — visemes, emotions, gaze, idle
+motion, blinks, gesture clips, interjections, the frame-edge hand, and all
+smoothing — belongs to the mixer and arrives already mixed, already clamped,
+already smoothed.
+
+## The smallest face that works
+
+Complete, runnable, and deliberately ugly. It passes the conformance sweep and
+the hand-framing gate; it fails every judgement in the checklist, which is the
+point — the plumbing is small and the drawing is not.
+
+```js
+// src/face-sparrow.js
+import { clamp } from './params.js';
+import { f, createFaceShell, faceApi, poseTransforms } from './face-core.js';
+
+export const THEME = { ink: '#1b1b1b', paper: '#ffffff' };
+
+const VB = { x: 0, y: 0, w: 576, h: 800 };
+
+export const META = {
+  viewBox: { x: VB.x, y: VB.y, w: VB.w, h: VB.h },
+  mouthCrop: { x: 190, y: 372, w: 196, h: 116 },
+};
+
+const CX = 288;
+
+// Every number poseTransforms needs. All eight body channels come from here.
+const POSE = {
+  leanTravel: 23, leanPivot: { x: CX, y: 547 },
+  shrugLift: 29, shrugTiltDeg: 1.6, shrugPivot: { x: CX, y: 778 },
+  yawPx: 26, pitchPx: 16,
+  pivot: { x: CX, y: 677 },
+  breathSwell: 0.008, swellPivot: { x: CX, y: 800 },
+  turnPx: 14,
+  layers: ['head', 'body', 'features'],
+  parallax: { head: 1.0, body: 0.1, features: 1.2 },
+  torsoLayers: ['body'],
+  units: 1,
+};
+
+function markup(id, t) {
+  return `
+<svg id="${id}" viewBox="${VB.x} ${VB.y} ${VB.w} ${VB.h}" xmlns="http://www.w3.org/2000/svg"
+     preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%">
+  <g id="${id}-head">
+    <path d="M234 430L234 800L342 800L342 430" fill="${t.paper}" stroke="${t.ink}" stroke-width="10"/>
+    <ellipse cx="${CX}" cy="343" rx="176" ry="219" fill="${t.paper}" stroke="${t.ink}" stroke-width="10"/>
+  </g>
+  <g id="${id}-body">
+    <path d="M40 800L48 702Q160 648 288 646Q416 648 528 702L536 800Z"
+          fill="${t.paper}" stroke="${t.ink}" stroke-width="10"/>
+  </g>
+  <g id="${id}-features">
+    <path id="${id}-browL" fill="none" stroke="${t.ink}" stroke-width="11" stroke-linecap="round"/>
+    <path id="${id}-browR" fill="none" stroke="${t.ink}" stroke-width="11" stroke-linecap="round"/>
+    <g id="${id}-eyes">
+      <ellipse id="${id}-eyeL" cx="${CX - 69}" cy="305" rx="17" fill="${t.ink}"/>
+      <ellipse id="${id}-eyeR" cx="${CX + 69}" cy="305" rx="17" fill="${t.ink}"/>
+    </g>
+    <ellipse id="${id}-mouth" fill="${t.ink}"/>
+  </g>
+</svg>`;
+}
+
+let uid = 0;
+
+export function createFace(mount, theme = {}) {
+  const t = Object.assign({}, THEME, theme);
+  const id = `sparrow${++uid}`;
+  const { svg, $, set } = createFaceShell(mount, id, markup(id, t));
+
+  const el = {
+    head: $('head'), body: $('body'), features: $('features'),
+    browL: $('browL'), browR: $('browR'),
+    eyes: $('eyes'), eyeL: $('eyeL'), eyeR: $('eyeR'), mouth: $('mouth'),
+  };
+
+  function apply(p) {
+    poseTransforms(p, set, el, POSE);   // the eight body channels, all of them
+
+    // Gaze translates the pair inside the features layer — never the layer.
+    set(el.eyes, 'transform', `translate(${f(p.pupilX * 11)} ${f(p.pupilY * 9)})`);
+
+    // A lid closes by flattening the bean. Squint eats the lower half only,
+    // which is why it is a separate channel and not just more lid.
+    const lidOpen = (lid, squint) =>
+      f(Math.max(1, 19 * (1 - clamp(lid)) * (1 - 0.45 * clamp(squint))));
+    set(el.eyeL, 'ry', lidOpen(p.lidL, p.squintL));
+    set(el.eyeR, 'ry', lidOpen(p.lidR, p.squintR));
+
+    // raise lifts the whole mark, angle lifts the OUTER end, inner the inner.
+    const brow = (outerX, innerX, raise, angle, inner) => {
+      const y = 242 - raise * 22;
+      return `M${f(outerX)} ${f(y - angle * 16)}L${f(innerX)} ${f(y - inner * 16)}`;
+    };
+    set(el.browL, 'd', brow(CX - 109, CX - 29, p.browRaiseL, p.browAngleL, p.browInnerL));
+    set(el.browR, 'd', brow(CX + 109, CX + 29, p.browRaiseR, p.browAngleR, p.browInnerR));
+
+    // mouthOpen is the VISIBLE APERTURE, not a control-point gap. See the
+    // channel semantics note in Obligations below — this is where faces cheat.
+    const open = clamp(p.mouthOpen);
+    const w = (43 + clamp(p.mouthWidth) * 52) * (1 - 0.45 * clamp(p.mouthRound));
+    const h = Math.max(2, open * 52 * (1 - 0.3 * clamp(p.mouthPress)));
+    const corner = (p.mouthCornerL + p.mouthCornerR) * 0.5;
+    set(el.mouth, 'cx', f(CX));
+    set(el.mouth, 'cy', f(426 + open * 9 + clamp(p.jaw) * 10 - corner * 7));
+    set(el.mouth, 'rx', f(w / 2));
+    set(el.mouth, 'ry', f(h / 2));
+  }
+
+  return faceApi(mount, svg, apply, t);
+}
+
+export const sparrow = { create: createFace, meta: META };
+```
+
+Three rules are hiding in that file, and all three have cost someone a session:
+
+- **Every node you `set()` needs an id, and every id is instance-scoped.**
+  `createFaceShell(mount, id, markup)` finds your root by `#<id>` and hands back
+  `$('name')` for `#<id>-name`. The `uid` counter is not decoration: the contact
+  sheet mounts several dozen instances of one face on a single page, and
+  duplicate DOM ids cross-wire them. The memoizer keys on `node.id + attr`, so a
+  node with no id shares one cache slot with every other id-less node and its
+  writes are silently skipped — which presents as a channel that does nothing.
+- **`poseTransforms` owns the `transform` attribute of every layer named in
+  `POSE.layers`.** Your own transforms go on groups *nested inside* a layer —
+  which is why the eyes here are a `<g>` inside `features` and not `features`
+  itself. Writing a layer's transform yourself silently deletes the pose.
+- **The viewBox is written once, in the markup, and never again**, with
+  `preserveAspectRatio="xMidYMid meet"` and `width:100%;height:100%` so the host
+  sizes the mount and the drawing follows. Tooling re-frames by rewriting
+  `viewBox` *after* `apply()` and relies on you not touching it.
+
+This skeleton uses plain `stroke` to get a shape on screen fast. The house idiom
+is that nothing is a stroke — see [Art units](#art-units) and `src/line-art.js`.
+
+### Driving it without a mixer
+
+```js
+import { makeParams } from './params.js';
+import { sparrow } from './face-sparrow.js';
+
+const face = sparrow.create(document.getElementById('stage'));
+face.apply(makeParams({ mouthOpen: 0.85, headYaw: 0.4 }));
+```
+
+`makeParams` fills every channel from `REST` and applies your overrides on top,
+so you can name only the channel you are looking at. That is the whole harness
+the rig pages use, and `authoring/control-plane.html` is a ready-made one:
+`src/face-peep-control-plane.js` is peep with all static art deleted and only
+the elements `apply()` writes left behind, so you can see exactly which nodes a
+frame actually touches. `window.pose({ mouthOpen: .7, teethUpper: 1 })` in the
+console of that page.
+
+### What the skeleton does not do
+
+It consumes 27 of the 30 channels. The three it drops — `mouthTuck`,
+`teethUpper`, `tongue` — are precisely the ones that separate one viseme from
+another, so on the mouth-detail row `B` and `G` come out as the same mark and
+`H` is indistinguishable from `C`. It also fails the torso check: at
+`shoulderL/R = 1` the shirt lifts off the bottom of the frame and shows ground
+behind it, because the art stops at the frame edge instead of running past it.
+Both are the normal first findings, and both are in the checklist.
 
 ## Obligations of `apply(params)`
 
@@ -52,8 +271,8 @@ it needs anything outside `src/face*.js`, it's a bug.
   already smoothed through per-channel time constants. Add no easing of your
   own.
 - **Idempotent and cheap.** Same vector in, same DOM out; memoize attribute
-  writes (every rig shares a `prev`-map `set(node, attr, val)` helper) so
-  an unchanged channel costs nothing. ~60 calls/s is the budget.
+  writes (`createFaceShell`'s `set(node, attr, val)`) so an unchanged channel
+  costs nothing. ~60 calls/s is the budget.
 - **Never write `viewBox`.** Every pose channel is a transform or a path,
   never the camera. Tooling relies on this to crop safely after `apply()`.
 - **Honour the channel's semantic, not its plumbing** — the standing
@@ -61,6 +280,35 @@ it needs anything outside `src/face*.js`, it's a bug.
   [internal-rig.md § The pose channels](internal-rig.md), with the full
   channel table, rest values, ranges and sign conventions. A face consumes all
   30 and eases none of them.
+
+## Visemes are vectors, not drawings
+
+The headline feature is lipsync, and the most common wrong mental model is that
+a viseme is a shape you draw. It is not. `src/visemes.js` holds `VISEME_SHAPES`
+— the nine Rhubarb letters `A`–`H` plus `X` for silence — and each one is a set
+of values for seven mouth channels, scaled by loudness and given a `jaw` from
+the same arithmetic. The letter never reaches your module. What reaches it is
+`mouthOpen`, `mouthWidth`, `mouthRound`, `mouthPress`, `mouthTuck`, `teethUpper`
+and `tongue`, retargeted every cue and chased at a ~42 ms time constant, which
+is where co-articulation comes from — nothing blends shapes explicitly.
+
+Two consequences for the drawing:
+
+- **Distinctness is your problem, not the table's.** Two letters can be
+  numerically far apart and visually identical. `G` (lip to upper teeth) and `B`
+  (teeth together) differ almost entirely in `mouthTuck` and `teethUpper`; a
+  face that ignores those renders one mouth for both. This was a real defect,
+  invisible on full heads and obvious the moment the mouth was cropped.
+- **The fix is shape, not amplitude.** At 130 px a viseme is roughly 40 px tall.
+  Making everything bigger does not separate letters; making them differ in
+  outline does.
+
+`META.mouthCrop` is how anyone checks this. Choose it in your own art units as a
+rectangle around the mouth at its widest and most open, plus a margin — wide
+enough to show the corners at full smile, tall enough to hold viseme `D`. The
+contact sheet's mouth-detail row writes it straight into the svg's `viewBox`
+after `apply()`, so a badly chosen crop is a row of clipped mouths and nothing
+else in the library notices.
 
 ## Invariant vs per-avatar
 
@@ -174,6 +422,24 @@ unit-independent, which is why `shrugTiltDeg` never takes the `units` factor.
 `viewBox` is not a rig constant. Hosts derive aspect from `META.viewBox` (or
 `api.meta.viewBox`); the rig pages under `authoring/` do.
 
+**Two soft constraints on the window, if you are choosing one from scratch.**
+Pick the same 576-wide portrait window the three shipped faces use unless you
+have a reason not to: the frame-edge hand's timelines are authored in absolute
+units against it, and a window narrower than **532 units** fails
+`checkHandFraming` on the greet swing (measured; it is width-only, and height is
+free). And keep the aspect portrait and close to 0.72 — a host letterboxes your
+drawing inside a 16:9 tile, so extra width is margin nobody sees.
+
+The one thing to fix before anything else is that **the art has to run off the
+frame**, not stop at it. Every torso channel moves the shirt, and a shirt drawn
+to the frame edge shows ground the first time it leans back or shrugs.
+
+Line-art characters build every mark with `src/line-art.js` — `taper`,
+`taperRing`, `region`, filled variable-width outlines rather than strokes,
+because a uniform `stroke-width` with round caps is a rope with a blob at each
+end and that is the whole difference between "vector illustration" and "someone
+drew this". Width *profiles* are per-character and stay in the face module.
+
 ## Shipping a face
 
 Each face module exports its own `{ create, meta }` record, named after the
@@ -189,14 +455,36 @@ import { peep } from '@voqalize/avatar/faces/peep';
 createAvatar({ mount, client, face: peep });
 ```
 
-`src/faces.js` is the all-three table (`FACES`, `FACE_NAMES`, `DEFAULT_FACE`)
-and costs all three drawings, which is the right trade for `rig-check`, the
-contact sheet, `sweep` and Studio — tools whose whole job is comparing faces
-against each other. It is deliberately not on the package export map.
+Adding a face to *this* repo is four edits, and the first one is worth doing on
+day one because every review tool enumerates that table:
 
-Both halves are required. `create` without `meta` used to be tolerated, with
-`viewBox` re-read off the produced svg — a face could ship half a descriptor
-and nothing would say so ([removed.md](removed.md)).
+1. **`src/faces.js`** — import your module and add a row to `FACES`. That is
+   what makes the face visible to `rig-check`, the contact sheet, the torso
+   check, the clip strip, `authoring/tools/baseline.mjs` and the conformance
+   sweep in `pnpm test`. `FACE_NAMES` and `DEFAULT_FACE` follow from it;
+   `DEFAULT_FACE` stays `peep` unless a stakeholder says otherwise.
+2. **A `.d.ts` beside the module**, three lines: `createFace`, `META`, `THEME`
+   and the record, typed from `./avatar.js` exactly as `src/face-peep.d.ts`
+   does.
+3. **A `package.json` `exports` entry** for `./faces/<name>`, pointing at the
+   `.js` and the `.d.ts`. Separate entry points are why importing one face costs
+   one drawing.
+4. **`studio/src/look.ts`**, only if the face should be selectable in Studio —
+   which imports the published subpaths, never `src/`.
+
+Both halves of the record are required. `create` without `meta` used to be
+tolerated, with `viewBox` re-read off the produced svg — a face could ship half
+a descriptor and nothing would say so ([removed.md](removed.md)).
+
+**Authoring a face outside this repo** works for the public interface —
+`createAvatar({ mount, client, face })` takes any `{ create, meta }` value, and
+that is the documented way to add an avatar
+([design-avatar-interface.md § Adding an avatar](design-avatar-interface.md)).
+What you do not get is the kit: `face-core.js`, `line-art.js` and `params.js`
+are not on the package export map, so an outside module implements `apply()` on
+its own. It must still return a real `svg` and carry `ink`/`paper` in its theme,
+or mount with `hand: false`. That limit is the reason the faces we ship live
+here.
 
 Palettes: there is no barrel `THEME` export — each face module owns its
 palette, and `api.theme` returns the mounted avatar's. A host needs it
@@ -231,7 +519,9 @@ window itself — centre `x + w/2`, floor `y + h`, a reach scaled off `w`, and a
 outboard limit of `w/2 − 8` — and every gesture timeline is authored in wrist
 depth *below the floor* rather than absolute `y`, so the same drawing lands
 correctly on windows of different heights. peep's bottom is 876 and wren's and
-myna's is 850; all three place identically.
+myna's is 850; all three place identically. Widths are the axis with a floor
+under it: the swing's outboard travel does not shrink as fast as the limit does,
+so a window under ~532 units wide is rejected (see Art units).
 
 Two framing rules are asserted, not assumed. `checkHandFraming(meta)` throws if
 any keyframe would let the wrist rise into the window (the hand must always be
@@ -246,8 +536,33 @@ then plays the face half alone.
 
 ## Checklist for a new avatar
 
-1. Serve with `python3 authoring/serve.py 8777` (never `python3 -m http.server` — its
-   caching has burned this project three times).
+Setup, once: `pnpm install` at the repository root (for `pnpm test` and the
+headless tools), then serve.
+
+```sh
+python3 authoring/serve.py 8777        # never python3 -m http.server
+open http://localhost:8777/authoring/  # index.html describes every page
+```
+
+**Use `serve.py`.** The stdlib server sends `Last-Modified` and no
+`Cache-Control`, so browsers apply heuristic freshness and stop revalidating
+modules you have edited. That has cost this project three debugging sessions,
+one of which produced a module error that was simply a lie. Do not work around
+it with `?v=` either — that puts two copies of the module in the graph and
+fails differently and worse.
+
+The pages below want your face registered in `src/faces.js`, so do that first.
+Anything on a page can also be rendered headlessly to a PNG —
+`authoring/tools/shot.mjs` for one page, `baseline.mjs` for the standard set,
+`diff.mjs` to prove a refactor changed no pixel, `motion.mjs` to measure how
+much actually moves ([authoring/tools/README.md](../authoring/tools/README.md)).
+That is how you review a face without a browser open, and how you keep a record
+of what it looked like yesterday.
+
+1. `authoring/rig-check.html` — every registered avatar side by side, driven by
+   one command, so any difference on screen is the drawing and never the
+   driving. First place to open; also carries the **run sweep** button and
+   `window.pose({…})` from the console.
 2. `authoring/contact-sheet.html?face=NAME` — every viseme, emotion, gaze and
    channel extreme. Check the **mouth-detail crop row**, not just full heads:
    two visemes can be numerically distinct and visually identical (`G` vs `B`
@@ -301,6 +616,12 @@ then plays the face half alone.
     head-room, silhouette, long-session comfort. The output is prescriptions
     ranked by perceptual payoff ÷ stroke cost, plus a **protect-list** of
     marks confirmed right — which then stops future churn on them.
+
+**The sweep passing is not evidence the face is good.** It catches dead
+avatars, NaN leaks and detached SVGs, nothing about how the face *looks*. Every
+defect this project has found was found by looking. And param-gate your
+sampling: a screenshot at an arbitrary moment catches blinks and saccades, and
+three of this project's "findings" turned out to be mid-blink frames.
 
 ## Adding a new avatar
 
@@ -370,10 +691,10 @@ A new face module supplies:
    constants — if a third line-art face repeats that, extract them into
    parameterized factories the way the stroke engine was extracted.
 4. **`META`** — viewBox and mouthCrop.
-5. **The exported record** — `export const <name> = { create, meta }` at the
-   foot of your module, an `exports` entry for `./faces/<name>`, a `.d.ts`
-   beside it, and a row in `src/faces.js` so the comparison tools can see it.
-   Nothing resolves a face by name at runtime (§ Shipping a face).
+5. **The exported record and its four edits** — `export const <name> =
+   { create, meta }` at the foot of your module, plus the `src/faces.js` row,
+   the `.d.ts` and the `exports` entry (§ Shipping a face).
+   Nothing resolves a face by name at runtime.
 
 What you get for free: the mixer, visemes, emotions, gaze, idle, clips,
 interjections, the frame-edge hand (§ The hand — it needs only your viewBox and
@@ -384,7 +705,7 @@ The wren run measured the split: the
 plumbing steps (2, 4, 5) are mechanical; the art (step 1) and the read of
 every state at tile size (the checklist) are where the judgement — and the
 time — actually goes. Static accessories interact with channels: wren's lens
-rings cap pupil travel, the exact channel DISTRACTED needs most — check your
+rings cap pupil travel, the exact channel `DISTRACTED` needs most — check your
 accessory against the gaze extremes early, not last.
 
 Then run the checklist above, and judge by eye — a passing conformance sweep is not

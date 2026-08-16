@@ -98,6 +98,11 @@ apart. `koel` was authored from a written brief, passed every check on every
 page here, and was rejected on sight. `myna` was authored reference-first and
 was approved. Rig conformance is necessary and is not the bar.
 
+If you are starting from an SVG and not from a character, that guide's
+*smallest face that works* is a complete, runnable module to copy — the
+plumbing is an afternoon, and every page here is waiting for it once the face
+has a row in `src/faces.js`.
+
 ## Headless verification
 
 [`tools/README.md`](tools/README.md) — screenshot a page, sweep every avatar
