@@ -17,14 +17,17 @@
  * There is no URL field and no token field: the one server this speaks to needs
  * no credential, and a box for one would advertise a configuration surface the
  * library does not have.
+ *
+ * This hook owns the client and the log. It does **not** own the notion of
+ * "connected": that comes from `usePipecatClientTransportState()` inside the
+ * provider, so the button, the mode and the disabled controls all read the same
+ * value and cannot drift apart.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PipecatClient } from "@pipecat-ai/client-js";
 import { SmallWebRTCTransport } from "@pipecat-ai/small-webrtc-transport";
 import { describe, readAvatarMessage } from "./wire";
-
-export type CallStatus = "offline" | "connecting" | "live" | "error";
 
 /** `call` and `error` are the page talking; the other three are the wire. */
 export type LogKind = "claim" | "action" | "cues" | "call" | "error";
@@ -38,8 +41,7 @@ export interface LogEntry {
 
 export interface Call {
   readonly client: PipecatClient;
-  readonly status: CallStatus;
-  /** Whatever went wrong last, or "". */
+  /** Whatever went wrong last, or "". Cleared by the next connect attempt. */
   readonly detail: string;
   readonly log: readonly LogEntry[];
   clearLog(): void;
@@ -47,8 +49,6 @@ export interface Call {
   problem(text: string): void;
   connect(): Promise<void>;
   hangUp(): Promise<void>;
-  /** Attach this to an `<audio autoPlay>`; the bot's voice arrives as a track. */
-  readonly audio: React.RefObject<HTMLAudioElement>;
 }
 
 /** Enough scrollback to read a burst of cues; not enough to leak a long call. */
@@ -57,10 +57,8 @@ const SCROLLBACK = 400;
 const clock = () => new Date().toLocaleTimeString("en-GB", { hour12: false });
 
 export function useCall(): Call {
-  const [status, setStatus] = useState<CallStatus>("offline");
   const [detail, setDetail] = useState("");
   const [log, setLog] = useState<readonly LogEntry[]>([]);
-  const audio = useRef<HTMLAudioElement>(null);
   const seq = useRef(0);
 
   const append = useCallback((kind: LogKind, text: string) => {
@@ -76,21 +74,19 @@ export function useCall(): Call {
       enableMic: true,
       enableCam: false,
       callbacks: {
-        onConnected: () => { setStatus("live"); setDetail(""); },
-        onDisconnected: () => setStatus("offline"),
+        onConnected: () => setDetail(""),
         onBotReady: () => append("call", "bot ready"),
-        onTrackStarted: (track, participant) => {
-          if (participant?.local || track.kind !== "audio" || !audio.current) return;
-          audio.current.srcObject = new MediaStream([track]);
-        },
         onServerMessage: (raw: unknown) => {
           const cmd = readAvatarMessage(raw);
           // Anything not addressed to the avatar is somebody else's message on
-          // a shared channel, and this panel is titled "Avatar wire".
-          if (cmd) append(cmd.cmd === "claim" || cmd.cmd === "action" || cmd.cmd === "cues" ? cmd.cmd : "error", describe(cmd));
+          // a shared channel, and this panel is titled "Wire".
+          if (cmd) {
+            const kind: LogKind =
+              cmd.cmd === "claim" || cmd.cmd === "action" || cmd.cmd === "cues" ? cmd.cmd : "error";
+            append(kind, describe(cmd));
+          }
         },
         onError: (message) => {
-          setStatus("error");
           const data = message?.data as { message?: string } | undefined;
           const text = String(data?.message ?? message);
           setDetail(text);
@@ -104,22 +100,23 @@ export function useCall(): Call {
   useEffect(() => () => { void client.disconnect().catch(() => undefined); }, [client]);
 
   const connect = useCallback(async () => {
-    setStatus("connecting");
     setDetail("");
     try {
       await client.initDevices();
       await client.connect({ webrtcRequestParams: { endpoint: "/api/offer" } });
     } catch (err) {
-      setStatus("error");
       const text = err instanceof Error ? err.message : String(err);
       setDetail(text);
       append("error", text);
+      // Back to `disconnected`, or the transport sits in `error` and the connect
+      // button — which disables itself in every state but the three it can act
+      // on — is stuck. A failed dial should leave you able to dial again.
+      await client.disconnect().catch(() => undefined);
     }
   }, [append, client]);
 
   const hangUp = useCallback(async () => {
     await client.disconnect().catch(() => undefined);
-    setStatus("offline");
   }, [client]);
 
   const clearLog = useCallback(() => setLog([]), []);
@@ -130,5 +127,5 @@ export function useCall(): Call {
   // them in one column in one order is how you tell them apart.
   const problem = useCallback((text: string) => append("error", text), [append]);
 
-  return { client, status, detail, log, clearLog, problem, connect, hangUp, audio };
+  return { client, detail, log, clearLog, problem, connect, hangUp };
 }

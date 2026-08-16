@@ -668,9 +668,9 @@ invisible to a fixture, because a fixture only contains what its author already
 knew to put in it. `#/connection` was honest and empty: it asked the developer
 to bring a client from somewhere the repo did not provide.
 
-**Instead:** `server/` provides the somewhere. Studio's two routes drive a real
+**Instead:** `server/` provides the somewhere. Studio drives a real
 `SmallWebRTCTransport` call against a real pipecat pipeline, and every control
-on `#/wire` is an HTTP request asking the *server* to send the message —
+that moves the face is an HTTP request asking the *server* to send the message —
 including the misbehaviours, which are now real messages from a real server
 rather than a fixture describing one ([studio/README.md](../studio/README.md)).
 

@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useRef } from "react";
+import { Button } from "@pipecat-ai/voice-ui-kit";
 import type { LogEntry } from "./call";
 
 export function WireLog({ log, onClear }: { log: readonly LogEntry[]; onClear: () => void }) {
@@ -29,7 +30,9 @@ export function WireLog({ log, onClear }: { log: readonly LogEntry[]; onClear: (
     <section className="wire">
       <header>
         <h2>Avatar wire</h2>
-        <button onClick={onClear} disabled={log.length === 0}>Clear</button>
+        <Button size="sm" variant="outline" onClick={onClear} disabled={log.length === 0}>
+          Clear
+        </Button>
       </header>
       <ol
         ref={list}

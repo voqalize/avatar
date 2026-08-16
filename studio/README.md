@@ -11,7 +11,7 @@ open http://127.0.0.1:4173/                   # AVATAR_STUDIO_PORT overrides
 ```
 
 Both halves are needed. Studio is a page, not a bot: without `server/` running
-there is nothing to call, and the Start-call button will say so.
+there is nothing to call, and the Connect button will say so.
 `pm2 start ecosystem.config.cjs` runs both halves supervised, plus the
 `authoring/` workshop on 8777 — three surfaces, one command, no terminal to
 keep open.
@@ -38,19 +38,39 @@ Two consequences that read as limitations and are not:
   what the *server sent*; what the face decided is a thing you judge by looking
   at the face.
 
-Studio also does not compose wire messages. Every control on the Wire route is
-an HTTP request to `server/`, which then sends the message — a page that could
+Studio also does not compose wire messages. Every control that drives the avatar
+is an HTTP request to `server/`, which then sends the message — a page that could
 make the avatar nod on its own would be a client deciding what the agent is
 doing, which is the one thing CLAUDE.md says the client never does.
 
-## The two routes
+## One screen, two modes
 
-| route | who it is for | what it validates |
+There is no navigation. The panel on the right changes with the connection,
+because that is when the interesting question changes:
+
+| when | the panel | what it validates |
 |---|---|---|
-| `#/` | product developer | the option surface — face, the three gains, the hand and its side — against a live `SmallWebRTCTransport` call. **Compare mode** mounts all three faces on one `PipecatClient`, which is the only way to judge separate drawings on identical input, and the proof that an avatar is an embodiment of a client rather than an owner of one |
-| `#/wire` | client/backend integrator | [contract-wire.md](../docs/contract-wire.md) — every `claim`, `action` and `cues` chunk the server sends, in order, beside controls that make the server send them. Including the misbehaviours: a claim that contradicts playout, an action storm, a cue burst out of order |
+| disconnected | **Build the avatar** — face, the three gains, the hand and its side | the option surface of `createAvatar`, which is yours to decide and nobody else's. **Compare mode** mounts all three faces on one `PipecatClient`: the only way to judge separate drawings on identical input, and the proof that an avatar is an embodiment of a client rather than an owner of one |
+| in a call | **Drive the server** — pre-speech beats, interjections, misbehaviours | [contract-wire.md](../docs/contract-wire.md), from the sending end. The beats arm the next turn (`THINKING`, then `WORKING`, then speech); the interjections are one-shot `action`s; the misbehaviours are the ones the face is supposed to refuse — a claim that contradicts playout, an action storm, a claim that arrives too late |
 
-The call is owned above the routes, so switching between them does not hang up.
+Mode is read from the transport, once, in one place — `usePipecatClientTransportState()`
+— so the button, the panel and every disabled control cannot disagree about
+whether there is a call. Options stay changeable mid-call: Build collapses to a
+line with a **Change** button rather than locking.
+
+Two things span both modes. The **avatar wire** log is the evidence for either —
+what the server sent, in order, decoded. The **transcript** appears with the call
+and renders karaoke-style from the kit's `Conversation`: the spoken part of the
+sentence in full ink, the rest muted, the boundary advancing with playout. That
+is a real check on the server, not a decoration — it only tracks because
+`CannedTTSService` puts word timings on the wire the way pipecat's protocol
+requires (`add_word_timestamps`, `push_text_frames=False`).
+
+The chrome comes from [`@pipecat-ai/voice-ui-kit`](https://github.com/pipecat-ai/voice-ui-kit)
+— the same components a pipecat developer already has. Studio's own layout is
+hand-written CSS on the kit's tokens: the kit ships its Tailwind bundle prebuilt
+with only the utilities it uses, so there is no Tailwind build here and no
+arbitrary utility classes that would silently do nothing.
 
 `studio/src/wire.ts` is a **second implementation** of the wire reader, written
 from [contract-wire.md](../docs/contract-wire.md) rather than imported from

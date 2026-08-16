@@ -1,152 +1,604 @@
-/* Studio's whole job is to make the face easy to look at and the wire easy to
-   read, so everything here is either dark and out of the way or a monospaced
-   column. The palette is `server/index.html`'s, deliberately: the two surfaces
-   show the same call and looking different would imply they were different. */
+/*
+ * The chrome around three line drawings.
+ *
+ * One idea, and everything here serves it: **a dark instrument with one lit
+ * stage.** The avatars are ink on paper — `face-peep.js` paints its figure in
+ * `t.paper` and draws no background rectangle at all — so on a dark tile the
+ * character reads as a white cut-out floating in a hole, which is the exact
+ * failure a comment in that file warns about. Paper is not a taste here; it is
+ * the ground the drawing was authored on. So the tile is the only bright
+ * surface on the page, and every panel, control and label around it is quiet
+ * enough to make that read as deliberate rather than as an unstyled div.
+ *
+ * The colours and the components come from `@pipecat-ai/voice-ui-kit` — this
+ * page is `class="dark"` and inherits its whole semantic palette (`--color-card`,
+ * `--color-border`, `--color-active`, …). Nothing here re-picks a grey the kit
+ * already has an opinion about, so a kit button dropped into a Studio panel
+ * belongs there. The kit ships its Tailwind bundle prebuilt, containing only
+ * the utilities the kit itself uses, which is why Studio's own layout is
+ * hand-written CSS on those tokens rather than utility classes that would
+ * silently do nothing.
+ *
+ * Type does the labelling: sans for prose, and the mono face — the one the wire
+ * log is already in — small and letterspaced for every field label. A control
+ * label and a wire message are the same kind of thing seen at two distances,
+ * and setting them in one family says so.
+ */
 
 :root {
-  --bg: #16181d;
-  --tile: #23262d;
-  --panel: #1b1e24;
-  --ink: #e6e8ec;
-  --dim: #8a9099;
-  --line: #2e323a;
-  --live: #7aa2f7;
-  --hot: #f0857d;
-  --ok: #86cf9b;
-  --warm: #e0b371;
+  /* The one colour that is ours. Warm, so the figures' pure-white fills lift
+     off it very slightly instead of disappearing into it. */
+  --paper: #f4f1e9;
+  --paper-edge: #d9d3c4;
 
-  color: var(--ink);
-  background: var(--bg);
-  font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-synthesis: none;
+  --gap: 1.25rem;
+  --rail: 25rem;
+  --label: 0.6875rem;
 }
 
-* { box-sizing: border-box; }
-/* All three, or none of them: `height: 100%` resolves against the parent's
-   *used* height, so a mount div left at `auto` in the middle silently turns the
-   whole page back into a document that grows — and the avatar tile, which is
-   sized from that height, grows with it off the bottom of the window. */
-html, body, #root { height: 100%; }
-body { margin: 0; background: var(--bg); }
-button, input, select { font: inherit; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; }
-
-button {
-  padding: 5px 11px; font-size: 12px;
-  color: var(--ink); background: var(--tile);
-  border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
-}
-button:hover:not(:disabled) { border-color: #4a505c; background: #2b2f38; }
-button:disabled { opacity: .4; cursor: not-allowed; }
-button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--live); outline-offset: 2px; }
-button.go { color: #0f1116; background: var(--live); border-color: var(--live); font-weight: 600; }
-button.hang { color: #0f1116; background: var(--hot); border-color: var(--hot); font-weight: 600; }
-button.bad { color: var(--hot); border-color: #4a3235; }
-select {
-  min-width: 0; padding: 5px 8px; font-size: 12px;
-  color: var(--ink); background: var(--tile);
-  border: 1px solid var(--line); border-radius: 6px;
+* {
+  box-sizing: border-box;
 }
 
-/* The page never scrolls; the log does.
-   Flex rather than three named grid rows, because the error banner is
-   conditional: a `grid-template-rows: auto auto 1fr` reads correctly with the
-   banner up and hands the `1fr` to nothing without it, leaving the call area
-   sized to its content — which looks like nothing at all when the content is a
-   short panel and an empty log. */
-.studio { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--color-foreground);
+  background: var(--color-muted);
+  padding: 0.05em 0.35em;
+  border-radius: 0.25rem;
+}
+
+.studio {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ─── the bar ─────────────────────────────────────────────────────────────
+   Connecting is the one thing you do before anything else works, so it gets
+   the largest control on the page and the far right of a bar with nothing
+   else competing in it. There is no navigation to sit beside it any more. */
 
 .bar {
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
-  gap: 16px; padding: 10px 18px; border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 0.875rem var(--gap);
+  background: color-mix(in oklch, var(--color-background) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--color-border);
 }
-.brand strong { display: block; font-size: 14px; }
-.brand span { display: block; margin-top: 2px; color: var(--dim); font-size: 11px; }
-.bar nav { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; }
-.bar nav button { min-width: 66px; border-color: transparent; background: transparent; color: var(--dim); }
-.bar nav button.active { color: var(--ink); background: #2b3444; border-color: #3f4c60; }
-.call-controls { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
-.status { font-size: 12px; color: var(--dim); }
-.status.live { color: var(--ok); }
-.status.error { color: var(--hot); }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.brand strong {
+  display: block;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.brand span {
+  display: block;
+  color: var(--color-muted-foreground);
+  font-size: 0.8125rem;
+}
+
+/* A 22px sample of the stage: paper, an edge, and one ink stroke. The page's
+   whole thesis at favicon size. */
+.mark {
+  position: relative;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.4rem;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--paper-edge);
+}
+
+.mark::after {
+  content: "";
+  position: absolute;
+  inset: 0.45rem 0.35rem auto;
+  height: 0.34rem;
+  border: 1.4px solid #1a1a1a;
+  border-top: 0;
+  border-radius: 0 0 1rem 1rem;
+}
+
+.dial {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.status {
+  font-family: var(--font-mono);
+  font-size: var(--label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+}
+
+.status.live {
+  color: var(--color-active);
+  border-color: var(--color-active-ring);
+  background: var(--color-active-accent);
+}
+
+.status.error {
+  color: var(--color-inactive);
+  border-color: var(--color-inactive-ring);
+  background: var(--color-inactive-accent);
+}
 
 .banner {
-  margin: 0; padding: 7px 18px; font-size: 12px;
-  color: var(--hot); background: #241b1c; border-bottom: 1px solid #3a2a2b;
+  margin: 0;
+  padding: 0.6rem var(--gap);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--color-inactive);
+  background: var(--color-inactive-accent);
+  border-bottom: 1px solid var(--color-inactive-ring);
 }
 
-.layout { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; }
+/* ─── the floor and the rail ─────────────────────────────────────────────── */
 
-/* --- the avatars ---------------------------------------------------------- */
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  gap: var(--gap);
+  align-items: start;
+  padding: var(--gap);
+  max-width: 76rem;
+  width: 100%;
+  margin: 0 auto;
+}
 
-.stage { display: flex; justify-content: center; gap: 14px; min-width: 0; min-height: 0; padding: 18px; }
+.floor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+  position: sticky;
+  top: 5.5rem;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-width: 0;
+}
+
+/* ─── the stage ──────────────────────────────────────────────────────────── */
+
+.stage {
+  display: grid;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  gap: var(--gap);
+}
+
+.stage-compare {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .tile {
-  flex: 1 1 0; max-width: 620px; min-width: 0; margin: 0;
-  display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 6px;
+  margin: 0;
+  width: 100%;
+  /* The tile is the paper, so it is the shape of the drawing and no wider. A
+     landscape frame around a portrait figure is not a bigger stage — it is
+     margin, and margin here reads as an unfinished layout. */
+  max-width: 24rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
-/* Three at once want the room; one is easier to judge at a fixed size. */
-.stage-compare .tile { max-width: none; }
-.tile-mount { position: relative; overflow: hidden; border-radius: 10px; background: var(--tile); min-height: 0; }
-.tile-mount > svg { display: block; width: 100%; height: 100%; }
-.tile figcaption { color: var(--dim); font-size: 11px; text-align: center; }
 
-/* --- the right-hand panel ------------------------------------------------- */
-
-.panel {
-  display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0;
-  /* `minmax(0, 1fr)`, not the implied `auto`: an auto column sizes to its
-     max-content and is *not* clamped to the container, so one unwrapped row of
-     action buttons would widen this 360px panel to its content — and a page
-     that does not scroll turns that into controls you cannot reach. */
-  grid-template-columns: minmax(0, 1fr);
-  border-left: 1px solid var(--line); background: var(--panel);
+.stage-compare .tile {
+  max-width: none;
 }
-.panel > .muted { align-self: start; margin: 0; padding: 0 16px 16px; }
 
-.options { padding: 14px 16px; border-bottom: 1px solid var(--line); }
-.options h2, .wire h2 {
-  margin: 0 0 12px; font-size: 11px; font-weight: 600;
-  letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
+/* 576 × 800 — the faces' own viewBox, so the figure meets all four edges of the
+   paper exactly as it was authored. */
+.tile-mount {
+  position: relative;
+  aspect-ratio: 18 / 25;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--paper);
+  box-shadow:
+    inset 0 0 0 1px var(--paper-edge),
+    0 1px 3px rgb(0 0 0 / 40%);
 }
-/* The heading is uppercased, so the call it stands for is spelled out under it
-   rather than in it — `createAvatar` shouted comes out as one unreadable word. */
-.signature { margin: -8px 0 12px; }
-.field { display: grid; grid-template-columns: 62px minmax(0, 1fr); align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; }
-.field > span { color: var(--dim); }
-.field.slider { grid-template-columns: 62px minmax(0, 1fr) 34px; }
-.field.slider input { width: 100%; accent-color: var(--live); }
-.field.slider b { color: var(--dim); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 400; text-align: right; }
-.check { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-size: 12px; color: var(--dim); }
-.check input { accent-color: var(--live); }
-.muted { color: var(--dim); font-size: 11px; line-height: 1.5; }
 
-/* --- driving --------------------------------------------------------------- */
+.tile-mount > * {
+  width: 100%;
+  height: 100%;
+}
 
-.drive { display: flex; flex-direction: column; gap: 8px; }
-.drive-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.drive-row > select { flex: 1 1 auto; }
-.watch { margin: 2px 0 0; color: var(--dim); font-size: 11px; line-height: 1.45; }
+.tile figcaption {
+  font-family: var(--font-mono);
+  font-size: var(--label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
 
-/* --- the wire log ---------------------------------------------------------- */
+.invite {
+  margin: 0 auto;
+  color: var(--color-muted-foreground);
+  font-size: 0.875rem;
+  max-width: 34rem;
+  text-wrap: pretty;
+}
 
-.wire { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; padding: 14px 0 0; }
-.wire header { display: flex; align-items: baseline; justify-content: space-between; padding: 0 16px; }
+/* ─── the transcript ─────────────────────────────────────────────────────── */
+
+.transcript {
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-card);
+  overflow: hidden;
+}
+
+.transcript > .band-head {
+  padding: 0.6rem 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.transcript small {
+  font-family: var(--font-mono);
+  font-size: var(--label);
+  letter-spacing: 0.06em;
+  color: var(--color-muted-foreground);
+}
+
+/* The kit's Conversation fills its container, so the height is ours to set.
+   Tall enough for the current turn and the one before it — the comparison you
+   actually make is against the mouth, not against the backlog. */
+.transcript-body {
+  height: 13rem;
+}
+
+/* ─── panels ─────────────────────────────────────────────────────────────── */
+
+.band {
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-card);
+  padding: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.band-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.band-head h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.note {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-muted-foreground);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.group-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--label);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+
+.group-label b {
+  font-weight: 500;
+  color: var(--color-foreground);
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+/* The sentence under a control. Deliberately full prose and deliberately
+   permanent: three sliders reading `1.00` with no words under them was the
+   original complaint, and a tooltip would have been the same failure with an
+   extra step. */
+.why {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-muted-foreground);
+  text-wrap: pretty;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-card);
+  padding: 0.625rem 0.875rem;
+}
+
+.summary p {
+  margin: 0;
+  min-width: 0;
+  font-size: 0.8125rem;
+}
+
+.summary b {
+  display: block;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.summary span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--label);
+  color: var(--color-muted-foreground);
+}
+
+/* ─── the beats, and the turn ────────────────────────────────────────────── */
+
+.beat {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr auto;
+  align-items: center;
+  gap: 0.5rem 0.625rem;
+}
+
+.beat-track {
+  min-width: 0;
+}
+
+.beat b {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-foreground);
+  text-align: right;
+  min-width: 3.5rem;
+}
+
+.beat small {
+  grid-column: 2 / -1;
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+}
+
+/*
+ * The signature.
+ *
+ * Two millisecond numbers mean nothing on their own; drawn to scale against a
+ * nominal utterance they are visibly a beat, or visibly the whole turn. This is
+ * the one place on the page allowed to use colour as information — think and
+ * work take the kit's agent and warning hues, speaking takes the paper of the
+ * stage, so the bar ends in the same material the face is drawn on.
+ */
+.turn {
+  display: flex;
+  height: 2rem;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: var(--label);
+  letter-spacing: 0.06em;
+}
+
+.seg {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: width 180ms ease;
+  border-right: 1px solid var(--color-background);
+}
+
+.seg:last-child {
+  border-right: 0;
+}
+
+.seg.think {
+  background: var(--color-agent);
+  color: #fff;
+}
+
+.seg.work {
+  background: var(--color-warning);
+  color: var(--color-warning-foreground);
+}
+
+.seg.speak {
+  background: var(--paper);
+  color: #2a2a2a;
+}
+
+/* The footnote of a band of buttons, held at a fixed height so pointing at
+   things does not shuffle the panel under the pointer. */
+.watch {
+  margin: 0;
+  min-height: 2.25rem;
+  padding-top: 0.625rem;
+  border-top: 1px dashed var(--color-border);
+  font-size: 0.8125rem;
+  color: var(--color-muted-foreground);
+  text-wrap: pretty;
+}
+
+/* ─── the wire ───────────────────────────────────────────────────────────── */
+
+.wire {
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.wire > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.wire > header h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
 .wire-log {
-  overflow: auto; margin: 0; padding: 0 16px 16px; list-style: none;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; line-height: 1.7;
+  margin: 0;
+  padding: 0.5rem 0;
+  list-style: none;
+  height: 16rem;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.7;
 }
-.wire-log li { display: flex; gap: 8px; }
-.wire-log .at { color: #5c626c; flex: none; }
-.wire-log .claim { color: var(--live); }
-.wire-log .action { color: var(--warm); }
-.wire-log .cues { color: var(--dim); }
-.wire-log .call { color: var(--ok); }
-.wire-log .error { color: var(--hot); }
 
-audio { display: none; }
+.wire-log li {
+  display: flex;
+  gap: 0.625rem;
+  padding: 0 0.875rem;
+}
 
-@media (max-width: 1000px) {
-  .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(240px, 1fr) minmax(0, 1fr); }
-  .panel { border-left: 0; border-top: 1px solid var(--line); }
-  .stage { padding: 10px; }
+.wire-log li:hover {
+  background: var(--color-muted);
+}
+
+.wire-log .at {
+  flex: none;
+  color: var(--color-subtle);
+}
+
+/* The kinds are coloured to the same scheme as the turn strip: a claim is the
+   agent asserting, an action is a one-shot, cues are the mouth. */
+.wire-log .claim {
+  color: var(--color-agent-foreground);
+}
+
+.wire-log .action {
+  color: var(--color-warning);
+}
+
+.wire-log .cues {
+  color: var(--color-active);
+}
+
+.wire-log .call {
+  color: var(--color-muted-foreground);
+}
+
+.wire-log .error {
+  color: var(--color-inactive);
+}
+
+/* ─── smaller screens ────────────────────────────────────────────────────── */
+
+@media (max-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .floor {
+    position: static;
+  }
+
+  .stage-compare {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 34rem) {
+  .bar {
+    flex-wrap: wrap;
+  }
+
+  .stage-compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .beat {
+    grid-template-columns: 1fr auto;
+  }
+
+  .beat-track {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+
+  .beat small {
+    order: 4;
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seg {
+    transition: none;
+  }
 }

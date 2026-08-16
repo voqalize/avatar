@@ -250,12 +250,13 @@ cd py && uv run --group server python ../server/server.py
 open http://localhost:7860/          # the 30-second look — a real call, no build step
 ```
 
-**Avatar Studio** is the IDE for `createAvatar`, pointed at that same server.
-`#/` drives the published option surface — face, the three gains, the hand and
-its side — against a live `SmallWebRTCTransport` call, and its compare mode
-mounts all three faces on one `PipecatClient`. `#/wire` decodes every `claim`,
-`action` and `cues` chunk as it arrives, beside controls that make the server
-misbehave on purpose.
+**Avatar Studio** is the IDE for `createAvatar`, pointed at that same server. One
+screen, and the connection picks the mode. Disconnected, it drives the published
+option surface — face, the three gains, the hand and its side — and its compare
+mode mounts all three faces on one `PipecatClient`. In a call, that panel gives
+way to what the *server* can do to the face: the pre-speech beats, the
+interjections, and the misbehaviours it sends on purpose. The wire log decodes
+every `claim`, `action` and `cues` chunk as it arrives, throughout.
 
 ```sh
 pnpm -w run studio:dev               # with server/ running in another terminal

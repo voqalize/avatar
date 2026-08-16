@@ -1,5 +1,9 @@
 <!doctype html>
-<html lang="en">
+<!-- `dark` is the whole of the theming. The voice-ui-kit stylesheet defines its
+     semantic palette twice — once on `:root` and once under a bare `.dark` rule
+     — so this class is what makes every kit component and every token in
+     styles.css agree on one scheme. No ThemeProvider needed. -->
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

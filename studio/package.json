@@ -11,10 +11,12 @@
   },
   "dependencies": {
     "@pipecat-ai/client-js": "catalog:",
+    "@pipecat-ai/client-react": "^1.8.1",
     "@pipecat-ai/small-webrtc-transport": "catalog:",
+    "@pipecat-ai/voice-ui-kit": "0.13.0",
+    "@voqalize/avatar": "workspace:*",
     "react": "catalog:",
-    "react-dom": "catalog:",
-    "@voqalize/avatar": "workspace:*"
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -42,9 +42,31 @@ export const DEFAULT_LOOK: Look = {
 
 export const faceValue = (name: FaceName): Face => FACES[name];
 
-/** The gains, named once, so the sliders and the labels cannot disagree. */
+/**
+ * The three multipliers, named once so the sliders and their labels cannot
+ * disagree.
+ *
+ * They were three unlabelled sliders reading `1.00` and nobody could tell what
+ * any of them did, which is a fair complaint: `mouthGain` is a scale factor on
+ * an internal channel group, and the only useful way to describe it is by what
+ * you will see change on the face. So each one names the *part of the face* it
+ * scales, reads as a percentage of normal, and says out loud what turning it
+ * costs — every one of them has a direction that makes the avatar worse.
+ */
 export const GAINS = [
-  ["mouthGain", "Mouth", "Viseme amplitude. Lipsync is the headline feature; this is the knob that ruins it."],
-  ["gestureGain", "Gesture", "Clip amplitude — nods, receipts, the hand."],
-  ["motionGain", "Motion", "Idle liveness. Low by design: a jittery face costs the encoder real bitrate."],
+  [
+    "mouthGain",
+    "Mouth",
+    "How far the lips travel per viseme. Below 100% the speech mumbles; above it the face chews. Lipsync is the headline feature, so this is the one that ruins it.",
+  ],
+  [
+    "gestureGain",
+    "Gestures",
+    "How big the authored moves are — nods, receipts, the hand. Turn it down to check a nod still reads at all; turn it up to see what an over-eager rig looks like.",
+  ],
+  [
+    "motionGain",
+    "Idle motion",
+    "The drift, blinks and breathing between everything else. Low by design: the avatar shares a screen with a camera feed, and jitter costs real bitrate for nothing.",
+  ],
 ] as const satisfies ReadonlyArray<readonly [keyof Look, string, string]>;

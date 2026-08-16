@@ -1,50 +1,73 @@
 /**
- * Driving the call by hand — and misdriving it on purpose.
+ * Mode two: what the server does to the avatar during a call.
  *
  * Every control here is an HTTP request to the *server*, never a message this
  * page composes. The server owns intent: a page that could make the avatar nod
  * on its own would be a client deciding what the agent is doing, which is the
  * one thing this project does not allow. So what lands in the wire log is what
- * the server sent, which is how you tell a command the face ignored from one
- * that never arrived.
+ * the server sent, which is how you tell a move the face ignored from one that
+ * never arrived.
  *
  * The vocabularies come from `GET /api/lines` rather than from a list here.
  * They live in the Python package, and a button list that had drifted from them
- * would be a UI testing a wire format that no longer exists.
+ * would be a UI testing a wire format that no longer exists. `vocabulary.ts`
+ * turns their names into words; anything it has no words for still gets a
+ * button.
  *
- * The misbehaviours are the part worth the code. The authority model
- * (docs/pipecat-lifecycle-protocol.md) is a claim about the *renderer* —
- * observed playout outranks server intent — and until these existed nothing in
- * the repo exercised it: every message the server sent was well-formed and sent
- * at the right moment. Each one names what should happen, because a deliberately
- * wrong message is worthless unless you know what the face is supposed to do
- * about it.
+ * There is no button that makes it talk, and that is the point of the beats.
+ * Talk to it — turn-taking is VAD, so it takes its turn when you stop — and the
+ * three sections below are, in order, what happens before it speaks, what it
+ * can do while you speak, and what happens when the server gets it wrong.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Button, Slider } from "@pipecat-ai/voice-ui-kit";
+import { actionGroup, actionTerm, misbehaviourLabel } from "./vocabulary";
 
-interface Line {
-  id: string;
-  tag: string;
-  text: string;
+interface Corpus {
+  actions: string[];
+  /** kind → what to watch for while it runs. */
+  misbehaviours: Record<string, string>;
+  beats: { think_ms: number; work_ms: number };
+}
+
+/** One pre-speech state: whether the server holds it, and for how long. */
+interface Beat {
+  on: boolean;
   ms: number;
 }
 
-interface Corpus {
-  lines: Line[];
-  claims: string[];
-  actions: string[];
-  /** kind → what to watch for. */
-  misbehaviours: Record<string, string>;
-}
+/**
+ * What a beat goes back to when you switch it on.
+ *
+ * A remembered duration has to be non-zero or the toggle does nothing — and
+ * `work_ms` ships at `0`, because only a turn that calls a tool has any working
+ * in it. So the fallback is a length you can actually see rather than the
+ * server's own default.
+ */
+const FALLBACK_MS = 600;
+const MAX_MS = 3000;
 
-/** The vocabulary prefixes are what group the actions; the verb is what you press. */
-const verb = (action: string) => action.replace(/^(ACK|GESTURE|RESPONSE)_/, "").toLowerCase();
+/**
+ * A nominal utterance, so the timeline has something to be a fraction *of*.
+ *
+ * The point of the strip is proportion — 700 ms of thinking in front of a
+ * couple of seconds of speech is a beat, and the same 700 in front of nothing
+ * is the whole turn. Real lines run 1.5–4 s.
+ */
+const SPEAKING_MS = 2200;
+
+const ms = (beat: Beat) => (beat.on ? beat.ms : 0);
 
 export function Drive({ live, onProblem }: { live: boolean; onProblem: (text: string) => void }) {
   const [corpus, setCorpus] = useState<Corpus | null>(null);
-  const [line, setLine] = useState("");
-  const [kind, setKind] = useState("");
+  const [think, setThink] = useState<Beat>({ on: true, ms: 700 });
+  const [work, setWork] = useState<Beat>({ on: false, ms: FALLBACK_MS });
+  // One hint line per band rather than one for the panel: the sentence has to
+  // sit next to the buttons it describes, or you are reading an explanation of
+  // something two sections away.
+  const [interjectHint, setInterjectHint] = useState("");
+  const [wrongHint, setWrongHint] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -53,12 +76,40 @@ export function Drive({ live, onProblem }: { live: boolean; onProblem: (text: st
       .then((body) => {
         if (cancelled) return;
         setCorpus(body);
-        setLine(body.lines[0]?.id ?? "");
-        setKind(Object.keys(body.misbehaviours)[0] ?? "");
+        // The server's own defaults, so the panel opens agreeing with the call
+        // it is about to drive rather than guessing at it.
+        setThink({ on: body.beats.think_ms > 0, ms: body.beats.think_ms || FALLBACK_MS });
+        setWork({ on: body.beats.work_ms > 0, ms: body.beats.work_ms || FALLBACK_MS });
       })
       .catch((err: Error) => !cancelled && onProblem(`${err.message} — is \`server/\` running?`));
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [onProblem]);
+
+  // Arm the call whenever the numbers or the call itself change. A fresh call
+  // is a fresh `CannedLLMService` back on its defaults, so connecting has to
+  // re-send these or the panel would be describing a turn nobody configured.
+  // Debounced because a dragged slider fires per pixel and each frame is a POST.
+  useEffect(() => {
+    if (!live) return;
+    const timer = setTimeout(() => {
+      void fetch("/api/beats", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ think_ms: ms(think), work_ms: ms(work) }),
+      }).catch(() => onProblem("/api/beats — the call went away"));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [live, think, work, onProblem]);
+
+  const groups = useMemo(() => {
+    const all = corpus?.actions ?? [];
+    return {
+      acknowledge: all.filter((a) => actionGroup(a) === "acknowledge"),
+      gesture: all.filter((a) => actionGroup(a) === "gesture"),
+    };
+  }, [corpus]);
 
   async function post(path: string, body: unknown) {
     const res = await fetch(path, {
@@ -67,50 +118,177 @@ export function Drive({ live, onProblem }: { live: boolean; onProblem: (text: st
       body: JSON.stringify(body),
     });
     if (res.ok) return;
-    const detail = await res.json().then((d: { detail?: string }) => d.detail).catch(() => res.statusText);
+    const detail = await res
+      .json()
+      .then((d: { detail?: string }) => d.detail)
+      .catch(() => res.statusText);
     onProblem(`${path} → ${res.status} ${detail}`);
   }
 
-  if (!corpus) return <p className="muted">Waiting for the corpus from <code>/api/lines</code>.</p>;
+  if (!corpus) {
+    return (
+      <section className="band">
+        <p className="note">
+          Waiting for the vocabulary from <code>/api/lines</code>.
+        </p>
+      </section>
+    );
+  }
+
+  const total = ms(think) + ms(work) + SPEAKING_MS;
 
   return (
-    <div className="drive" aria-disabled={!live}>
-      <div className="drive-row">
-        <select aria-label="Line to say" value={line} disabled={!live} onChange={(e) => setLine(e.target.value)}>
-          {corpus.lines.map((n) => (
-            <option key={n.id} value={n.id}>{n.tag} · {n.text}</option>
+    <>
+      <section className="band">
+        <header className="band-head">
+          <h2>Before it speaks</h2>
+        </header>
+        <p className="note">
+          A real agent takes a moment to think, and longer if it runs a tool. Switch these on and the
+          server holds each state in turn, clears them, and only then starts talking — so the face has
+          something to do during the pause instead of sitting in the listening pose.
+        </p>
+
+        {(
+          [
+            ["Thinking", think, setThink, "Every turn has some."],
+            ["Working", work, setWork, "Only a turn that calls a tool."],
+          ] as const
+        ).map(([label, beat, setBeat, when]) => (
+          <div className="beat" key={label}>
+            <Button
+              size="sm"
+              variant={beat.on ? "active" : "outline"}
+              aria-pressed={beat.on}
+              disabled={!live}
+              onClick={() => setBeat({ ...beat, on: !beat.on })}
+            >
+              {label}
+            </Button>
+            <div className="beat-track">
+              <Slider
+                aria-label={`${label} duration`}
+                min={100}
+                max={MAX_MS}
+                step={100}
+                value={[beat.ms]}
+                disabled={!live || !beat.on}
+                onValueChange={([value]) => setBeat({ ...beat, ms: value })}
+              />
+            </div>
+            <b>{beat.on ? `${beat.ms} ms` : "off"}</b>
+            <small>{when}</small>
+          </div>
+        ))}
+
+        {/* The signature control: the two numbers you just set, drawn against a
+            nominal utterance. "700 ms" means nothing on its own; a third of the
+            bar in front of the speech is the thing being configured. */}
+        <div className="turn" aria-hidden="true">
+          {ms(think) > 0 && <span className="seg think" style={{ width: `${(ms(think) / total) * 100}%` }}>think</span>}
+          {ms(work) > 0 && <span className="seg work" style={{ width: `${(ms(work) / total) * 100}%` }}>work</span>}
+          <span className="seg speak" style={{ width: `${(SPEAKING_MS / total) * 100}%` }}>speaks</span>
+        </div>
+        <p className="why">
+          One turn, to scale. Talk to it and watch — turn-taking is voice activity, so it takes its turn
+          when you stop.
+        </p>
+      </section>
+
+      <section className="band">
+        <header className="band-head">
+          <h2>Interject</h2>
+        </header>
+        <p className="note">
+          One-shot moves, sent while you are the one talking. The face never invents these — every nod
+          and receipt is an explicit instruction, which is why they are buttons and not a setting.
+        </p>
+
+        <div className="group">
+          <span className="group-label">Acknowledge</span>
+          <div className="choices">
+            {groups.acknowledge.map((action) => (
+              <ActionButton key={action} action={action} live={live} onSend={post} onHover={setInterjectHint} />
+            ))}
+          </div>
+        </div>
+
+        <div className="group">
+          <span className="group-label">Gesture</span>
+          <div className="choices">
+            {groups.gesture.map((action) => (
+              <ActionButton key={action} action={action} live={live} onSend={post} onHover={setInterjectHint} />
+            ))}
+          </div>
+        </div>
+
+        {/* One line rather than a caption per button: seven permanent sentences
+            would bury the seven buttons they explain. */}
+        <p className="watch">{hint(live, interjectHint)}</p>
+      </section>
+
+      <section className="band">
+        <header className="band-head">
+          <h2>Send something wrong</h2>
+        </header>
+        <p className="note">
+          The face is allowed to disobey. Observed playout outranks whatever the server claims, and until
+          these existed nothing in the repo tested that — every message this server sent was well-formed
+          and sent at the right moment.
+        </p>
+        <div className="choices">
+          {Object.keys(corpus.misbehaviours).map((kind) => (
+            <Button
+              key={kind}
+              size="sm"
+              variant="outline"
+              className="wrong"
+              disabled={!live}
+              onMouseEnter={() => setWrongHint(corpus.misbehaviours[kind])}
+              onFocus={() => setWrongHint(corpus.misbehaviours[kind])}
+              onClick={() => void post("/api/misbehave", { kind })}
+            >
+              {misbehaviourLabel(kind)}
+            </Button>
           ))}
-        </select>
-        <button className="go" disabled={!live} onClick={() => void post("/api/say", { id: line })}>Say</button>
-      </div>
+        </div>
+        {/* The server's own sentence, not a second copy written here. These are
+            only worth pressing if you know what the face is supposed to do
+            about it, and the answer lives with the thing being sent. */}
+        <p className="watch">{hint(live, wrongHint)}</p>
+      </section>
+    </>
+  );
+}
 
-      <div className="drive-row" aria-label="Claim a state">
-        {corpus.claims.map((state) => (
-          <button key={state} disabled={!live} onClick={() => void post("/api/claim", { state })}>
-            {state.toLowerCase()}
-          </button>
-        ))}
-        {/* Clearing is a real command rather than a missing one — the face has
-            to be told the agent stopped thinking. */}
-        <button disabled={!live} onClick={() => void post("/api/claim", {})}>clear</button>
-      </div>
+const hint = (live: boolean, watching: string) =>
+  live
+    ? watching || "Point at any of them to read what to watch for."
+    : "Connect first — these act on the call in progress, and answer 409 without one.";
 
-      <div className="drive-row" aria-label="Send an action">
-        {corpus.actions.map((action) => (
-          <button key={action} title={action} disabled={!live} onClick={() => void post("/api/action", { action })}>
-            {verb(action)}
-          </button>
-        ))}
-      </div>
-
-      <div className="drive-row">
-        <select aria-label="Misbehaviour" value={kind} disabled={!live} onChange={(e) => setKind(e.target.value)}>
-          {Object.keys(corpus.misbehaviours).map((k) => <option key={k} value={k}>{k}</option>)}
-        </select>
-        <button className="bad" disabled={!live} onClick={() => void post("/api/misbehave", { kind })}>Break it</button>
-      </div>
-
-      <p className="watch">{live ? corpus.misbehaviours[kind] : "Start the call — these act on the call in progress, and answer 409 without one."}</p>
-    </div>
+function ActionButton({
+  action,
+  live,
+  onSend,
+  onHover,
+}: {
+  action: string;
+  live: boolean;
+  onSend: (path: string, body: unknown) => Promise<void>;
+  onHover: (why: string) => void;
+}) {
+  const term = actionTerm(action);
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      title={action}
+      disabled={!live}
+      onMouseEnter={() => onHover(term.why)}
+      onFocus={() => onHover(term.why)}
+      onClick={() => void onSend("/api/action", { action })}
+    >
+      {term.label}
+    </Button>
   );
 }

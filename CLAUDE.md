@@ -192,11 +192,12 @@ Three things no suite will tell you:
   ([removed.md § Removed in 0.3 — the demo surfaces](docs/removed.md)).
 - **Studio is not a rig workbench, and no longer pretends to be.** It imports
   `@voqalize/avatar` and nothing else from this repo — no `src/`, no
-  `/internal` — so a thing it cannot do is a thing a consumer cannot do. Its
-  two routes drive a real `SmallWebRTCTransport` call against `server/`; there
-  is no fake clock, no trace fixture and no demo-only state machine anywhere in
-  it, and it does not compose wire messages — every control on `#/wire` asks
-  the *server* to send one.
+  `/internal` — so a thing it cannot do is a thing a consumer cannot do. It is
+  one screen driving a real `SmallWebRTCTransport` call against `server/`, and
+  the connection picks the mode: disconnected you build the avatar, in a call
+  you drive the server. There is no fake clock, no trace fixture and no
+  demo-only state machine anywhere in it, and it does not compose wire messages
+  — every control that moves the face asks the *server* to send one.
 - **The vocabulary is the seven core states, everywhere above the mixer.** The
   render-state pass-throughs (`TYPING_CHAT`, `CANT_HEAR`, `WANTS_IN`, …) are
   gone from `src/behavior.js`; they are still real states *in* `src/avatar.js`,

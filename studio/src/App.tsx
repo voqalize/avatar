@@ -1,114 +1,122 @@
 /**
- * Avatar Studio — the avatar on a live call, and the wire that drives it.
+ * Avatar Studio — one screen, two modes, and the mode is the call.
  *
  * Studio imports `@voqalize/avatar` and nothing else from this repo. Not
- * `src/avatar.js`, not `client/src/AvatarClient.js`, not `@voqalize/avatar/internal`
- * — the published entry point, the three published faces, and the wire format as
- * documented. That is the point of it: if a thing cannot be done here, a
- * consumer cannot do it either, and the gap is a defect in the package rather
- * than a reason to reach past it.
+ * `src/avatar.js`, not `client/src/AvatarClient.ts`, not
+ * `@voqalize/avatar/internal` — the published entry point, the three published
+ * faces, and the wire format as documented. That is the point of it: if a thing
+ * cannot be done here, a consumer cannot do it either, and the gap is a defect
+ * in the package rather than a reason to reach past it.
  *
- * Two routes, and the difference is who is looking:
+ * It used to be two routes — one for the face, one for the wire — and the honest
+ * verdict on them was that the difference was not apparent from either. It
+ * wasn't: they were the same call, and what changed between them was which
+ * panel was on the right. So the panel changes on its own now, at the moment
+ * that makes it true.
  *
- * - `#/`     the face on a real call, with the option surface of `createAvatar`.
- * - `#/wire` the same call, plus what the server is sending and the controls to
- *            make it send something — including something wrong.
+ *   disconnected  → build the avatar. The whole option surface of
+ *                   `createAvatar`, which is what you get to decide, and the
+ *                   only time it is the interesting question.
+ *   in a call     → drive the server. Options collapse to a line you can
+ *                   reopen; what takes their place is what the *server* can do
+ *                   to the face, because that is now the thing in motion.
  *
- * The call is owned here, above the routes, so navigating between them does not
- * hang up.
+ * The wire log spans both, because it is the evidence for both. Everything else
+ * moves; the log stays exactly where it was.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { useCall } from "./call";
+import { useState } from "react";
+import { PipecatClientAudio, PipecatClientProvider, usePipecatClientTransportState } from "@pipecat-ai/client-react";
+import { ConnectButton } from "@pipecat-ai/voice-ui-kit";
+import { useCall, type Call } from "./call";
 import { DEFAULT_LOOK, type Look } from "./look";
-import { Options } from "./Options";
-import { Stage } from "./Stage";
-import { WireLog } from "./WireLog";
+import { Build, BuildSummary } from "./Build";
 import { Drive } from "./Drive";
-
-type Route = "call" | "wire";
-
-const ROUTES: ReadonlyArray<readonly [Route, string]> = [
-  ["call", "Call"],
-  ["wire", "Wire"],
-];
-
-const routeFromHash = (): Route => (window.location.hash.replace(/^#\/?/, "") === "wire" ? "wire" : "call");
-
-function useRoute(): [Route, (next: Route) => void] {
-  const [route, setRoute] = useState(routeFromHash);
-  useEffect(() => {
-    const update = () => setRoute(routeFromHash());
-    window.addEventListener("hashchange", update);
-    return () => window.removeEventListener("hashchange", update);
-  }, []);
-  return [route, useCallback((next: Route) => { window.location.hash = next === "call" ? "/" : "/wire"; }, [])];
-}
-
-const LABEL: Record<ReturnType<typeof useCall>["status"], string> = {
-  offline: "offline",
-  connecting: "connecting…",
-  live: "live",
-  error: "error",
-};
+import { Stage } from "./Stage";
+import { Transcript } from "./Transcript";
+import { WireLog } from "./WireLog";
 
 export function App() {
-  const [route, go] = useRoute();
+  const call = useCall();
+  return (
+    // Everything below reads the connection from one place: the transport, via
+    // the provider. Studio holds no `connected` boolean of its own, so the
+    // button, the mode and the disabled controls cannot disagree about whether
+    // there is a call.
+    <PipecatClientProvider client={call.client}>
+      <Studio call={call} />
+      {/* The bot's voice arrives as a track on the transport. The avatar is
+          mute by itself and lipsyncs to whatever this is playing. */}
+      <PipecatClientAudio />
+    </PipecatClientProvider>
+  );
+}
+
+function Studio({ call }: { call: Call }) {
+  const transport = usePipecatClientTransportState();
   const [look, setLook] = useState<Look>(DEFAULT_LOOK);
   const [compare, setCompare] = useState(false);
-  const call = useCall();
-  const live = call.status === "live";
+  const [building, setBuilding] = useState(false);
+
+  // `ready` and not `connected`: the peer connection being up is not the same
+  // as the bot being ready to be driven, and every control endpoint answers 409
+  // until it is.
+  const live = transport === "ready";
 
   return (
     <div className="studio">
       <header className="bar">
         <div className="brand">
-          <strong>Avatar Studio</strong>
-          <span>@voqalize/avatar, on a live pipecat call</span>
+          <span className="mark" aria-hidden="true" />
+          <div>
+            <strong>Avatar Studio</strong>
+            <span>@voqalize/avatar, on a real pipecat call</span>
+          </div>
         </div>
-        <nav aria-label="View">
-          {ROUTES.map(([id, label]) => (
-            <button key={id} className={route === id ? "active" : ""} onClick={() => go(id)}>{label}</button>
-          ))}
-        </nav>
-        <div className="call-controls">
-          <span className={`status ${call.status}`}>{LABEL[call.status]}</span>
-          <button
-            className={live ? "hang" : "go"}
-            disabled={call.status === "connecting"}
-            onClick={() => void (live ? call.hangUp() : call.connect())}
-          >
-            {live ? "End call" : "Start call"}
-          </button>
+        <div className="dial">
+          <span className={`status ${live ? "live" : transport}`}>{transport}</span>
+          <ConnectButton
+            size="xl"
+            onConnect={() => void call.connect()}
+            onDisconnect={() => void call.hangUp()}
+          />
         </div>
       </header>
 
       {call.detail && <p className="banner">{call.detail}</p>}
 
-      <main className={`layout ${route}`}>
-        <Stage client={call.client} look={look} compare={compare} />
-        {route === "call" ? (
-          <aside className="panel">
-            <Options look={look} compare={compare} onLook={setLook} onCompare={setCompare} />
-            <p className="muted">
-              Microphone required; the bot speaks first. It runs on <code>server/</code>,
-              which needs no credential — <code>cd py && uv run --group server python ../server/server.py</code>.
+      <main className="layout">
+        <div className="floor">
+          <Stage client={call.client} look={look} compare={compare} />
+          {live ? (
+            <Transcript />
+          ) : (
+            <p className="invite">
+              Build it, then start the call and talk to it. Turn-taking is voice activity — it answers when
+              you stop — so this needs a microphone. It runs against <code>server/</code>, which needs no
+              credential: <code>cd py && uv run --group server python ../server/server.py</code>.
             </p>
-          </aside>
-        ) : (
-          <aside className="panel">
-            <section className="options">
-              <h2>Drive the call</h2>
-              <Drive live={live} onProblem={call.problem} />
-            </section>
-            <WireLog log={call.log} onClear={call.clearLog} />
-          </aside>
-        )}
-      </main>
+          )}
+        </div>
 
-      {/* The bot's voice arrives as a track on the transport; the avatar is
-          mute by itself and lipsyncs to whatever this element is playing. */}
-      <audio ref={call.audio} autoPlay />
+        <aside className="rail">
+          {live && !building ? (
+            <>
+              <BuildSummary look={look} compare={compare} onOpen={() => setBuilding(true)} />
+              <Drive live={live} onProblem={call.problem} />
+            </>
+          ) : (
+            <Build
+              look={look}
+              compare={compare}
+              onLook={setLook}
+              onCompare={setCompare}
+              onDone={live ? () => setBuilding(false) : undefined}
+            />
+          )}
+          <WireLog log={call.log} onClear={call.clearLog} />
+        </aside>
+      </main>
     </div>
   );
 }
