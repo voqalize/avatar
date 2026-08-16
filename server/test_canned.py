@@ -195,9 +195,16 @@ class Chain:
         await self.until(lambda: len(self.out.of(TTSStoppedFrame)) >= turns, timeout)
 
 
-@pytest.fixture
-def lines() -> CannedLines:
-    return CannedLines.load(LINES)
+@pytest.fixture(params=["female", "male"])
+def lines(request: pytest.FixtureRequest) -> CannedLines:
+    """Every corpus test runs against every voice.
+
+    A voice is a directory of recordings, and the failure a second voice
+    introduces is a sentence recorded for one and not the other — silence the
+    face still mouths, on one setting only. Parametrising the fixture is what
+    makes that a test failure rather than something you find in a call.
+    """
+    return CannedLines.load(LINES, request.param)
 
 
 # --- the corpus -------------------------------------------------------------
@@ -212,6 +219,31 @@ def test_every_sentence_has_a_clip(lines: CannedLines) -> None:
             assert sentence.audio.exists(), f"{line.id}: {sentence.audio}"
             assert sentence.ms > 0
             assert lines.find(sentence.text) is sentence
+
+
+def test_a_voice_is_one_row_in_both_spellings() -> None:
+    """Picking a voice has to move the recordings *and* the vendor id together.
+
+    The defect this guards is inaudible in the default pipeline and obvious in
+    production: the canned path plays the female recordings while
+    `--tts vql-speech` asks for the male omnivoice id, because the two were
+    threaded through separately. The avatar is drawn as a person; a voice that
+    disagrees with the drawing is noticed before anything about the face is.
+    """
+    female = CannedLines.load(LINES, "female")
+    male = CannedLines.load(LINES, "male")
+
+    assert female.voice.name == "female"
+    assert female.voice.vql_speech == "omnivoice/gauri"
+    assert male.voice.vql_speech == "omnivoice/gaurav"
+    assert female.voice.piper != male.voice.piper
+
+    # Same text, different audio: one corpus, recorded twice.
+    assert [n.text for n in female.lines] == [n.text for n in male.lines]
+    assert female.lines[0].sentences[0].audio != male.lines[0].sentences[0].audio
+
+    with pytest.raises(ValueError, match="no voice"):
+        CannedLines.load(LINES, "nobody")
 
 
 def test_lookup_survives_what_the_aggregator_does(lines: CannedLines) -> None:
@@ -232,8 +264,8 @@ def test_rejects_a_clip_that_is_not_what_the_corpus_declares(
     import wave
 
     src = lines.lines[0].sentences[0]
-    bad = tmp_path / "audio" / "bad.wav"
-    bad.parent.mkdir()
+    bad = tmp_path / "audio" / "wren" / "bad.wav"
+    bad.parent.mkdir(parents=True)
     with wave.open(str(src.audio)) as r, wave.open(str(bad), "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
@@ -245,8 +277,12 @@ def test_rejects_a_clip_that_is_not_what_the_corpus_declares(
         json.dumps(
             {
                 "sample_rate": lines.sample_rate,
+                "default_voice": "wren",
+                "voices": {
+                    "wren": {"label": "Wren", "vql_speech": "omnivoice/x", "piper": "en_US-x"}
+                },
                 "lines": [
-                    {"id": "x", "tag": "t", "sentences": [{"text": "hi", "audio": "audio/bad.wav"}]}
+                    {"id": "x", "tag": "t", "sentences": [{"text": "hi", "audio": "bad.wav"}]}
                 ],
             }
         )

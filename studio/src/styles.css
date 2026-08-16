@@ -1,14 +1,20 @@
 /*
- * The chrome around three line drawings.
+ * The chrome around one small line drawing.
  *
  * One idea, and everything here serves it: **a dark instrument with one lit
  * stage.** The avatars are ink on paper — `face-peep.js` paints its figure in
  * `t.paper` and draws no background rectangle at all — so on a dark tile the
  * character reads as a white cut-out floating in a hole, which is the exact
  * failure a comment in that file warns about. Paper is not a taste here; it is
- * the ground the drawing was authored on. So the tile is the only bright
+ * the ground the drawing was authored on. So the frame is the only bright
  * surface on the page, and every panel, control and label around it is quiet
  * enough to make that read as deliberate rather than as an unstyled div.
+ *
+ * The frame is deliberately small — 8rem, the calibration size — and the layout
+ * is built around that rather than apologising for it. The avatar and the four
+ * controls that belong to it stack into one narrow column on the left, in the
+ * order a first call happens in; the panels get the rest of the width, because
+ * they are the part with reading in them.
  *
  * The colours and the components come from `@pipecat-ai/voice-ui-kit` — this
  * page is `class="dark"` and inherits its whole semantic palette (`--color-card`,
@@ -19,10 +25,10 @@
  * hand-written CSS on those tokens rather than utility classes that would
  * silently do nothing.
  *
- * Type does the labelling: sans for prose, and the mono face — the one the wire
- * log is already in — small and letterspaced for every field label. A control
- * label and a wire message are the same kind of thing seen at two distances,
- * and setting them in one family says so.
+ * Type does the labelling: sans for prose, and the mono face, small and
+ * letterspaced, for every field label and every identifier. A control label and
+ * an argument name are the same kind of thing seen at two distances, and setting
+ * them in one family says so.
  */
 
 :root {
@@ -32,7 +38,10 @@
   --paper-edge: #d9d3c4;
 
   --gap: 1.25rem;
-  --rail: 25rem;
+  /* The avatar column: the frame plus enough width for two lines of caption
+     under it. Wider than the drawing on purpose — captions at 8rem would break
+     every three words. */
+  --player: 19rem;
   --label: 0.6875rem;
 }
 
@@ -71,29 +80,27 @@ code {
 }
 
 /* ─── the bar ─────────────────────────────────────────────────────────────
-   Connecting is the one thing you do before anything else works, so it gets
-   the largest control on the page and the far right of a bar with nothing
-   else competing in it. There is no navigation to sit beside it any more. */
+   Not sticky, and no controls in it. Connect moved down to the avatar, which
+   left the bar with one job: telling somebody who has never seen this page what
+   it is and what the three things to do with it are, in that order. */
 
 .bar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--gap);
+  flex-wrap: wrap;
   padding: 0.875rem var(--gap);
-  background: color-mix(in oklch, var(--color-background) 88%, transparent);
-  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--color-border);
 }
 
 .brand {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
   min-width: 0;
+  max-width: 30rem;
+  padding-top: 0.125rem;
 }
 
 .brand strong {
@@ -107,9 +114,10 @@ code {
   display: block;
   color: var(--color-muted-foreground);
   font-size: 0.8125rem;
+  text-wrap: pretty;
 }
 
-/* A 22px sample of the stage: paper, an edge, and one ink stroke. The page's
+/* A 24px sample of the stage: paper, an edge, and one ink stroke. The page's
    whole thesis at favicon size. */
 .mark {
   position: relative;
@@ -131,33 +139,70 @@ code {
   border-radius: 0 0 1rem 1rem;
 }
 
-.dial {
+/* Numbered because it is a sequence and the numbers carry information — you
+   cannot drive a call you have not dialled. The current step is lit, so the
+   strip answers "where am I" as well as "what is this". */
+.steps {
   display: flex;
-  align-items: center;
-  gap: 0.875rem;
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1 1 26rem;
+  min-width: 0;
 }
 
-.status {
-  font-family: var(--font-mono);
-  font-size: var(--label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-muted-foreground);
-  padding: 0.2rem 0.55rem;
-  border: 1px solid var(--color-border);
+.steps li {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--color-subtle);
+}
+
+.steps li b {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.1rem;
   border-radius: 999px;
+  border: 1px solid currentColor;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
 }
 
-.status.live {
+.steps li strong {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+}
+
+.steps li span {
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--color-subtle);
+  text-wrap: pretty;
+}
+
+.steps li.now {
   color: var(--color-active);
-  border-color: var(--color-active-ring);
-  background: var(--color-active-accent);
 }
 
-.status.error {
-  color: var(--color-inactive);
-  border-color: var(--color-inactive-ring);
-  background: var(--color-inactive-accent);
+.steps li.now strong {
+  color: var(--color-foreground);
+}
+
+.steps li.now span {
+  color: var(--color-muted-foreground);
+}
+
+.steps li.done {
+  color: var(--color-muted-foreground);
 }
 
 .banner {
@@ -175,22 +220,19 @@ code {
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--rail);
-  gap: var(--gap);
+  grid-template-columns: var(--player) minmax(0, 1fr);
+  gap: calc(var(--gap) * 1.5);
   align-items: start;
   padding: var(--gap);
-  max-width: 76rem;
+  max-width: 68rem;
   width: 100%;
   margin: 0 auto;
 }
 
 .floor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap);
   min-width: 0;
   position: sticky;
-  top: 5.5rem;
+  top: var(--gap);
 }
 
 .rail {
@@ -200,39 +242,23 @@ code {
   min-width: 0;
 }
 
-/* ─── the stage ──────────────────────────────────────────────────────────── */
+/* ─── the player ─────────────────────────────────────────────────────────── */
 
-.stage {
-  display: grid;
-  grid-template-columns: 1fr;
-  justify-items: center;
-  gap: var(--gap);
-}
-
-.stage-compare {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.tile {
-  margin: 0;
-  width: 100%;
-  /* The tile is the paper, so it is the shape of the drawing and no wider. A
-     landscape frame around a portrait figure is not a bigger stage — it is
-     margin, and margin here reads as an unfinished layout. */
-  max-width: 24rem;
+.player {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  align-items: stretch;
+  gap: 0.75rem;
 }
 
-.stage-compare .tile {
-  max-width: none;
-}
-
-/* 576 × 800 — the faces' own viewBox, so the figure meets all four edges of the
-   paper exactly as it was authored. */
-.tile-mount {
+/* 8rem — a third of what this used to be, and the 130 px the rig is calibrated
+   at. The frame is the paper, so it is the shape of the drawing and no wider:
+   576 × 800, the faces' own viewBox, so the figure meets all four edges exactly
+   as it was authored. */
+.frame {
   position: relative;
+  align-self: center;
+  width: 8rem;
   aspect-ratio: 18 / 25;
   border-radius: 0.75rem;
   overflow: hidden;
@@ -242,53 +268,137 @@ code {
     0 1px 3px rgb(0 0 0 / 40%);
 }
 
-.tile-mount > * {
+.frame-mount,
+.frame-mount > * {
   width: 100%;
   height: 100%;
 }
 
-.tile figcaption {
+/* The bot's output level, laid over the bottom of the drawing on a scrim that
+   is paper-coloured rather than dark — a dark band across the chin would read
+   as part of the character. */
+.frame-meter {
+  position: absolute;
+  inset: auto 0 0;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(to top, color-mix(in oklch, var(--paper) 92%, transparent), transparent);
+  pointer-events: none;
+}
+
+.frame-meter > * {
+  display: block;
+}
+
+/* What the avatar is doing, in the library's own words. Colour is the whole
+   signal at this size, so it is the kit's semantic pair: active for the call
+   hearing you, agent for the call talking. */
+.doing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0;
   font-family: var(--font-mono);
   font-size: var(--label);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--color-muted-foreground);
 }
 
-.invite {
-  margin: 0 auto;
-  color: var(--color-muted-foreground);
-  font-size: 0.875rem;
-  max-width: 34rem;
+.doing-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.doing-listening {
+  color: var(--color-active);
+}
+
+.doing-talking {
+  color: var(--color-agent);
+}
+
+.doing-error {
+  color: var(--color-inactive);
+}
+
+.doing-listening .doing-dot,
+.doing-talking .doing-dot {
+  opacity: 1;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ─── the captions ───────────────────────────────────────────────────────── */
+
+/*
+ * Subtitles, not a transcript. Two sentences at most and two lines at most,
+ * held at exactly that height so the button under it never moves. A panel you
+ * could scroll would invite reading the conversation; the thing worth watching
+ * is the face.
+ */
+.captions {
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  background: var(--color-muted);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.caption-clamp {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  /* Two lines of the above, always, so an empty caption is a held space rather
+     than a jump when the first word arrives. */
+  min-height: calc(2 * 1.45em);
   text-wrap: pretty;
 }
 
-/* ─── the transcript ─────────────────────────────────────────────────────── */
-
-.transcript {
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  background: var(--color-card);
-  overflow: hidden;
+.cap {
+  color: var(--color-foreground);
+  transition: opacity 400ms ease;
 }
 
-.transcript > .band-head {
-  padding: 0.6rem 0.875rem;
-  border-bottom: 1px solid var(--color-border);
+/* The sentence before this one, on its way out. */
+.cap-past {
+  opacity: 0.4;
 }
 
-.transcript small {
-  font-family: var(--font-mono);
-  font-size: var(--label);
-  letter-spacing: 0.06em;
-  color: var(--color-muted-foreground);
+/* Written but not yet spoken — the TTS has not reached it, so the mouth should
+   not be shaping it either. Seeing the two disagree is the point. */
+.cap-ahead {
+  color: var(--color-subtle);
 }
 
-/* The kit's Conversation fills its container, so the height is ours to set.
-   Tall enough for the current turn and the one before it — the comparison you
-   actually make is against the mouth, not against the backlog. */
-.transcript-body {
-  height: 13rem;
+.dial {
+  width: 100%;
+}
+
+/* The mic picker and the level meter as one control: "is it hearing me" and
+   "which device" are the same question. */
+.mic {
+  display: flex;
+  width: 100%;
+}
+
+.mic-button {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
 }
 
 /* ─── panels ─────────────────────────────────────────────────────────────── */
@@ -322,6 +432,29 @@ code {
   font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--color-muted-foreground);
+  text-wrap: pretty;
+}
+
+/*
+ * The signature.
+ *
+ * The controls below are not preferences, they are arguments, and this is the
+ * call they add up to. It is the answer to "why would a developer care what
+ * these do" — you are looking at the line you would paste, and at the defaults
+ * it is one line long.
+ */
+.snippet {
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  border-radius: 0.5rem;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--color-muted-foreground);
+  tab-size: 2;
 }
 
 .group {
@@ -333,7 +466,6 @@ code {
 .group-label {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 0.5rem;
   font-family: var(--font-mono);
   font-size: var(--label);
@@ -342,7 +474,19 @@ code {
   color: var(--color-muted-foreground);
 }
 
+/* The argument's real name, beside the human word for it. Lower case and
+   unstyled-looking, because it is code and the label is not. */
+.group-label code {
+  background: none;
+  padding: 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-subtle);
+}
+
 .group-label b {
+  margin-left: auto;
   font-weight: 500;
   color: var(--color-foreground);
 }
@@ -363,6 +507,12 @@ code {
   line-height: 1.5;
   color: var(--color-muted-foreground);
   text-wrap: pretty;
+}
+
+.why code {
+  background: none;
+  padding: 0;
+  color: var(--color-foreground);
 }
 
 .summary {
@@ -424,13 +574,10 @@ code {
 }
 
 /*
- * The signature.
- *
  * Two millisecond numbers mean nothing on their own; drawn to scale against a
- * nominal utterance they are visibly a beat, or visibly the whole turn. This is
- * the one place on the page allowed to use colour as information — think and
- * work take the kit's agent and warning hues, speaking takes the paper of the
- * stage, so the bar ends in the same material the face is drawn on.
+ * nominal utterance they are visibly a beat, or visibly the whole turn. Think
+ * and work take the kit's agent and warning hues, speaking takes the paper of
+ * the stage, so the bar ends in the same material the face is drawn on.
  */
 .turn {
   display: flex;
@@ -483,83 +630,9 @@ code {
   text-wrap: pretty;
 }
 
-/* ─── the wire ───────────────────────────────────────────────────────────── */
-
-.wire {
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  background: var(--color-card);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.wire > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.6rem 0.875rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.wire > header h2 {
-  margin: 0;
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
-.wire-log {
-  margin: 0;
-  padding: 0.5rem 0;
-  list-style: none;
-  height: 16rem;
-  overflow-y: auto;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  line-height: 1.7;
-}
-
-.wire-log li {
-  display: flex;
-  gap: 0.625rem;
-  padding: 0 0.875rem;
-}
-
-.wire-log li:hover {
-  background: var(--color-muted);
-}
-
-.wire-log .at {
-  flex: none;
-  color: var(--color-subtle);
-}
-
-/* The kinds are coloured to the same scheme as the turn strip: a claim is the
-   agent asserting, an action is a one-shot, cues are the mouth. */
-.wire-log .claim {
-  color: var(--color-agent-foreground);
-}
-
-.wire-log .action {
-  color: var(--color-warning);
-}
-
-.wire-log .cues {
-  color: var(--color-active);
-}
-
-.wire-log .call {
-  color: var(--color-muted-foreground);
-}
-
-.wire-log .error {
-  color: var(--color-inactive);
-}
-
 /* ─── smaller screens ────────────────────────────────────────────────────── */
 
-@media (max-width: 60rem) {
+@media (max-width: 64rem) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -568,18 +641,16 @@ code {
     position: static;
   }
 
-  .stage-compare {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .player {
+    max-width: var(--player);
+    margin: 0 auto;
   }
 }
 
-@media (max-width: 34rem) {
-  .bar {
-    flex-wrap: wrap;
-  }
-
-  .stage-compare {
-    grid-template-columns: minmax(0, 1fr);
+@media (max-width: 44rem) {
+  .steps {
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
   .beat {
@@ -598,7 +669,12 @@ code {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .seg {
+  .seg,
+  .cap {
     transition: none;
+  }
+
+  .doing-dot {
+    animation: none !important;
   }
 }

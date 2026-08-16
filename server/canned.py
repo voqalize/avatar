@@ -81,6 +81,43 @@ class Line:
         return " ".join(s.text for s in self.sentences)
 
 
+@dataclass(frozen=True)
+class Voice:
+    """Who is speaking, in both spellings at once.
+
+    The avatar is drawn as a person and a voice that disagrees with the drawing
+    breaks the illusion faster than any lipsync error does — so the voice is a
+    choice a caller makes, and it has to mean the same thing whichever TTS is
+    behind it. `vql_speech` is the real id (`omnivoice/gauri`); `piper` is the
+    licence-clean local model that stands in for it when there is no credential,
+    which is the default and the only path with no setup. One row, so the two
+    can never drift apart into a call whose voice depends on a flag.
+    """
+
+    name: str
+    label: str
+    vql_speech: str
+    piper: str
+
+
+def load_voices(path: Path) -> dict[str, Voice]:
+    """The voice table, without loading (or requiring) any audio.
+
+    Separate from `CannedLines.load` on purpose: the server advertises the list
+    before a call exists, and at that point the clips for the voice nobody has
+    picked yet are not its business.
+    """
+    raw = json.loads(path.read_text())
+    return {
+        name: Voice(name=name, label=v["label"], vql_speech=v["vql_speech"], piper=v["piper"])
+        for name, v in raw["voices"].items()
+    }
+
+
+def default_voice(path: Path) -> str:
+    return json.loads(path.read_text())["default_voice"]
+
+
 class CannedLines:
     """The corpus, validated at load rather than at the first call.
 
@@ -91,16 +128,29 @@ class CannedLines:
     headphones on, so none of them is allowed to reach a call.
     """
 
-    def __init__(self, lines: list[Line], sample_rate: int):
+    def __init__(self, lines: list[Line], sample_rate: int, voice: Voice):
         self.lines = lines
         self.sample_rate = sample_rate
+        #: Who these recordings are. Carried on the corpus rather than passed
+        #: alongside it so a vendor TTS built from the same corpus asks for the
+        #: matching voice without anyone having to remember to thread it through.
+        self.voice = voice
+
         self._by_key = {_key(s.text): s for line in lines for s in line.sentences}
 
     @classmethod
-    def load(cls, path: Path) -> CannedLines:
+    def load(cls, path: Path, voice: str | None = None) -> CannedLines:
         raw = json.loads(path.read_text())
         sample_rate = raw["sample_rate"]
-        root = path.parent
+        name = voice or raw["default_voice"]
+        if name not in raw["voices"]:
+            raise ValueError(f"no voice {name!r} in {path} — have {list(raw['voices'])}")
+        chosen = load_voices(path)[name]
+        # One text corpus, one recording of it per voice. The text is authored
+        # once and the directory is the only thing that varies, so a line added
+        # for one voice cannot go missing for the other — it goes missing for
+        # both, loudly, at load.
+        root = path.parent / "audio" / name
 
         lines: list[Line] = []
         for entry in raw["lines"]:
@@ -116,7 +166,7 @@ class CannedLines:
 
         if not lines:
             raise ValueError(f"{path} lists no lines")
-        return cls(lines, sample_rate)
+        return cls(lines, sample_rate, chosen)
 
     def find(self, text: str) -> Sentence | None:
         return self._by_key.get(_key(text))

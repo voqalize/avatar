@@ -135,8 +135,32 @@ VQL_SPEECH_KEY_PEM=/path/to/signing-key.pem \
 ```
 
 Neither has a default and neither is in this repo — everything committed here is
-public. `VQL_SPEECH_VOICE` overrides the voice. A key vql-speech has not been
-told about fails closed at the handshake with a 403.
+public. The voice comes from the selected row of `lines.json` (below);
+`VQL_SPEECH_VOICE` overrides it. A key vql-speech has not been told about fails
+closed at the handshake with a 403.
+
+## Two voices
+
+`lines.json` carries a `voices` table, and the corpus is recorded once per row:
+
+| row | vql-speech | the committed stand-in |
+|---|---|---|
+| `female` | `omnivoice/gauri` | `en_US-ljspeech-high` — public domain |
+| `male` | `omnivoice/gaurav` | `en_US-joe-medium` — CC0 |
+
+One row is two spellings of one voice, and both legs are load-bearing: the
+`vql_speech` id is what a real call asks for, the `piper` one is what `audio/`
+holds so a clone can hear it without a credential. `test_canned.py` runs its
+whole suite once per row, and asserts the two spellings stay paired.
+
+Which row is live is a server setting, not a wire message — `GET /api/lines`
+reports it alongside the vocabularies and `POST /api/voice {"name": "male"}`
+changes it. It takes effect on the **next** call, deliberately: a TTS opens its
+context with a voice id, so switching mid-call would put one sentence in each.
+
+The pairing exists because a voice that contradicts the face is read as a
+mistake long before any animation defect is — the avatar is one character, and
+the abstraction breaks at the first gender mismatch.
 
 ## Verifying lipsync
 
@@ -171,7 +195,8 @@ which is the point of judging here.
 
 ## The audio is committed
 
-`audio/` — 33 WAVs, 2.8 MB — is in git deliberately, which is the opposite call
+`audio/` — 66 WAVs, 5.5 MB, one directory per voice — is in git deliberately,
+which is the opposite call
 from the aligner in `native/avatarsync/`, whose library and model tree were taken
 out of git in favour of `native/avatarsync/get.sh`.
 
@@ -186,21 +211,25 @@ I add a line?", which used to be "ask whoever made the last one". Edit the text
 in `lines.json`, then:
 
 ```
-cd server && uv run --with piper-tts python record.py
+cd server && uv run --with piper-tts python record.py          # every voice
+cd server && uv run --with piper-tts python record.py male     # or just one
 ```
 
-It fetches the voice into `.voices/` (gitignored) on first run, re-records every
-sentence, and refuses any clip whose rate, channel count or bit depth is not
-what `lines.json` declares — the same properties the corpus re-checks when it
-loads, alongside the file simply being absent. Every one of those failures looks
-identical at runtime: the mouth moves and no sound comes out, which reads as a
-lipsync bug and is not one.
+It fetches each voice into `.voices/` (gitignored) on first run, re-records
+every sentence into `audio/<voice>/`, and refuses any clip whose rate, channel
+count or bit depth is not what `lines.json` declares — the same properties the
+corpus re-checks when it loads, alongside the file simply being absent. Every
+one of those failures looks identical at runtime: the mouth moves and no sound
+comes out, which reads as a lipsync bug and is not one.
 
-The voice is `en_US-ljspeech-high`, and it is chosen for its licence rather than
-its sound. LJSpeech is public domain. This repo is public and AGPL, and every
-WAV in it is redistributed to everyone who clones it — which rules out the
-obvious shortcut of macOS `say`, whose voices produce the exact target format
-and are Apple's to license, not ours to ship.
+Both piper voices are chosen for their licence rather than their sound: they
+are stand-ins for the `omnivoice/*` pair, which needs a credential this repo
+does not carry. LJSpeech is public domain and OHF-Voice `joe` is CC0. This repo
+is public and AGPL, and every WAV in it is redistributed to everyone who clones
+it — which rules out the obvious shortcut of macOS `say`, whose voices produce
+the exact target format and are Apple's to license, not ours to ship, and which
+also rules out the better-sounding `ryan` and `hfc_male` (CC BY-NC-SA: no
+commercial use, and a share-alike that AGPL cannot absorb).
 
 ## Editing while it runs
 

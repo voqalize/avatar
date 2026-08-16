@@ -210,11 +210,25 @@ def test_the_corpus_endpoint_describes_the_whole_surface(
         "think_ms": CannedLLMService.DEFAULT_THINK_MS,
         "work_ms": CannedLLMService.DEFAULT_WORK_MS,
     }
+    assert {v["name"] for v in body["voices"]} == {"female", "male"}
+    assert body["voice"] in {v["name"] for v in body["voices"]}
 
 
 def test_the_corpus_is_readable_with_no_call_in_progress(client: TestClient) -> None:
     """The page loads before it dials."""
     assert client.get("/api/lines").status_code == 200
+
+
+def test_choosing_a_voice_needs_no_call(client: TestClient) -> None:
+    """The one control that works *only* while disconnected.
+
+    Everything else here 409s without a call because it drives one. This is the
+    opposite: the voice decides which recordings a call loads, so it is settled
+    before there is a pipeline to tell — and asking mid-call would mean one
+    sentence in one voice and the next in another."""
+    assert client.post("/api/voice", json={"name": "male"}).json() == {"voice": "male"}
+    assert client.get("/api/lines").json()["voice"] == "male"
+    assert client.post("/api/voice", json={"name": "nobody"}).status_code == 404
 
 
 @pytest.mark.parametrize(

@@ -1,7 +1,7 @@
 # Avatar Studio
 
 The IDE for `createAvatar` — the published options, turned against a live call,
-with the wire that drove it decoded beside them.
+with the code you would paste written back to you as you change them.
 
 ```sh
 pnpm install                                  # once, from the repository root
@@ -34,9 +34,10 @@ Two consequences that read as limitations and are not:
   surface is `createAvatar(options) -> { destroy() }` and has nothing else on
   it ([design-avatar-interface.md](../docs/design-avatar-interface.md)).
 - **There is no state readout.** `createAvatar` returns no resolved state,
-  deliberately, so an integration cannot come to depend on one. Studio shows
-  what the *server sent*; what the face decided is a thing you judge by looking
-  at the face.
+  deliberately, so an integration cannot come to depend on one. The status line
+  under the frame reads the *transport* — who is speaking, which is a pipecat
+  fact — never the avatar. What the face decided is a thing you judge by
+  looking at the face.
 
 Studio also does not compose wire messages. Every control that drives the avatar
 is an HTTP request to `server/`, which then sends the message — a page that could
@@ -45,40 +46,62 @@ doing, which is the one thing CLAUDE.md says the client never does.
 
 ## One screen, two modes
 
-There is no navigation. The panel on the right changes with the connection,
+There is no navigation. The avatar, its status, its captions and the Connect
+button hold the left; the panel on the right changes with the connection,
 because that is when the interesting question changes:
 
 | when | the panel | what it validates |
 |---|---|---|
-| disconnected | **Build the avatar** — face, the three gains, the hand and its side | the option surface of `createAvatar`, which is yours to decide and nobody else's. **Compare mode** mounts all three faces on one `PipecatClient`: the only way to judge separate drawings on identical input, and the proof that an avatar is an embodiment of a client rather than an owner of one |
+| disconnected | **Your createAvatar call** — face, the three gains, the hand and its side, and the voice | the option surface of `createAvatar`, which is yours to decide and nobody else's. Every control rewrites a live snippet of the call you would paste, and at the defaults it writes `createAvatar({ mount, client })` and nothing more — which is the argument for the library in one screen |
 | in a call | **Drive the server** — pre-speech beats, interjections, misbehaviours | [contract-wire.md](../docs/contract-wire.md), from the sending end. The beats arm the next turn (`THINKING`, then `WORKING`, then speech); the interjections are one-shot `action`s; the misbehaviours are the ones the face is supposed to refuse — a claim that contradicts playout, an action storm, a claim that arrives too late |
 
 Mode is read from the transport, once, in one place — `usePipecatClientTransportState()`
 — so the button, the panel and every disabled control cannot disagree about
-whether there is a call. Options stay changeable mid-call: Build collapses to a
-line with a **Change** button rather than locking.
+whether there is a call. Options stay changeable mid-call: the build collapses
+to a line with a **Change** button rather than locking.
 
-Two things span both modes. The **avatar wire** log is the evidence for either —
-what the server sent, in order, decoded. The **transcript** appears with the call
-and renders karaoke-style from the kit's `Conversation`: the spoken part of the
-sentence in full ink, the rest muted, the boundary advancing with playout. That
-is a real check on the server, not a decoration — it only tracks because
-`CannedTTSService` puts word timings on the wire the way pipecat's protocol
-requires (`add_word_timestamps`, `push_text_frames=False`).
+The header carries the orientation, because a developer landing here cold has
+two questions — what is this, and what do I do — and a screen of controls
+answers neither. Three numbered steps, with the current one marked: build,
+connect, drive.
+
+**One avatar at a time.** A compare mode used to mount all three faces side by
+side; it made the frame small enough that nothing in it could be judged, which
+is the opposite of what a comparison is for. The faces are separate drawings
+rather than renderings of one, so a difference between them is usually not the
+finding it looks like ([removed.md](../docs/removed.md)).
+
+The **voice** sits in the build panel but in a band of its own, because it is
+not a `createAvatar` argument — it is which voice `server/` speaks in, and it
+reaches the face only as audio ([server/README.md § Two voices](../server/README.md)).
+It is there at all because the two have to agree: a voice that contradicts the
+face is read as a mistake long before any animation defect is. It is fixed once
+a call is up, since a TTS opens its context with a voice id.
+
+## The call, on the left
+
+The **captions** are video subtitles rather than a transcript: at most two
+sentences, clamped to two lines, the previous one faded. They come from
+`usePipecatConversation()` and render the kit's karaoke split — the spoken part
+of the sentence in full ink, the tail ahead of playout dimmed, the boundary
+advancing as it is said. That is a real check on the server, not a decoration:
+it only tracks because `CannedTTSService` puts word timings on the wire the way
+pipecat's protocol requires (`add_word_timestamps`, `push_text_frames=False`).
+The one rule worth knowing is written in `Captions.tsx` — an empty spoken half
+means *no karaoke on this TTS*, not *nothing said yet*, and reading it the other
+way dims every caption a timestamp-free vendor produces.
+
+The **status** under the frame — Talking, Listening, Idle — is derived from
+`RTVIEvent` speaking events and the transport state, not from the avatar. The
+meter over the frame is the kit's `VoiceVisualizer` on the bot track; the mic
+control under the button is its `UserAudioControl`, which is the device picker
+and your own level in one thing, usable before you dial.
 
 The chrome comes from [`@pipecat-ai/voice-ui-kit`](https://github.com/pipecat-ai/voice-ui-kit)
 — the same components a pipecat developer already has. Studio's own layout is
 hand-written CSS on the kit's tokens: the kit ships its Tailwind bundle prebuilt
 with only the utilities it uses, so there is no Tailwind build here and no
 arbitrary utility classes that would silently do nothing.
-
-`studio/src/wire.ts` is a **second implementation** of the wire reader, written
-from [contract-wire.md](../docs/contract-wire.md) rather than imported from
-`@voqalize/avatar/internal`. An integrator has the document, not our internals;
-if the document is not enough to write the reader, that is a defect in the
-document. It is also a reader rather than a validator — it keeps anything it
-can name, because a message the face ignored is precisely what you came here to
-see.
 
 ## What this is not
 

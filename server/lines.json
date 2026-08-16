@@ -1,9 +1,16 @@
 {
   "_comment": [
-    "The closed corpus this server speaks. Text is authored here; the WAV beside",
-    "each sentence is produced by `record.py` and IS committed, so a clone can",
-    "hear the avatar without fetching a 60 MB speech model — see that script and",
+    "The closed corpus this server speaks. Text is authored here once and",
+    "recorded once per voice by `record.py`; every WAV IS committed, so a clone",
+    "can hear the avatar without fetching a speech model — see that script and",
     "server/README.md.",
+    "",
+    "Two voices, because the avatar has a gender and the voice has to agree with",
+    "it. `vql_speech` is the real id — what `--tts vql-speech` asks Voqalize's own",
+    "service for. `piper` is the stand-in that keeps `--tts canned` free of every",
+    "credential: a licence-clean local model recorded into `audio/<voice>/`.",
+    "Choosing a voice picks the whole row, so the two backends can never disagree",
+    "about which one is speaking.",
     "",
     "22050 Hz is piper's native rate for these voices, not a choice. Resampling",
     "to 24 kHz here would add a dependency and a lossy step to reach a number",
@@ -16,149 +23,272 @@
     "worth more here than a paragraph that does not."
   ],
   "sample_rate": 22050,
-  "voice": "en_US-ljspeech-high",
+  "default_voice": "female",
+  "voices": {
+    "female": {
+      "label": "Female",
+      "vql_speech": "omnivoice/gauri",
+      "piper": "en_US-ljspeech-high",
+      "piper_licence": "public domain (LJSpeech)"
+    },
+    "male": {
+      "label": "Male",
+      "vql_speech": "omnivoice/gaurav",
+      "piper": "en_US-joe-medium",
+      "piper_licence": "CC0 (OHF-Voice joe)"
+    }
+  },
   "lines": [
     {
       "id": "greet",
       "tag": "greeting",
       "sentences": [
-        { "text": "Hello.", "audio": "audio/greet-0.wav" },
-        { "text": "I'm a talking head for A I voice calls.", "audio": "audio/greet-1.wav" }
+        {
+          "text": "Hello.",
+          "audio": "greet-0.wav"
+        },
+        {
+          "text": "I'm a talking head for A I voice calls.",
+          "audio": "greet-1.wav"
+        }
       ]
     },
     {
       "id": "what",
       "tag": "explain",
       "sentences": [
-        { "text": "There is no video model here.", "audio": "audio/what-0.wav" },
-        { "text": "I'm a drawing, moved by a small behavior library.", "audio": "audio/what-1.wav" }
+        {
+          "text": "There is no video model here.",
+          "audio": "what-0.wav"
+        },
+        {
+          "text": "I'm a drawing, moved by a small behavior library.",
+          "audio": "what-1.wav"
+        }
       ]
     },
     {
       "id": "listen",
       "tag": "explain",
       "sentences": [
-        { "text": "Most of my job is listening.", "audio": "audio/listen-0.wav" },
-        { "text": "So watch what I do while you talk, not just while I do.", "audio": "audio/listen-1.wav" }
+        {
+          "text": "Most of my job is listening.",
+          "audio": "listen-0.wav"
+        },
+        {
+          "text": "So watch what I do while you talk, not just while I do.",
+          "audio": "listen-1.wav"
+        }
       ]
     },
     {
       "id": "ack-okay",
       "tag": "backchannel",
-      "sentences": [{ "text": "Okay.", "audio": "audio/ack-okay-0.wav" }]
+      "sentences": [
+        {
+          "text": "Okay.",
+          "audio": "ack-okay-0.wav"
+        }
+      ]
     },
     {
       "id": "ack-see",
       "tag": "backchannel",
-      "sentences": [{ "text": "I see.", "audio": "audio/ack-see-0.wav" }]
+      "sentences": [
+        {
+          "text": "I see.",
+          "audio": "ack-see-0.wav"
+        }
+      ]
     },
     {
       "id": "ack-go-on",
       "tag": "backchannel",
-      "sentences": [{ "text": "Go on.", "audio": "audio/ack-go-on-0.wav" }]
+      "sentences": [
+        {
+          "text": "Go on.",
+          "audio": "ack-go-on-0.wav"
+        }
+      ]
     },
     {
       "id": "lipsync",
       "tag": "explain",
       "sentences": [
-        { "text": "My mouth runs on two clocks.", "audio": "audio/lipsync-0.wav" },
-        { "text": "One guesses from the words, the other measures the audio.", "audio": "audio/lipsync-1.wav" }
+        {
+          "text": "My mouth runs on two clocks.",
+          "audio": "lipsync-0.wav"
+        },
+        {
+          "text": "One guesses from the words, the other measures the audio.",
+          "audio": "lipsync-1.wav"
+        }
       ]
     },
     {
       "id": "moment",
       "tag": "thinking",
       "sentences": [
-        { "text": "One moment.", "audio": "audio/moment-0.wav" },
-        { "text": "Let me think about that.", "audio": "audio/moment-1.wav" }
+        {
+          "text": "One moment.",
+          "audio": "moment-0.wav"
+        },
+        {
+          "text": "Let me think about that.",
+          "audio": "moment-1.wav"
+        }
       ]
     },
     {
       "id": "authority",
       "tag": "explain",
       "sentences": [
-        { "text": "I never decide what I'm doing.", "audio": "audio/authority-0.wav" },
-        { "text": "The server tells me, and the audio corrects it.", "audio": "audio/authority-1.wav" }
+        {
+          "text": "I never decide what I'm doing.",
+          "audio": "authority-0.wav"
+        },
+        {
+          "text": "The server tells me, and the audio corrects it.",
+          "audio": "authority-1.wav"
+        }
       ]
     },
     {
       "id": "ack-sure",
       "tag": "backchannel",
-      "sentences": [{ "text": "Sure.", "audio": "audio/ack-sure-0.wav" }]
+      "sentences": [
+        {
+          "text": "Sure.",
+          "audio": "ack-sure-0.wav"
+        }
+      ]
     },
     {
       "id": "ack-got-it",
       "tag": "backchannel",
-      "sentences": [{ "text": "Got it.", "audio": "audio/ack-got-it-0.wav" }]
+      "sentences": [
+        {
+          "text": "Got it.",
+          "audio": "ack-got-it-0.wav"
+        }
+      ]
     },
     {
       "id": "canned",
       "tag": "explain",
       "sentences": [
-        { "text": "Nothing I say is generated.", "audio": "audio/canned-0.wav" },
-        { "text": "There's no language model in this call at all.", "audio": "audio/canned-1.wav" }
+        {
+          "text": "Nothing I say is generated.",
+          "audio": "canned-0.wav"
+        },
+        {
+          "text": "There's no language model in this call at all.",
+          "audio": "canned-1.wav"
+        }
       ]
     },
     {
       "id": "sorry",
       "tag": "concern",
       "sentences": [
-        { "text": "Sorry, I didn't catch that.", "audio": "audio/sorry-0.wav" }
+        {
+          "text": "Sorry, I didn't catch that.",
+          "audio": "sorry-0.wav"
+        }
       ]
     },
     {
       "id": "roles",
       "tag": "explain",
       "sentences": [
-        { "text": "I can take any role you give me.", "audio": "audio/roles-0.wav" },
-        { "text": "Nothing about me assumes what this call is for.", "audio": "audio/roles-1.wav" }
+        {
+          "text": "I can take any role you give me.",
+          "audio": "roles-0.wav"
+        },
+        {
+          "text": "Nothing about me assumes what this call is for.",
+          "audio": "roles-1.wav"
+        }
       ]
     },
     {
       "id": "faces",
       "tag": "explain",
       "sentences": [
-        { "text": "There are several faces.", "audio": "audio/faces-0.wav" },
-        { "text": "Each one is drawn by hand, not rendered from a photograph.", "audio": "audio/faces-1.wav" }
+        {
+          "text": "There are several faces.",
+          "audio": "faces-0.wav"
+        },
+        {
+          "text": "Each one is drawn by hand, not rendered from a photograph.",
+          "audio": "faces-1.wav"
+        }
       ]
     },
     {
       "id": "ack-makes-sense",
       "tag": "backchannel",
       "sentences": [
-        { "text": "That makes sense.", "audio": "audio/ack-makes-sense-0.wav" }
+        {
+          "text": "That makes sense.",
+          "audio": "ack-makes-sense-0.wav"
+        }
       ]
     },
     {
       "id": "still",
       "tag": "explain",
       "sentences": [
-        { "text": "I try to stay still.", "audio": "audio/still-0.wav" },
-        { "text": "A restless face costs bandwidth and says nothing.", "audio": "audio/still-1.wav" }
+        {
+          "text": "I try to stay still.",
+          "audio": "still-0.wav"
+        },
+        {
+          "text": "A restless face costs bandwidth and says nothing.",
+          "audio": "still-1.wav"
+        }
       ]
     },
     {
       "id": "take-time",
       "tag": "warm",
       "sentences": [
-        { "text": "Take your time.", "audio": "audio/take-time-0.wav" },
-        { "text": "There's no rush.", "audio": "audio/take-time-1.wav" }
+        {
+          "text": "Take your time.",
+          "audio": "take-time-0.wav"
+        },
+        {
+          "text": "There's no rush.",
+          "audio": "take-time-1.wav"
+        }
       ]
     },
     {
       "id": "wire",
       "tag": "explain",
       "sentences": [
-        { "text": "Everything you see arrives as three kinds of message.", "audio": "audio/wire-0.wav" },
-        { "text": "A claim, an action, and the mouth shapes.", "audio": "audio/wire-1.wav" }
+        {
+          "text": "Everything you see arrives as three kinds of message.",
+          "audio": "wire-0.wav"
+        },
+        {
+          "text": "A claim, an action, and the mouth shapes.",
+          "audio": "wire-1.wav"
+        }
       ]
     },
     {
       "id": "close",
       "tag": "explain",
       "sentences": [
-        { "text": "That's the whole library.", "audio": "audio/close-0.wav" },
-        { "text": "Keep talking, and I'll start over from the top.", "audio": "audio/close-1.wav" }
+        {
+          "text": "That's the whole library.",
+          "audio": "close-0.wav"
+        },
+        {
+          "text": "Keep talking, and I'll start over from the top.",
+          "audio": "close-1.wav"
+        }
       ]
     }
   ]

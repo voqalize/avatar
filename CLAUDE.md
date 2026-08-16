@@ -82,6 +82,14 @@ Non-obvious, and recorded nowhere else.
   more than it speaks. Spend effort accordingly. They must also read
   convincingly with no audio at all (baked default timings; real clips attach
   later).
+- **The voice is part of the character, and a mismatch outranks every animation
+  defect.** The library never chooses a TTS — but anything that *demonstrates*
+  the library does, and a face read as one gender speaking in another is the
+  first thing anyone notices, before a single nod is judged. So `server/`'s
+  corpus is recorded once per voice, each row naming both its `omnivoice/*` id
+  and the licence-clean piper stand-in committed here, and the picker sits
+  before the call because a TTS opens its context with a voice id
+  ([server/README.md § Two voices](server/README.md)).
 - **Autonomy is contingent, never decorative.** The renderer must never invent
   an acknowledgement — every nod, receipt and empathy beat is an explicit
   `action`.
@@ -197,7 +205,14 @@ Three things no suite will tell you:
   the connection picks the mode: disconnected you build the avatar, in a call
   you drive the server. There is no fake clock, no trace fixture and no
   demo-only state machine anywhere in it, and it does not compose wire messages
-  — every control that moves the face asks the *server* to send one.
+  — every control that moves the face asks the *server* to send one. **One
+  avatar, at shipping size, and no wire log**: compare mode and the decoded
+  message list were both cut on the stakeholder's read that they answer
+  transport questions on a page whose subject is the face
+  ([removed.md](docs/removed.md) § Studio's wire log, compare mode and
+  transcript panel). Deleting the log also deleted the repo's only wire reader
+  written from `contract-wire.md` alone — recorded there as a cost, not a
+  cleanup.
 - **The vocabulary is the seven core states, everywhere above the mixer.** The
   render-state pass-throughs (`TYPING_CHAT`, `CANT_HEAR`, `WANTS_IN`, …) are
   gone from `src/behavior.js`; they are still real states *in* `src/avatar.js`,

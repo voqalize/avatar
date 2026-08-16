@@ -252,11 +252,12 @@ open http://localhost:7860/          # the 30-second look — a real call, no bu
 
 **Avatar Studio** is the IDE for `createAvatar`, pointed at that same server. One
 screen, and the connection picks the mode. Disconnected, it drives the published
-option surface — face, the three gains, the hand and its side — and its compare
-mode mounts all three faces on one `PipecatClient`. In a call, that panel gives
-way to what the *server* can do to the face: the pre-speech beats, the
-interjections, and the misbehaviours it sends on purpose. The wire log decodes
-every `claim`, `action` and `cues` chunk as it arrives, throughout.
+option surface — face, the three gains, the hand and its side — and writes the
+`createAvatar` call you would paste as you change them; at the defaults that is
+one line. In a call, that panel gives way to what the *server* can do to the
+face: the pre-speech beats, the interjections, and the misbehaviours it sends on
+purpose. The avatar keeps the left of the screen throughout, at the size it
+ships at, with the sentence it is saying captioned under it.
 
 ```sh
 pnpm -w run studio:dev               # with server/ running in another terminal

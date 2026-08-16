@@ -8,11 +8,11 @@
  * the server sent, which is how you tell a move the face ignored from one that
  * never arrived.
  *
- * The vocabularies come from `GET /api/lines` rather than from a list here.
- * They live in the Python package, and a button list that had drifted from them
- * would be a UI testing a wire format that no longer exists. `vocabulary.ts`
- * turns their names into words; anything it has no words for still gets a
- * button.
+ * The vocabularies come from `GET /api/lines` (see `corpus.ts`) rather than from
+ * a list here. They live in the Python package, and a button list that had
+ * drifted from them would be a UI testing a wire format that no longer exists.
+ * `vocabulary.ts` turns their names into words; anything it has no words for
+ * still gets a button.
  *
  * There is no button that makes it talk, and that is the point of the beats.
  * Talk to it — turn-taking is VAD, so it takes its turn when you stop — and the
@@ -22,14 +22,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button, Slider } from "@pipecat-ai/voice-ui-kit";
+import type { Corpus } from "./corpus";
 import { actionGroup, actionTerm, misbehaviourLabel } from "./vocabulary";
-
-interface Corpus {
-  actions: string[];
-  /** kind → what to watch for while it runs. */
-  misbehaviours: Record<string, string>;
-  beats: { think_ms: number; work_ms: number };
-}
 
 /** One pre-speech state: whether the server holds it, and for how long. */
 interface Beat {
@@ -59,8 +53,15 @@ const SPEAKING_MS = 2200;
 
 const ms = (beat: Beat) => (beat.on ? beat.ms : 0);
 
-export function Drive({ live, onProblem }: { live: boolean; onProblem: (text: string) => void }) {
-  const [corpus, setCorpus] = useState<Corpus | null>(null);
+export function Drive({
+  live,
+  corpus,
+  onProblem,
+}: {
+  live: boolean;
+  corpus: Corpus | null;
+  onProblem: (text: string) => void;
+}) {
   const [think, setThink] = useState<Beat>({ on: true, ms: 700 });
   const [work, setWork] = useState<Beat>({ on: false, ms: FALLBACK_MS });
   // One hint line per band rather than one for the panel: the sentence has to
@@ -69,23 +70,14 @@ export function Drive({ live, onProblem }: { live: boolean; onProblem: (text: st
   const [interjectHint, setInterjectHint] = useState("");
   const [wrongHint, setWrongHint] = useState("");
 
+  // The server's own defaults, once they arrive, so the panel opens agreeing
+  // with the call it is about to drive rather than guessing at it.
+  const beats = corpus?.beats;
   useEffect(() => {
-    let cancelled = false;
-    void fetch("/api/lines")
-      .then((r) => (r.ok ? (r.json() as Promise<Corpus>) : Promise.reject(new Error(`/api/lines → ${r.status}`))))
-      .then((body) => {
-        if (cancelled) return;
-        setCorpus(body);
-        // The server's own defaults, so the panel opens agreeing with the call
-        // it is about to drive rather than guessing at it.
-        setThink({ on: body.beats.think_ms > 0, ms: body.beats.think_ms || FALLBACK_MS });
-        setWork({ on: body.beats.work_ms > 0, ms: body.beats.work_ms || FALLBACK_MS });
-      })
-      .catch((err: Error) => !cancelled && onProblem(`${err.message} — is \`server/\` running?`));
-    return () => {
-      cancelled = true;
-    };
-  }, [onProblem]);
+    if (!beats) return;
+    setThink({ on: beats.think_ms > 0, ms: beats.think_ms || FALLBACK_MS });
+    setWork({ on: beats.work_ms > 0, ms: beats.work_ms || FALLBACK_MS });
+  }, [beats]);
 
   // Arm the call whenever the numbers or the call itself change. A fresh call
   // is a fresh `CannedLLMService` back on its defaults, so connecting has to

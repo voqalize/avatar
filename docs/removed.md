@@ -630,7 +630,7 @@ project whose `src/` is dependency-free on purpose.
 services, so it needs no API key, and a real `SmallWebRTCTransport`. Turn-taking
 is pipecat's, the wire is the wire, and the microphone is the browser's.
 `server/index.html` is the 30-second look; `studio/` is the same call with the
-`createAvatar` options exposed and the wire decoded beside it.
+`createAvatar` options exposed beside it.
 
 **Worth recovering on purpose:** the tile treatment. `call.html` painted the
 surround transparent and feathered the drawing's two vertical edges with a
@@ -678,6 +678,48 @@ rather than a fixture describing one ([studio/README.md](../studio/README.md)).
 `main` after `v0.2.2`. `git show 79511aa:studio/src/App.tsx` has all four
 workspaces and the trace type; `git show 79511aa:studio/src/rive-bob.ts` and
 `git show 79511aa:docs/studio-verification.md` for the rest.
+
+---
+
+## Studio's wire log, compare mode and transcript panel
+
+**Was:** three panels of the first single-screen Studio.
+`studio/src/WireLog.tsx` printed every `claim`, `action` and `cues` message as
+it arrived, decoded by `studio/src/wire.ts` — a **second implementation** of the
+wire reader, written from [contract-wire.md](contract-wire.md) rather than
+imported from `@voqalize/avatar/internal`, on the argument that an integrator
+has the document and not our internals. Compare mode (in `Stage.tsx`) mounted
+all three faces on one `PipecatClient` at once. `studio/src/Transcript.tsx` was
+a scrolling conversation list, both roles, the whole call.
+
+**Why they went:** the stakeholder's verdict on the wire log was that it is not
+useful, and it is worth being precise about why — it is the *transport* view of
+a system whose whole design says the transport is not the interesting thing.
+The face is judged by looking at the face, and a log of well-formed messages
+answers a question ("did the server send it") that `server/`'s own page already
+answers more plainly. Compare mode made each face a third of a frame that is
+now 128 px whole; nothing in a 43 px face can be judged, and the faces are
+separate drawings rather than renderings of one, so a difference between them
+is usually not the finding it looks like. The transcript was a panel-sized
+answer to a caption-sized question: two sentences over the avatar is what a
+viewer reads, and the scrollback was never read twice.
+
+**Instead:** captions (`studio/src/Captions.tsx`) — at most two sentences,
+clamped to two lines, the previous one faded, rendering the same karaoke split
+the transcript did. One avatar, at the size it ships at. For the wire, `server/`
+still logs every message, and its own page still decodes them
+([server/README.md](../server/README.md)).
+
+**The real cost, recorded:** deleting the log took `wire.ts` with it, and the
+repo no longer holds a reader written from the document alone. If
+[contract-wire.md](contract-wire.md) stops being sufficient to write one,
+nothing here will notice. Recovering that check does not need the panel back —
+`wire.ts` was a pure module and could return as a test fixture.
+
+**Recover:** `git show 0150804:studio/src/wire.ts`,
+`git show 0150804:studio/src/WireLog.tsx`,
+`git show 0150804:studio/src/Transcript.tsx`; compare mode is in
+`git show 0150804:studio/src/Stage.tsx`.
 
 ---
 

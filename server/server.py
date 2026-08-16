@@ -55,7 +55,7 @@ from voqalize_avatar import AvatarAction, AvatarClaim
 
 import control
 from bot import DEFAULT_TTS, LINES, TTS_SERVICES, run_bot
-from canned import CannedLines, CannedLLMService
+from canned import CannedLines, CannedLLMService, default_voice, load_voices
 
 
 class Say(BaseModel):
@@ -80,6 +80,12 @@ class Beats(BaseModel):
 
     think_ms: int = 0
     work_ms: int = 0
+
+
+class Voice(BaseModel):
+    """Which row of `lines.json` the *next* call speaks as."""
+
+    name: str
 
 
 HERE = Path(__file__).resolve().parent
@@ -119,6 +125,14 @@ MISSING = {
 def build_app(tts_name: str) -> FastAPI:
     handler = SmallWebRTCRequestHandler()
 
+    # The voice is chosen before the call and read when it starts, because that
+    # is when it is decidable: the canned path loads a different set of
+    # recordings and a vendor path opens its context with a voice id, and
+    # neither is a thing you can change halfway through a sentence. One server,
+    # one call at a time, so one selection is the whole of the state.
+    voices = load_voices(LINES)
+    chosen = {"name": default_voice(LINES)}
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         yield
@@ -143,7 +157,7 @@ def build_app(tts_name: str) -> FastAPI:
         async def start(connection: SmallWebRTCConnection) -> None:
             # Queued rather than awaited: the SDP answer has to go back on this
             # request, and the call outlives it by minutes.
-            background.add_task(run_bot, connection, tts_name)
+            background.add_task(run_bot, connection, tts_name, chosen["name"])
 
         return await handler.handle_web_request(request, start)
 
@@ -163,7 +177,7 @@ def build_app(tts_name: str) -> FastAPI:
     @app.get("/api/lines")
     async def corpus():
         """What this call can say, and what it can be told to do wrong."""
-        lines = CannedLines.load(LINES)
+        lines = CannedLines.load(LINES, chosen["name"])
         return {
             "lines": [
                 {"id": n.id, "tag": n.tag, "text": n.text, "ms": sum(s.ms for s in n.sentences)}
@@ -172,6 +186,12 @@ def build_app(tts_name: str) -> FastAPI:
             "claims": [str(c) for c in AvatarClaim],
             "actions": [str(a) for a in AvatarAction],
             "misbehaviours": control.MISBEHAVIOURS,
+            # Who can speak, and who will. Chosen before the call, because the
+            # canned path picks a directory of recordings at load.
+            "voices": [
+                {"name": v.name, "label": v.label, "id": v.vql_speech} for v in voices.values()
+            ],
+            "voice": chosen["name"],
             # What a fresh call will do before it speaks, so a page can show the
             # real setting on load instead of a guess that disagrees with it.
             "beats": {
@@ -185,6 +205,19 @@ def build_app(tts_name: str) -> FastAPI:
         if session is None:
             raise HTTPException(status_code=409, detail="no call in progress")
         return session
+
+    @app.post("/api/voice")
+    async def voice(body: Voice):
+        """Pick the voice for the next call. Deliberately not for this one.
+
+        Nothing here reaches into a running pipeline: swapping a TTS mid-call
+        would mean a sentence in one voice and the next in another, which is
+        worse than the mismatch it would be fixing. Hang up and dial again.
+        """
+        if body.name not in voices:
+            raise HTTPException(status_code=404, detail=f"no voice {body.name!r}")
+        chosen["name"] = body.name
+        return {"voice": body.name}
 
     @app.post("/api/say")
     async def say(body: Say):
