@@ -26,14 +26,21 @@
  * screen of controls.
  */
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { PipecatClientAudio, PipecatClientProvider, usePipecatClientTransportState } from "@pipecat-ai/client-react";
 import { useCall, type Call } from "./call";
 import { useCorpus } from "./corpus";
 import { DEFAULT_LOOK, type Look } from "./look";
 import { Build, BuildSummary } from "./Build";
 import { Drive } from "./Drive";
-import { Stage } from "./Stage";
+import { DEFAULT_SIZE, Stage, type Size } from "./Stage";
+
+/** Where the package, the source and the architecture note live. */
+export const LINKS = {
+  npm: "https://www.npmjs.com/package/@voqalize/avatar",
+  github: "https://github.com/voqalize/avatar",
+  docs: "https://github.com/voqalize/avatar/blob/main/docs/architecture.md",
+} as const;
 
 export function App() {
   const call = useCall();
@@ -54,6 +61,10 @@ export function App() {
 function Studio({ call }: { call: Call }) {
   const transport = usePipecatClientTransportState();
   const [look, setLook] = useState<Look>(DEFAULT_LOOK);
+  // The frame width lives up here rather than in `Stage`, because the avatar
+  // column is a grid track: a 400 px drawing has to widen the track it sits in,
+  // and a custom property only travels downward.
+  const [size, setSize] = useState<Size>(DEFAULT_SIZE);
   const [building, setBuilding] = useState(false);
   const { corpus, chooseVoice } = useCorpus(call.problem);
 
@@ -72,13 +83,16 @@ function Studio({ call }: { call: Call }) {
 
       {call.detail && <p className="banner">{call.detail}</p>}
 
-      <main className="layout">
+      <main className="layout" style={{ "--frame": `${size}px` } as CSSProperties}>
         <div className="floor">
           <Stage
             client={call.client}
             look={look}
             live={live}
             transport={transport}
+            size={size}
+            onSize={setSize}
+            unreachable={call.unreachable}
             onConnect={() => void call.connect()}
             onHangUp={() => void call.hangUp()}
           />
@@ -124,8 +138,11 @@ function Header({ live }: { live: boolean }) {
         <div>
           <strong>Avatar Studio</strong>
           <span>
-            <code>@voqalize/avatar</code> — a 2-D talking head that animates itself from a pipecat call.
-            This is the published package on a real one.
+            <a className="chip" href={LINKS.npm} target="_blank" rel="noreferrer">
+              <code>@voqalize/avatar</code>
+            </a>{" "}
+            — a 2-D talking head that animates itself from a pipecat call. This is the published package
+            on a real one.
           </span>
         </div>
       </div>
@@ -146,6 +163,22 @@ function Header({ live }: { live: boolean }) {
           </li>
         ))}
       </ol>
+      {/* Quiet, and at the end of the bar: a developer who wants the source or
+          the docs should not have to guess the org, but the page is about the
+          face and these are not what to look at. */}
+      <nav className="links" aria-label="Project links">
+        <a href={LINKS.github} target="_blank" rel="noreferrer">
+          GitHub
+        </a>
+        <span aria-hidden="true">·</span>
+        <a href={LINKS.docs} target="_blank" rel="noreferrer">
+          Docs
+        </a>
+        <span aria-hidden="true">·</span>
+        <a href={LINKS.npm} target="_blank" rel="noreferrer">
+          npm
+        </a>
+      </nav>
     </header>
   );
 }

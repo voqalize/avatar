@@ -7,7 +7,9 @@
  * (CLAUDE.md § In flight — production calibration retires the reference image as
  * the yardstick), so this is the avatar at the size a consumer will actually
  * embed it, not a poster of it. A face that only reads at 400 px is a face that
- * does not work, and showing it big hides that.
+ * does not work, and showing it big hides that. The size control under the
+ * status line can enlarge it for inspection and defaults back to nothing — 130
+ * is what opens, always, so the first read of the face is the shipping read.
  *
  * Under the frame, in the order you need them: what the avatar is doing, what it
  * is saying, the button that starts the call, and your own microphone. That is
@@ -26,14 +28,32 @@ import type { PipecatClient } from "@pipecat-ai/client-js";
 import { ConnectButton, UserAudioControl, VoiceVisualizer } from "@pipecat-ai/voice-ui-kit";
 import { createAvatar } from "@voqalize/avatar";
 import { Captions } from "./Captions";
+import { SERVER_URL } from "./call";
 import { faceValue, type Look } from "./look";
 import { usePresence, type Presence } from "./presence";
+
+/**
+ * The three widths, and why the first one is the default.
+ *
+ * 130 px is the size the rig is calibrated at and the size a consumer embeds —
+ * CLAUDE.md § In flight. It stays the default deliberately: a page that opened
+ * at 400 would be advertising a face nobody ships, and a defect that only
+ * shows at tile size is exactly the defect this page exists to catch. The
+ * other two are inspection, for when you have found something and want to see
+ * what it is.
+ */
+export const SIZES = [130, 240, 400] as const;
+export type Size = (typeof SIZES)[number];
+export const DEFAULT_SIZE: Size = 130;
 
 export function Stage({
   client,
   look,
   live,
   transport,
+  size,
+  onSize,
+  unreachable,
   onConnect,
   onHangUp,
 }: {
@@ -41,6 +61,10 @@ export function Stage({
   look: Look;
   live: boolean;
   transport: string;
+  size: Size;
+  onSize: (size: Size) => void;
+  /** Raw text from the last failed dial, "" if it carried none, `null` if none. */
+  unreachable: string | null;
   onConnect: () => void;
   onHangUp: () => void;
 }) {
@@ -48,6 +72,7 @@ export function Stage({
     <div className="player">
       <Frame client={client} look={look} />
       <Doing live={live} transport={transport} />
+      <Sizes size={size} onSize={onSize} />
       {/* Only while there is something to caption. A permanently reserved
           two-line gap under an idle avatar reads as a rendering fault. */}
       {live && <Captions />}
@@ -57,10 +82,57 @@ export function Stage({
         onConnect={onConnect}
         onDisconnect={onHangUp}
       />
+      {unreachable !== null && <Unreachable detail={unreachable} />}
       <UserAudioControl
         classNames={{ buttongroup: "mic", button: "mic-button" }}
         dropdownMenuLabel="Your devices"
       />
+    </div>
+  );
+}
+
+/**
+ * What to do about a dial that went nowhere.
+ *
+ * It sits under the button rather than in the page banner because it is about
+ * the button, and because the answer is a command: this page is half of a pair
+ * and the other half is a process you have not started. The transport's own
+ * text goes in brackets when there is any — usually there is not, which is why
+ * the sentence cannot be built out of it.
+ */
+function Unreachable({ detail }: { detail: string }) {
+  return (
+    <p className="unreachable" role="alert">
+      Couldn't reach the pipecat server at <code>{SERVER_URL}</code>. Start it in another terminal:{" "}
+      <code>cd py &amp;&amp; uv run --group server python ../server/server.py</code> — then press Connect
+      again.
+      {detail && <span className="unreachable-raw"> ({detail})</span>}
+    </p>
+  );
+}
+
+/**
+ * How big the drawing is, which is a question about *inspection* and not about
+ * the library — nothing here reaches `createAvatar`, the mount just gets wider
+ * and the SVG fills it.
+ */
+function Sizes({ size, onSize }: { size: Size; onSize: (size: Size) => void }) {
+  return (
+    <div className="sizes">
+      <div className="sizes-set" role="group" aria-label="Avatar size">
+        {SIZES.map((px) => (
+          <button
+            key={px}
+            type="button"
+            className={px === size ? "on" : ""}
+            aria-pressed={px === size}
+            onClick={() => onSize(px)}
+          >
+            {px}
+          </button>
+        ))}
+      </div>
+      <small>{size === DEFAULT_SIZE ? "ships at this size" : "for inspection — it ships at 130"}</small>
     </div>
   );
 }
@@ -126,11 +198,13 @@ function Frame({ client, look }: { client: PipecatClient; look: Look }) {
 function Doing({ live, transport }: { live: boolean; transport: string }) {
   const presence = usePresence(live);
 
+  // Announced, because the word changing is the event — the face moving is not
+  // something a screen reader can report, and this line is the text of it.
   if (presence === null) {
     const settled = transport === "disconnected" || transport === "initialized";
     const tone = settled ? "idle" : transport === "error" ? "error" : "busy";
     return (
-      <p className={`doing doing-${tone}`}>
+      <p className={`doing doing-${tone}`} aria-live="polite">
         <span className="doing-dot" aria-hidden="true" />
         {settled ? "Not connected" : transport}
       </p>
@@ -138,7 +212,7 @@ function Doing({ live, transport }: { live: boolean; transport: string }) {
   }
 
   return (
-    <p className={`doing doing-${TONES[presence]}`}>
+    <p className={`doing doing-${TONES[presence]}`} aria-live="polite">
       <span className="doing-dot" aria-hidden="true" />
       {presence}
     </p>

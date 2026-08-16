@@ -14,15 +14,50 @@
  * opinion about the TTS, and it has none.
  */
 
+import { useState } from "react";
 import { Button, Slider } from "@pipecat-ai/voice-ui-kit";
 import type { VoiceOption } from "./corpus";
-import { FACE_NAMES, GAINS, type Look } from "./look";
+import { DEFAULT_LOOK, FACE_NAMES, GAINS, type FaceName, type Look } from "./look";
 
 const pct = (gain: number) => `${Math.round(gain * 100)}%`;
 
 const round = (gain: number) => Number(gain.toFixed(2));
 
 const side = (look: Look) => (look.hand ? (look.handSide === 1 ? "hand right" : "hand left") : "no hand");
+
+/** What `npm install` you run before any of the code below compiles. */
+const INSTALL = "npm install @voqalize/avatar";
+
+/** And the other half, which is a different package manager on a different machine. */
+const INSTALL_PY = "pip install voqalize-avatar";
+
+/**
+ * The backend half, which is one import and one seat in the pipeline.
+ *
+ * Zero-argument on purpose: `AvatarProcessor()` infers everything it announces
+ * from ordinary pipecat frames, so there is no configuration here to get wrong
+ * and no second copy of the call's state to keep in step.
+ */
+const PIPELINE = `from voqalize_avatar import AvatarProcessor
+
+pipeline = Pipeline([..., tts, AvatarProcessor(), transport.output()])`;
+
+/**
+ * How each drawing reads, and therefore which voice belongs with it.
+ *
+ * **Studio's own opinion, and nothing in the package backs it.** `META` is a
+ * viewBox and a mouth crop; a face carries no gender and should not, because
+ * that would be the library holding a view about a TTS it deliberately has none
+ * of. These are the characters the faces were authored as — the headers of
+ * `src/face-*.js` say male, female, female — copied by hand, because Studio
+ * imports `@voqalize/avatar` and never `src/`.
+ *
+ * It buys exactly one quiet sentence. A mismatch is worth noticing and not
+ * worth preventing: the reason both controls are on this page is that you can
+ * hear what a mismatched pair costs, and CLAUDE.md ranks that above every
+ * animation defect.
+ */
+const READS: Record<FaceName, string> = { peep: "male", wren: "female", myna: "female" };
 
 /**
  * The call you would write for this build, with the defaults left out.
@@ -51,6 +86,46 @@ function snippet(look: Look): string {
   return `${imports.join("\n")}\n\n${call}`;
 }
 
+/**
+ * Copy, and then say so.
+ *
+ * The confirmation is the whole feature: a clipboard write is silent, and a
+ * button that gives no sign is one you press twice. `navigator.clipboard` needs
+ * a secure context, which `127.0.0.1` is — but a failure still has to show,
+ * because "nothing happened" and "it copied" would otherwise look identical.
+ */
+function Copy({ text }: { text: string }) {
+  const [said, setSaid] = useState("");
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="copy"
+      onClick={() => {
+        void navigator.clipboard
+          .writeText(text)
+          .then(() => setSaid("Copied"))
+          .catch((err: unknown) => {
+            console.error("[studio] clipboard write failed", err);
+            setSaid("Copy failed");
+          })
+          .finally(() => setTimeout(() => setSaid(""), 1400));
+      }}
+    >
+      {said || "Copy"}
+    </Button>
+  );
+}
+
+/** A shell line above a code block — what you run before the code compiles. */
+function Install({ cmd }: { cmd: string }) {
+  return (
+    <p className="install">
+      <span aria-hidden="true">$</span> <code>{cmd}</code>
+    </p>
+  );
+}
+
 /** The one-line standing of the build, for when the call has the floor. */
 export function BuildSummary({
   look,
@@ -73,7 +148,7 @@ export function BuildSummary({
         </span>
       </p>
       <Button size="sm" variant="outline" onClick={onOpen}>
-        Change
+        Show code
       </Button>
     </div>
   );
@@ -100,6 +175,16 @@ export function Build({
 }) {
   const set = <K extends keyof Look>(key: K, value: Look[K]) => onLook({ ...look, [key]: value });
 
+  // Studio's own reading of the drawing against the voice on the wire — see
+  // READS. Silent until the server's vocabulary has arrived and until the two
+  // actually differ.
+  const pairs = READS[look.face];
+  const wanted = voices.find((v) => v.name === pairs);
+  const mismatch =
+    voice && wanted && voice !== pairs
+      ? `${look.face} reads ${pairs} — ${wanted.label} is the matching voice.`
+      : "";
+
   return (
     <>
       <section className="band">
@@ -107,12 +192,12 @@ export function Build({
           <h2>Your createAvatar call</h2>
           {onDone && (
             <Button size="sm" variant="outline" onClick={onDone}>
-              Done
+              Hide
             </Button>
           )}
         </header>
         <p className="note">
-          This is the whole library: one function, a mount, and the{" "}
+          This is the whole browser half: one function, a mount, and the{" "}
           <code>PipecatClient</code> you already have. Every control below rewrites the snippet — change
           one and the avatar is destroyed and rebuilt, because the returned handle is{" "}
           <code>{"{ destroy }"}</code> and there are no setters.
@@ -120,10 +205,17 @@ export function Build({
 
         {/* The signature control, and the reason the panel exists: the settings
             are not preferences, they are arguments, and you can see which ones
-            you have actually spent. */}
-        <pre className="snippet">
-          <code>{snippet(look)}</code>
-        </pre>
+            you have actually spent. The install line is above it because a
+            snippet you cannot run is a screenshot. */}
+        <div className="code">
+          <div className="code-head">
+            <Install cmd={INSTALL} />
+            <Copy text={`${INSTALL}\n\n${snippet(look)}\n`} />
+          </div>
+          <pre className="snippet">
+            <code>{snippet(look)}</code>
+          </pre>
+        </div>
 
         <div className="group">
           <span className="group-label">
@@ -154,7 +246,20 @@ export function Build({
             <div className="group-label">
               <span>{label}</span>
               <code>{key}</code>
-              <b>{pct(look[key] as number)}</b>
+              {/* The readout is the way back. A slider you have dragged has no
+                  detent at the default, and 100% is both the default and the
+                  only value that keeps the option out of the snippet — so the
+                  number that tells you where you are is also what puts you
+                  back. */}
+              <button
+                type="button"
+                className="readout"
+                title="reset to default"
+                disabled={look[key] === DEFAULT_LOOK[key]}
+                onClick={() => set(key, DEFAULT_LOOK[key])}
+              >
+                {pct(look[key] as number)}
+              </button>
             </div>
             <Slider
               aria-label={label}
@@ -198,6 +303,34 @@ export function Build({
         </div>
       </section>
 
+      {/* Nothing to press. It is here because the panel above answers "what do
+          I write in the browser" completely, and a reader who stopped there
+          would ship a face that blinks and never speaks — the messages the
+          avatar animates from are put on the wire by a pipecat processor, in
+          the other language, in the other repo half. */}
+      <section className="band">
+        <header className="band-head">
+          <h2>Your pipeline</h2>
+        </header>
+        <p className="note">
+          The other half. The face is driven by messages this server sends. Add one processor to your
+          pipeline, between the TTS and the output transport — it takes no arguments.
+        </p>
+        <div className="code">
+          <div className="code-head">
+            <Install cmd={INSTALL_PY} />
+            <Copy text={`${INSTALL_PY}\n\n${PIPELINE}\n`} />
+          </div>
+          <pre className="snippet">
+            <code>{PIPELINE}</code>
+          </pre>
+        </div>
+        <p className="why">
+          Without it the avatar still blinks and breathes, but it will not lip-sync and will not change
+          state.
+        </p>
+      </section>
+
       <section className="band">
         <header className="band-head">
           <h2>Voice</h2>
@@ -222,6 +355,10 @@ export function Build({
             </Button>
           ))}
         </div>
+        {/* One line, only when the pair disagrees. It is a warning and not a
+            constraint: hearing the mismatch is a legitimate thing to come here
+            for, and this only makes sure you meant it. */}
+        {mismatch && <p className="mismatch">{mismatch}</p>}
         <p className="why">
           {live
             ? "Fixed for this call. A TTS opens its context with a voice id, so swapping mid-call would mean one sentence in each — hang up to change it."

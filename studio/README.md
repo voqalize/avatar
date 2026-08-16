@@ -57,18 +57,33 @@ because that is when the interesting question changes:
 
 | when | the panel | what it validates |
 |---|---|---|
-| disconnected | **Your createAvatar call** — face, the three gains, the hand and its side, and the voice | the option surface of `createAvatar`, which is yours to decide and nobody else's. Every control rewrites a live snippet of the call you would paste, and at the defaults it writes `createAvatar({ mount, client })` and nothing more — which is the argument for the library in one screen |
+| disconnected | **Your createAvatar call** — face, the three gains, the hand and its side, then the pipeline and the voice | the option surface of `createAvatar`, which is yours to decide and nobody else's. Every control rewrites a live snippet of the call you would paste, and at the defaults it writes `createAvatar({ mount, client })` and nothing more — which is the argument for the library in one screen |
 | in a call | **Drive the server** — the quiet between turns, interjections, misbehaviours | [contract-wire.md](../docs/contract-wire.md), from the sending end. The beats make the server take as long as a real one would and announce nothing, so `THINKING` and `WORKING` are *inferred* from ordinary frames; hold thinking past the reply grace and it becomes `STRAINING`. The interjections are one-shot `action`s. The mute toggle is the one control that puts nothing on the avatar wire at all. The misbehaviours are what the face is supposed to refuse — a claim that contradicts playout, an action storm, a claim that arrives too late |
+
+Every drive button names the wire message it asks the server for. Hovering or
+focusing one puts that id and what to watch for in the line under the set; a
+click pins the same line for five seconds and flashes the button, so the thing
+you pressed and the thing that went out are legible without a wire log — which
+was cut deliberately, and stays cut ([removed.md](../docs/removed.md) § Studio's
+wire log, compare mode and transcript panel).
 
 Mode is read from the transport, once, in one place — `usePipecatClientTransportState()`
 — so the button, the panel and every disabled control cannot disagree about
 whether there is a call. Options stay changeable mid-call: the build collapses
-to a line with a **Change** button rather than locking.
+to a line with a **Show code** button rather than locking, and **Hide** puts the
+drive controls back.
 
 The header carries the orientation, because a developer landing here cold has
 two questions — what is this, and what do I do — and a screen of controls
 answers neither. Three numbered steps, with the current one marked: build,
-connect, drive.
+connect, drive. The package name is a link to npm, and a quiet nav at the end of
+the bar carries GitHub · Docs · npm, so a developer who wants the source does not
+have to guess the org.
+
+Each code block carries the install line that makes it run — `npm install` above
+the browser snippet, `pip install` above the pipeline — and a **Copy** button
+that takes the install and the code as one block, because a snippet you have to
+reassemble by hand is a screenshot.
 
 **One avatar at a time.** A compare mode used to mount all three faces side by
 side; it made the frame small enough that nothing in it could be judged, which
@@ -76,12 +91,26 @@ is the opposite of what a comparison is for. The faces are separate drawings
 rather than renderings of one, so a difference between them is usually not the
 finding it looks like ([removed.md](../docs/removed.md)).
 
+**Your pipeline** is the one band with nothing to press. The browser half is
+complete without it and that is exactly the trap: a reader who stopped at the
+`createAvatar` snippet would ship a face that blinks and never speaks, because
+the messages it animates from are put on the wire by a pipecat processor, in the
+other language, in the other half of the repo. So the card states the other
+install and the one import, seats `AvatarProcessor()` between the TTS and the
+output transport, and says what you lose without it — lipsync and every state
+change ([py/README.md](../py/README.md)).
+
 The **voice** sits in the build panel but in a band of its own, because it is
 not a `createAvatar` argument — it is which voice `server/` speaks in, and it
 reaches the face only as audio ([server/README.md § Two voices](../server/README.md)).
 It is there at all because the two have to agree: a voice that contradicts the
 face is read as a mistake long before any animation defect is. It is fixed once
-a call is up, since a TTS opens its context with a voice id.
+a call is up, since a TTS opens its context with a voice id. When the pair
+disagrees a single line says so — and that line is **Studio's own opinion**,
+a hardcoded map in `Build.tsx`. The package holds no view about which voice
+belongs with which drawing, because holding one would be the library having an
+opinion about a TTS it deliberately has none of. It warns rather than prevents:
+hearing what a mismatch costs is a legitimate reason to be on this page.
 
 ## The call, on the left
 
@@ -106,9 +135,27 @@ the wrong answer there
 `OFFLINE` and `DEGRADED` never appear — before a call the transport says where
 it has got to, in its own words, next to the button that acts on it.
 
+The **size** control under the status line is `130 · 240 · 400`, and 130 is the
+default and stays it. That is the size the rig is calibrated at and the size a
+consumer embeds ([CLAUDE.md § In flight](../CLAUDE.md)) — a page that opened at
+400 would be advertising a face nobody ships, and a defect that only shows at
+tile size is the defect this page exists to catch. The other two widths are for
+when you have found something and want to see what it is. Nothing here reaches
+`createAvatar`: the mount element gets wider and the SVG fills it, so changing
+size is not a remount and the call keeps running.
+
+**A dial that goes nowhere says what to run.** The message sits under the Connect
+button, names the server URL the page is actually pointed at, and gives the
+command that starts it; the transport's own text is appended in brackets when
+there is any, which usually there is not. It used to be a red banner reading
+`undefined`, which is what happens when an error callback's text is the only
+thing you show.
+
 The meter over the frame is the kit's `VoiceVisualizer` on the bot track; the
 mic control under the button is its `UserAudioControl`, which is the device
-picker and your own level in one thing, usable before you dial.
+picker and your own level in one thing, usable before you dial. Its two buttons
+are the kit's own internals and carry the kit's labels — the only text Studio
+supplies there is the dropdown's.
 
 The chrome comes from [`@pipecat-ai/voice-ui-kit`](https://github.com/pipecat-ai/voice-ui-kit)
 — the same components a pipecat developer already has. Studio's own layout is

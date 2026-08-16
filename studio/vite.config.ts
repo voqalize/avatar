@@ -19,8 +19,14 @@ const api = process.env.AVATAR_SERVER_URL ?? "http://localhost:7860";
  * `fs.allow` reaches the repo root because `@voqalize/avatar` resolves to
  * `client/dist/*.js`, which imports `../../src/*.js` by relative path — the
  * package is deliberately unbundled and vite serves it as-is.
+ *
+ * The proxy target is also handed to the page as a constant, because the one
+ * message that has to name it — "nothing is listening, start it like this" —
+ * is otherwise a second copy of this port that can go stale against an
+ * `AVATAR_SERVER_URL` override.
  */
 export default defineConfig({
+  define: { "import.meta.env.VITE_AVATAR_SERVER_URL": JSON.stringify(api) },
   server: {
     host: "127.0.0.1",
     port,

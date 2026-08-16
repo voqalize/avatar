@@ -38,6 +38,10 @@
   --paper-edge: #d9d3c4;
 
   --gap: 1.25rem;
+  /* The drawing's width. 130 px is the calibration size and what the page
+     opens at; the size control raises it for inspection only, and the column
+     below widens to match rather than letting a 400 px frame overhang. */
+  --frame: 130px;
   /* The avatar column: the frame plus enough width for two lines of caption
      under it. Wider than the drawing on purpose — captions at 8rem would break
      every three words. */
@@ -115,6 +119,48 @@ code {
   color: var(--color-muted-foreground);
   font-size: 0.8125rem;
   text-wrap: pretty;
+}
+
+/* Links are underlined on hover only. On a page whose one bright surface is a
+   drawing, three permanently underlined words in the corner would be the
+   loudest thing in the chrome. */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* The package name in the standfirst, which is also where you go to install
+   it. It keeps the `code` chip look and gains nothing but a destination. */
+.chip code {
+  color: var(--color-foreground);
+}
+
+.chip:hover code {
+  background: var(--color-accent);
+}
+
+.links {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  flex: none;
+  margin-left: auto;
+  padding-top: 0.125rem;
+  font-size: 0.8125rem;
+  color: var(--color-subtle);
+}
+
+.links a {
+  color: var(--color-muted-foreground);
+}
+
+.links a:hover {
+  color: var(--color-foreground);
 }
 
 /* A 24px sample of the stage: paper, an edge, and one ink stroke. The page's
@@ -220,7 +266,9 @@ code {
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: var(--player) minmax(0, 1fr);
+  /* The column is the wider of the caption width and the drawing, so raising
+     the size control widens the track instead of overhanging the rail. */
+  grid-template-columns: max(var(--player), var(--frame)) minmax(0, 1fr);
   gap: calc(var(--gap) * 1.5);
   align-items: start;
   padding: var(--gap);
@@ -229,10 +277,25 @@ code {
   margin: 0 auto;
 }
 
+/* Centred in the viewport, not in the column.
+   The player is about a fifth of the rail's height, so pinning it to the top of
+   a 3000 px column put the one thing this page exists to look at in the top
+   eighth of the screen with half a screen of nothing under it — and centring it
+   in the *column* would be worse still, parking it below the fold. So the
+   sticky box is one viewport tall and the player sits in the middle of it:
+   balanced above and below, and it stays that way as the panels scroll past.
+   `min-height` keeps it honest on a short window, where a fixed height would
+   crop the mic control off the bottom. */
 .floor {
   min-width: 0;
   position: sticky;
   top: var(--gap);
+  align-self: start;
+  height: calc(100vh - 2 * var(--gap));
+  min-height: min-content;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .rail {
@@ -251,15 +314,17 @@ code {
   gap: 0.75rem;
 }
 
-/* 8rem — a third of what this used to be, and the 130 px the rig is calibrated
+/* 130 px — a third of what this used to be, and the size the rig is calibrated
    at. The frame is the paper, so it is the shape of the drawing and no wider:
    576 × 800, the faces' own viewBox, so the figure meets all four edges exactly
-   as it was authored. */
+   as it was authored. The width is a variable only so it can be raised for
+   inspection; `--frame` is 130px at rest and the SVG fills whatever it is. */
 .frame {
   position: relative;
   align-self: center;
-  width: 8rem;
+  width: var(--frame);
   aspect-ratio: 18 / 25;
+  transition: width 180ms ease;
   border-radius: 0.75rem;
   overflow: hidden;
   background: var(--paper);
@@ -352,6 +417,88 @@ code {
   50% {
     opacity: 0.3;
   }
+}
+
+/* ─── the size control ───────────────────────────────────────────────────────
+   Three widths and a caption, because the default needs defending rather than
+   explaining away: 130 is what ships, and the other two exist so that something
+   you have already spotted can be looked at properly. The caption changes when
+   you leave the default, so the page never quietly presents a 400 px face as
+   the product. */
+
+.sizes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.sizes-set {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+
+.sizes-set button {
+  appearance: none;
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-muted-foreground);
+  font-family: var(--font-mono);
+  font-size: var(--label);
+  line-height: 1;
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+}
+
+.sizes-set button:first-child {
+  border-left: 0;
+}
+
+.sizes-set button:hover {
+  color: var(--color-foreground);
+  background: var(--color-muted);
+}
+
+.sizes-set button.on {
+  color: var(--color-active);
+  background: var(--color-active-accent);
+}
+
+.sizes small {
+  font-size: var(--label);
+  color: var(--color-subtle);
+}
+
+/* ─── a dial that went nowhere ───────────────────────────────────────────────
+   Under the button, not in the page banner, because the answer is a command
+   and the command belongs next to the thing that failed. */
+
+.unreachable {
+  margin: 0;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-inactive-ring);
+  background: var(--color-inactive-accent);
+  color: var(--color-inactive);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.unreachable code {
+  background: color-mix(in oklch, var(--color-inactive) 14%, transparent);
+  color: inherit;
+  word-break: break-word;
+}
+
+/* The transport's own words, when it had any. Quieter than the instruction,
+   because it is almost never the useful half. */
+.unreachable-raw {
+  color: color-mix(in oklch, var(--color-inactive) 70%, transparent);
 }
 
 /* ─── the captions ───────────────────────────────────────────────────────── */
@@ -458,6 +605,48 @@ code {
  * these do" — you are looking at the line you would paste, and at the defaults
  * it is one line long.
  */
+.code {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* The install line and the copy button share a row above the block, because
+   they are the two things you do with a snippet before you read it. */
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.install {
+  margin: 0;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground);
+}
+
+.install span {
+  color: var(--color-subtle);
+  user-select: none;
+}
+
+.install code {
+  background: none;
+  padding: 0;
+  font-size: 1em;
+  color: var(--color-foreground);
+}
+
+.copy {
+  flex: none;
+  min-width: 5.5rem;
+}
+
 .snippet {
   margin: 0;
   padding: 0.75rem 0.875rem;
@@ -470,6 +659,13 @@ code {
   line-height: 1.6;
   color: var(--color-muted-foreground);
   tab-size: 2;
+}
+
+.snippet code {
+  background: none;
+  padding: 0;
+  font-size: 1em;
+  color: inherit;
 }
 
 .group {
@@ -506,10 +702,87 @@ code {
   color: var(--color-foreground);
 }
 
+/*
+ * The value readout, which is also the reset.
+ *
+ * A slider has no detent at its default and no way back to it once dragged, so
+ * the number doubles as the way home — it is the only element on the row that
+ * already means "where you are". Dashed underline rather than a button chrome:
+ * it must not compete with the control it annotates, and when you are already
+ * at the default it stops being a control at all.
+ */
+.readout {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-foreground);
+  text-align: right;
+  min-width: 3.5rem;
+  cursor: pointer;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.readout:hover:not(:disabled) {
+  color: var(--color-active);
+  border-bottom-color: var(--color-active);
+}
+
+.readout:disabled {
+  cursor: default;
+  border-bottom-color: transparent;
+}
+
 .choices {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
+}
+
+/* The kit already rings a focused button; this is the belt to that braces, so
+   a keyboard user tabbing a segmented row can always see where they are even
+   where a variant's ring lands on a similar colour. */
+.choices button:focus-visible,
+.sizes-set button:focus-visible,
+.readout:focus-visible,
+.links a:focus-visible,
+.chip:focus-visible {
+  outline: 2px solid var(--color-active);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/*
+ * A send, made visible.
+ *
+ * Half of these moves are two units of ink for 400 ms. A press that produced
+ * nothing you could see was indistinguishable from a press that did not
+ * register, and the honest fix is to confirm at the button rather than to
+ * exaggerate the face. Duration matches FLASH_MS in `Drive.tsx`.
+ */
+.sent {
+  animation: sent 150ms ease-out;
+}
+
+@keyframes sent {
+  from {
+    background: var(--color-active);
+    border-color: var(--color-active);
+    color: var(--color-active-foreground);
+  }
+}
+
+/* Studio's own reading of face against voice — a warning, not a block. */
+.mismatch {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--color-warning);
+  text-wrap: pretty;
 }
 
 /* The sentence under a control. Deliberately full prose and deliberately
@@ -573,6 +846,18 @@ code {
   min-width: 0;
 }
 
+/* A beat that is off still drew a filled, coloured track, which reads as a
+   value in force. The kit dims the whole control to 50%; that is not enough to
+   tell "half brightness because disabled" from "half brightness because that is
+   where the handle is", so the fill itself goes grey. */
+.beat-track [data-slot="slider"][data-disabled] [data-slot="slider-range"] {
+  background: var(--color-subtle);
+}
+
+.beat-track [data-slot="slider"][data-disabled] [data-slot="slider-thumb"] {
+  border-color: var(--color-subtle);
+}
+
 .beat b {
   font-family: var(--font-mono);
   font-size: 0.75rem;
@@ -580,6 +865,12 @@ code {
   color: var(--color-foreground);
   text-align: right;
   min-width: 3.5rem;
+}
+
+/* In the beat grid the readout is a track of its own, not an auto-margined
+   tail of a flex label. */
+.beat .readout {
+  margin-left: 0;
 }
 
 .beat small {
@@ -645,6 +936,17 @@ code {
   text-wrap: pretty;
 }
 
+/* The wire name, which is the half of the button that is not printed on it.
+   Set as code and lit, because `ACK_NOD` is the string you will be looking for
+   in contract-wire.md ten minutes later. */
+.watch code {
+  background: none;
+  padding: 0;
+  font-size: 0.8125em;
+  letter-spacing: 0.02em;
+  color: var(--color-foreground);
+}
+
 /* ─── smaller screens ────────────────────────────────────────────────────── */
 
 @media (max-width: 64rem) {
@@ -654,10 +956,11 @@ code {
 
   .floor {
     position: static;
+    height: auto;
   }
 
   .player {
-    max-width: var(--player);
+    max-width: max(var(--player), var(--frame));
     margin: 0 auto;
   }
 }
@@ -685,11 +988,21 @@ code {
 
 @media (prefers-reduced-motion: reduce) {
   .seg,
-  .cap {
+  .cap,
+  .frame {
     transition: none;
   }
 
   .doing-dot {
     animation: none !important;
+  }
+
+  /* The send confirmation stays — it is information, not decoration — but it
+     arrives and leaves rather than easing. */
+  .sent {
+    animation-duration: 1ms;
+    background: var(--color-active);
+    border-color: var(--color-active);
+    color: var(--color-active-foreground);
   }
 }

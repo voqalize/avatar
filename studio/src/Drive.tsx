@@ -20,10 +20,55 @@
  * can do while you speak, and what happens when the server gets it wrong.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Slider } from "@pipecat-ai/voice-ui-kit";
 import type { Corpus } from "./corpus";
 import { actionGroup, actionTerm, misbehaviourLabel } from "./vocabulary";
+
+/**
+ * What a band's footnote is saying, and about which wire name.
+ *
+ * The id travels with the sentence because the button does not carry it: the
+ * labels are English ("Nod", "One moment") and the thing that actually goes on
+ * the wire is `ACK_NOD`. That used to live in a `title` attribute, which is to
+ * say nowhere — a developer reading `contract-wire.md` afterwards had no way
+ * to know which button they had pressed.
+ */
+interface Hint {
+  id: string;
+  why: string;
+}
+
+/**
+ * How long a pressed control keeps the footnote after the pointer leaves.
+ *
+ * Long enough to look up at the face, watch the move, and look back down. A
+ * hover that lands on a neighbour in the meantime does not steal the line,
+ * because what you want to read is what you just *sent*.
+ */
+const STICKY_MS = 5000;
+
+/** The accent blink on a pressed button. Some sends are subtle on the face. */
+const FLASH_MS = 150;
+
+function useHint() {
+  const [hint, setHint] = useState<Hint | null>(null);
+  const until = useRef(0);
+
+  // Hover and focus, which yield to a recent press.
+  const show = useCallback((next: Hint) => {
+    if (Date.now() < until.current) return;
+    setHint(next);
+  }, []);
+
+  // A press, which holds the line whatever the pointer does next.
+  const pin = useCallback((next: Hint) => {
+    until.current = Date.now() + STICKY_MS;
+    setHint(next);
+  }, []);
+
+  return { hint, show, pin };
+}
 
 /** One pre-speech state: whether the server holds it, and for how long. */
 interface Beat {
@@ -71,8 +116,8 @@ export function Drive({
   // One hint line per band rather than one for the panel: the sentence has to
   // sit next to the buttons it describes, or you are reading an explanation of
   // something two sections away.
-  const [interjectHint, setInterjectHint] = useState("");
-  const [wrongHint, setWrongHint] = useState("");
+  const interject = useHint();
+  const wrong = useHint();
 
   // The server's own defaults, once they arrive, so the panel opens agreeing
   // with the call it is about to drive rather than guessing at it.
@@ -152,10 +197,10 @@ export function Drive({
 
         {(
           [
-            ["Thinking", think, setThink, "Every turn has some."],
-            ["Working", work, setWork, "Only a turn that calls a tool."],
+            ["Thinking", think, setThink, "Every turn has some.", corpus.beats.think_ms || FALLBACK_MS],
+            ["Working", work, setWork, "Only a turn that calls a tool.", corpus.beats.work_ms || FALLBACK_MS],
           ] as const
-        ).map(([label, beat, setBeat, when]) => (
+        ).map(([label, beat, setBeat, when, fallback]) => (
           <div className="beat" key={label}>
             <Button
               size="sm"
@@ -177,7 +222,17 @@ export function Drive({
                 onValueChange={([value]) => setBeat({ ...beat, ms: value })}
               />
             </div>
-            <b>{beat.on ? `${beat.ms} ms` : "off"}</b>
+            {/* The number is also the way back to the server's own default —
+                the one this call started on, before you dragged anything. */}
+            <button
+              type="button"
+              className="readout"
+              title="reset to default"
+              disabled={!live || !beat.on || beat.ms === fallback}
+              onClick={() => setBeat({ ...beat, ms: fallback })}
+            >
+              {beat.on ? `${beat.ms} ms` : "off"}
+            </button>
             <small>{when}</small>
           </div>
         ))}
@@ -192,8 +247,8 @@ export function Drive({
         </div>
         <p className="why">
           One turn, to scale. Talk to it and watch — turn-taking is voice activity, so it takes its turn
-          when you stop. Drag thinking past the library's reply grace and it stops waiting: the claim
-          turns to <code>STRAINING</code> and the face leans in to hear you better.
+          when you stop. Drag thinking past the library's reply grace (2 s) and it stops waiting: the
+          claim turns to <code>STRAINING</code> and the face leans in to hear you better.
         </p>
 
         {/* The one control on this page that sends no avatar command. Mute is a
@@ -215,15 +270,15 @@ export function Drive({
           </Button>
           <small>
             Closes your microphone from the agent's side, the way a mute strategy does — pipecat's own
-            frames, read off the client, nothing on the avatar wire. This pipeline has no aggregator to
-            suppress with, so it announces the mute without enforcing it: stay quiet to read the pose.
+            frames, nothing on the avatar wire. This demo server announces the mute but doesn't actually
+            gate your audio, so stay quiet for a moment to read the pose.
           </small>
         </div>
       </section>
 
       <section className="band">
         <header className="band-head">
-          <h2>Interject</h2>
+          <h2>One-shot actions</h2>
         </header>
         <p className="note">
           One-shot moves, sent while you are the one talking. The face never invents these — every nod
@@ -234,7 +289,15 @@ export function Drive({
           <span className="group-label">Acknowledge</span>
           <div className="choices">
             {groups.acknowledge.map((action) => (
-              <ActionButton key={action} action={action} live={live} onSend={post} onHover={setInterjectHint} />
+              <Send
+                key={action}
+                id={action}
+                label={actionTerm(action).label}
+                why={actionTerm(action).why}
+                live={live}
+                onSend={() => post("/api/action", { action })}
+                hint={interject}
+              />
             ))}
           </div>
         </div>
@@ -243,14 +306,23 @@ export function Drive({
           <span className="group-label">Gesture</span>
           <div className="choices">
             {groups.gesture.map((action) => (
-              <ActionButton key={action} action={action} live={live} onSend={post} onHover={setInterjectHint} />
+              <Send
+                key={action}
+                id={action}
+                label={actionTerm(action).label}
+                why={actionTerm(action).why}
+                live={live}
+                onSend={() => post("/api/action", { action })}
+                hint={interject}
+              />
             ))}
           </div>
         </div>
 
         {/* One line rather than a caption per button: seven permanent sentences
-            would bury the seven buttons they explain. */}
-        <p className="watch">{hint(live, interjectHint)}</p>
+            would bury the seven buttons they explain. It carries the wire name,
+            because that is the half of the button that is not on the button. */}
+        <Watch live={live} hint={interject.hint} />
       </section>
 
       <section className="band">
@@ -258,63 +330,97 @@ export function Drive({
           <h2>Send something wrong</h2>
         </header>
         <p className="note">
-          The face is allowed to disobey. Observed playout outranks whatever the server claims, and until
-          these existed nothing in the repo tested that — every message this server sent was well-formed
-          and sent at the right moment.
+          The face is allowed to disobey. These deliberately send bad or contradictory messages, so you
+          can watch the face refuse them: observed playout outranks whatever the server claims.
         </p>
         <div className="choices">
           {Object.keys(corpus.misbehaviours).map((kind) => (
-            <Button
+            <Send
               key={kind}
-              size="sm"
-              variant="outline"
-              className="wrong"
-              disabled={!live}
-              onMouseEnter={() => setWrongHint(corpus.misbehaviours[kind])}
-              onFocus={() => setWrongHint(corpus.misbehaviours[kind])}
-              onClick={() => void post("/api/misbehave", { kind })}
-            >
-              {misbehaviourLabel(kind)}
-            </Button>
+              id={kind}
+              label={misbehaviourLabel(kind)}
+              why={corpus.misbehaviours[kind]}
+              live={live}
+              wrong
+              onSend={() => post("/api/misbehave", { kind })}
+              hint={wrong}
+            />
           ))}
         </div>
         {/* The server's own sentence, not a second copy written here. These are
             only worth pressing if you know what the face is supposed to do
             about it, and the answer lives with the thing being sent. */}
-        <p className="watch">{hint(live, wrongHint)}</p>
+        <Watch live={live} hint={wrong.hint} />
       </section>
     </>
   );
 }
 
-const hint = (live: boolean, watching: string) =>
-  live
-    ? watching || "Point at any of them to read what to watch for."
-    : "Connect first — these act on the call in progress, and answer 409 without one.";
+/** The footnote under a band of buttons: the wire name, then the sentence. */
+function Watch({ live, hint }: { live: boolean; hint: Hint | null }) {
+  if (!live) {
+    return <p className="watch">Connect first — these act on the call in progress, and answer 409 without one.</p>;
+  }
+  if (!hint) {
+    return <p className="watch">Hover or focus a button to see what to watch for.</p>;
+  }
+  return (
+    <p className="watch">
+      <code>{hint.id}</code> — {hint.why}
+    </p>
+  );
+}
 
-function ActionButton({
-  action,
+/**
+ * A button that puts one message on the wire, and admits it.
+ *
+ * Three things it does that a plain button does not, all of them about the same
+ * problem: the face's answer is often too small or too quick to serve as
+ * feedback. The wire name goes into the footnote on hover and on focus; the
+ * press holds that footnote for a few seconds so it survives looking away; and
+ * the button itself blinks, which is the only confirmation that does not depend
+ * on the drawing having done something visible.
+ */
+function Send({
+  id,
+  label,
+  why,
   live,
+  wrong,
   onSend,
-  onHover,
+  hint,
 }: {
-  action: string;
+  /** The wire name — `ACK_NOD`, `claim-during-speech`. Shown, not hidden in a title. */
+  id: string;
+  label: string;
+  why: string;
   live: boolean;
-  onSend: (path: string, body: unknown) => Promise<void>;
-  onHover: (why: string) => void;
+  wrong?: boolean;
+  onSend: () => Promise<void>;
+  hint: { show: (h: Hint) => void; pin: (h: Hint) => void };
 }) {
-  const term = actionTerm(action);
+  const [flash, setFlash] = useState(false);
+  useEffect(() => {
+    if (!flash) return;
+    const timer = setTimeout(() => setFlash(false), FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [flash]);
+
   return (
     <Button
       size="sm"
       variant="outline"
-      title={action}
+      className={`${wrong ? "wrong" : ""}${flash ? " sent" : ""}`}
       disabled={!live}
-      onMouseEnter={() => onHover(term.why)}
-      onFocus={() => onHover(term.why)}
-      onClick={() => void onSend("/api/action", { action })}
+      onMouseEnter={() => hint.show({ id, why })}
+      onFocus={() => hint.show({ id, why })}
+      onClick={() => {
+        hint.pin({ id, why });
+        setFlash(true);
+        void onSend();
+      }}
     >
-      {term.label}
+      {label}
     </Button>
   );
 }
