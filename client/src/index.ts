@@ -24,8 +24,6 @@
  *
  * To ship your own avatar, publish a module exporting `createAvatar` and import
  * that instead — see `createAvatar.ts` and docs/design-avatar-interface.md.
- * `docs/removed.md` lists what used to be here and how to get it back if a real
- * third case argues for it.
  */
 
 export { createAvatar } from "./createAvatar.js";

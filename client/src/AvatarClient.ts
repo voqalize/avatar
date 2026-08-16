@@ -80,8 +80,7 @@ interface Turn {
  * source: a `AvatarProcessor` in the pipeline and a brain driving the face
  * out of band emit the same shape. A per-deployment predicate meant the
  * library could not state what an avatar message *is*, which is the one thing
- * a wire format has to be able to say. See docs/removed.md § The accept
- * predicate.
+ * a wire format has to be able to say.
  */
 export interface AvatarClientOptions {
   /** A dispatch threw (e.g. an unknown state or interjection id, which the
@@ -100,8 +99,7 @@ export interface AvatarClientOptions {
    * surface and must not become one: a presence callback is a contract, and
    * publishing it would oblige every avatar implementation to emit these seven
    * states with this precedence, which is exactly the second public contract
-   * the design exists to avoid. See docs/removed.md § Presence and audio-level
-   * callbacks.
+   * the design exists to avoid.
    */
   onPresenceChange?: (state: AvatarPresenceState) => void;
 }
@@ -236,7 +234,7 @@ export class AvatarClient {
         // No default: an unknown `cmd` is a newer server talking to an older
         // widget, and the protocol's forward-compat rule says ignore it. There
         // is no callback for it — a hook nobody could act on is observability,
-        // not an interface (`docs/removed.md` § Client callbacks).
+        // not an interface.
       }
     } catch (err) {
       if (this.opts.onError) this.opts.onError(err, msg);

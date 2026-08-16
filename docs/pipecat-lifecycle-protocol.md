@@ -185,8 +185,8 @@ exists to avoid.
 A host that genuinely wants a status pill has the same `PipecatClient` and can
 subscribe to it directly — with its own precedence, for its own chrome.
 `RemoteAudioLevel` is not subscribed at all: remote gain may come from another
-participant, so it never had state authority, and relaying it was a
-high-frequency subscription serving decoration ([removed.md](removed.md)).
+participant, so it never had state authority, and relaying it would be a
+high-frequency subscription serving decoration.
 
 `IDLE` is reached by a quiet timer — `idleDelayMs`, default 12 s
 (`client/src/AvatarClient.ts`). It is an `AvatarClient` option, not a

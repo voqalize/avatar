@@ -45,9 +45,7 @@ surfaces to keep stable across versions is a cost paid for a host that did not
 exist. 0.3 restored the ones a real consumer asked for and no more:
 `.` (`createAvatar`), `./react`, `./internal` for the mixer, and one subpath per
 face so a host bundles the drawing it uses rather than all three.
-[design-avatar-interface.md](design-avatar-interface.md) is the current map;
-[removed.md](removed.md) § The `/pipecat` and `/react` subpaths records the
-collapse and what came back.
+[design-avatar-interface.md](design-avatar-interface.md) is the current map.
 
 **The entry-point count is the surface count.** `.` is the only one under a
 semver promise; `./internal` explicitly is not
@@ -206,7 +204,7 @@ still reachable — through `avatar.setState` on the mixer, which is `./internal
 and whose state list has exactly one copy, `STATES` in `src/avatar.js`. A host
 that wants one drives the mixer for it. That keeps the contract small enough to
 be worth calling a contract, and it puts the pass-throughs where their cost is
-visible ([removed.md](removed.md) § The behavior-state aliases).
+visible.
 
 The motivating case is concrete and not hypothetical: an LLM service that runs
 its tools *out of process* pushes `LLMFullResponseStartFrame` but never pushes
@@ -250,12 +248,11 @@ and is applied in arrival order alongside the heuristics; there is no priority
 lattice, no TTL, no ownership tracking. That is YAGNI until a third consumer
 produces a real collision, and the brief says so.
 
-**Tool calls show `THINKING`, and only that.** A `tool_states` map that pointed
-`search_web` at `SEARCHING_SCREEN` was tried and removed ([removed.md](removed.md)
-§ `tool_states`): it is a constructor argument on the one class that is supposed
-to take none, it only works for an LLM that runs its tools in-process, and an
-application that knows its tool is searching can say so in one
-`AvatarControlFrame`. What stays is the bookkeeping
+**Tool calls show `THINKING`, and only that.** There is no `tool_states` map
+pointing `search_web` at `SEARCHING_SCREEN`: it would be a constructor argument
+on the one class that is supposed to take none, it only works for an LLM that
+runs its tools in-process, and an application that knows its tool is searching
+can say so in one `AvatarControlFrame`. What stays is the bookkeeping
 nobody should write twice — call ids are deduped and parallel calls are held, so
 a turn with three tools shows one settled `THINKING` rather than a flicker.
 
@@ -273,8 +270,7 @@ no `speak`, no readback. Those verbs still exist on the mixer, which is
 `./internal` and carries no semver promise. The reasoning is decision 4's: an
 imperative surface on the public package is an invitation for the client to
 decide what the agent is doing, and the client does not get to decide.
-[design-avatar-interface.md](design-avatar-interface.md) is the seam;
-[removed.md](removed.md) lists each verb that left and how to reach it.
+[design-avatar-interface.md](design-avatar-interface.md) is the seam.
 
 ### 6. React is a peer at `>=18`, not a dependency at 19
 
@@ -312,13 +308,11 @@ authoring/              does the drawing read? the workshop: rig pages, clip
   tools/                headless render / screenshot / diff / motion
 
 docs/                   the contracts, binding for both packages
-  removed.md            what 0.2 and 0.3 cut from the surface, and how to undo it
 ```
 
 There is no fourth non-published tree, and that is load-bearing rather than
 tidy: `experiments/` was one, and a tree defined as "the things that are not any
-of those three" collects work nobody can say what it answers
-([removed.md § The textsync experiment](removed.md)).
+of those three" collects work nobody can say what it answers.
 
 `studio/` is the second compiled tree and the second exception to "no build
 step" (`client/` is the first). Nothing in `src/` may depend on either — what

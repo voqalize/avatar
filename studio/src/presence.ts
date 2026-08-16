@@ -12,8 +12,7 @@
  * for the envelope, `docs/pipecat-lifecycle-protocol.md § Authority model` for
  * the order — and not from `client/src/AvatarClient.ts`. That is the point of
  * having it: it is the repo's only wire reader by someone who read the spec
- * instead of the implementation, which is a check the deleted wire log used to
- * carry (`docs/removed.md` § Studio's wire log).
+ * instead of the implementation.
  */
 
 import { useCallback, useEffect, useState } from "react";

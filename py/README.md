@@ -142,10 +142,9 @@ accident. `tool_started` / `tool_finished` are public for exactly this — you
 inherit the call-id dedup and the parallel-call hold, so a turn with three tools
 settles on one `THINKING` instead of flickering.
 
-These two seams are the whole extension surface. A `tool_states={"search_web":
-...}` map existed and was removed in 0.2; an application that knows its tool is
-searching says so in one `AvatarControlFrame`
-([removed.md](https://github.com/voqalize/avatar/blob/main/docs/removed.md)).
+These two seams are the whole extension surface. There is no per-tool state map:
+an application that knows its tool is searching says so in one
+`AvatarControlFrame`.
 
 ## What this package will not do
 

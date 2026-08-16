@@ -311,5 +311,4 @@ can all be tested without running a call
 | why a library, what each package owns, the repo layout | [design-library-split.md](design-library-split.md) |
 | the pipeline half, its two seams, its wheels | [py/README.md](../py/README.md) |
 | our SVG renderer's internals — not a seam to implement | [internal-mixer.md](internal-mixer.md), [internal-rig.md](internal-rig.md) |
-| what earlier versions cut from the surface, and how to get it back | [removed.md](removed.md) |
 | whether it works in a real call | [server/README.md](../server/README.md) |

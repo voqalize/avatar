@@ -7,7 +7,7 @@
 > hands its renderer, and the reference an author of *our* faces works against.
 >
 > This page used to be called `contract-rig.md`, and that name is what sent a
-> non-SVG experiment (a Rive rig, removed 2026-08-12 — `docs/removed.md`) to the
+> non-SVG experiment (a Rive rig, removed 2026-08-12) to the
 > wrong layer: it reconstructed a Rhubarb letter and a `CANT_HEAR` intent out of
 > pose floats that the wire had already stated plainly. A renderer that is not
 > ours should take `claim` / `action` / `cues` and never see this page.

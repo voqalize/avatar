@@ -11,8 +11,8 @@
  * `{ type: "avatar", ...cmd-specific fields }`. {@link AvatarCommand} describes
  * what rides inside that envelope; {@link isAvatarMessage} is the envelope
  * itself, and is the only definition of "this message is for the avatar" the
- * client has. There is no protocol version field — see `docs/removed.md`
- * § The `v` field.
+ * client has. There is no protocol version field — an unknown `cmd` is simply
+ * ignored, which is the whole forward-compatibility rule.
  */
 
 import { ACTION_IDS, VISEME_LETTERS } from "../../src/avatar.js";
@@ -74,7 +74,7 @@ export type AvatarEnvelope = { type: "avatar"; cmd: string } & Record<string, un
  * Is this server-message payload the avatar's? The envelope is the whole
  * answer: `{type:"avatar"}` with a string `cmd`. It used to be a per-deployment
  * `accept` predicate on the client, which meant the library could not state
- * what an avatar message *is* — see `docs/removed.md` § The accept predicate.
+ * what an avatar message *is*.
  *
  * Addressed to us is not the same as understood by us: {@link parseAvatarCommand}
  * is the second half.

@@ -51,7 +51,7 @@ write:
 A face module exports four things, and the last one is how it is passed around:
 
 ```js
-createFace(mount, theme?, options?) -> { svg, apply(params), theme, destroy() }
+createFace(mount, theme?) -> { svg, apply(params), theme, destroy() }
 META  = { viewBox: {x, y, w, h}, mouthCrop: {x, y, w, h} }
 THEME = { ink: '#1b1b1b', paper: '#ffffff', … }
 export const <yourname> = { create: createFace, meta: META };
@@ -64,10 +64,6 @@ export const <yourname> = { create: createFace, meta: META };
   `teeth`, `tongue` — where the retired rigs shared a ~25-key palette; that is
   what the idiom costs, not a rule). Hosts that paint *around* the widget read
   them off `api.theme` — see [Shipping a face](#shipping-a-face).
-- `options` — authoring escape hatches only, never a host surface. The one that
-  exists is `{ pitchRig: false }` on peep, for the comparison lab (see
-  [The pitch rig](#the-pitch-rig--optional-and-what-makes-a-nod-a-nod)). A face
-  may ignore the argument entirely; wren and myna do.
 - `svg` — the live `<svg>` element. The hand layer appends into it, so it has to
   be the real node and not a wrapper.
 - `apply(params)` — write one full parameter vector into the DOM. Called every
@@ -362,7 +358,7 @@ What legitimately varies per avatar, and stays in the face module:
 Do not chase parity between faces: they are separate drawings, not renderings
 of one drawing. A visual improvement lands in one face and stops there.
 
-## The pitch rig — optional, and what makes a nod a nod
+## The pitch rig — what makes a nod a nod
 
 A face with one `head` group can only translate it vertically for `headPitch`,
 which reads as a *bob*. A nod needs the neck to stay behind an independently
@@ -395,9 +391,9 @@ compresses toward the collar; the body stays independent, so its existing
 shoulder timing acts as secondary motion. Yaw, roll, lipsync and gaze are
 untouched.
 
-**It is optional.** A face with no `pitch` block keeps the legacy translate, and
-`createFace(mount, theme, { pitchRig: false })` forces that path for A/B review
-(`authoring/pitch-rig-lab.html`). `peep` is calibrated; `wren` and `myna` are not.
+A face that supplies no `pitch` block gets the plain vertical translate instead.
+`peep` is calibrated and is the rig to author a nod against; `wren` and `myna`
+are not.
 
 Accept it when the jaw meets the neck at every sampled `headPitch` with no
 background gap or collar leak, and when at production tile size `NOD_SMALL`
@@ -474,7 +470,7 @@ day one because every review tool enumerates that table:
 
 Both halves of the record are required. `create` without `meta` used to be
 tolerated, with `viewBox` re-read off the produced svg — a face could ship half
-a descriptor and nothing would say so ([removed.md](removed.md)).
+a descriptor and nothing would say so.
 
 **Authoring a face outside this repo** works for the public interface —
 `createAvatar({ mount, client, face })` takes any `{ create, meta }` value, and
@@ -494,8 +490,7 @@ chooses that surrounding surface. `server/index.html` and `studio/src/styles.css
 both do the plain version — a tile in the palette, the drawing letterboxed
 inside it. The elaborate version is a mask feathering the drawing's two vertical
 edges, because peep's white shirt is drawn to run off its own frame and
-otherwise stops in mid-air; that lived in the demo call page and is recoverable
-from it ([removed.md](removed.md)). Reshaping the art to fit a host's box is the
+otherwise stops in mid-air. Reshaping the art to fit a host's box is the
 wrong fix either way; the widget does not control the box. peep has
 no dark palette **by decision** (inverting two-value line art recolours the
 hair and ages the character; that is geometry wearing a palette's clothes) —

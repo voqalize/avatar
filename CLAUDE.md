@@ -26,7 +26,7 @@ these, link to it — do not re-explain it here.
 **Only the first two rows are contracts** — a format someone outside this repo
 implements or depends on. Everything below the rule is our own internals and is
 named `internal-*` so a future renderer does not plug into the wrong one; that
-mistake has already been made once ([removed.md § The Rive proof](docs/removed.md)).
+mistake has already been made once.
 
 | layer | owns | code | reference |
 |---|---|---|---|
@@ -44,8 +44,8 @@ entry's perceptual reasoning in the comment above it. A prose table of states in
 a doc is the shape that rots — the last one advertised a `TYPING` state for
 weeks after it was renamed `WORKING`. `npm test` now fails if a doc puts any
 SCREAMING_CASE name in backticks that the code does not define
-(`client/test/docs.test.ts`); `docs/removed.md` and the research pages are
-exempt, because naming things the code does not have is their job.
+(`client/test/docs.test.ts`); the research pages are exempt, because naming
+things the code does not have is their job.
 
 Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
 Design narrative: [README.md § Design](README.md). Motion constants cite
@@ -61,9 +61,7 @@ that exports `createAvatar` — no registry, no loader
 ([design-avatar-interface.md](docs/design-avatar-interface.md)). A new prop,
 option or wire command needs a real consumer asking, not a plausible one. The
 backend extension seams are `AvatarControlFrame` and subclassing
-`AvatarStateMachine`. Everything 0.2 cut, and how to recover it
-from `v0.1.0`: [docs/removed.md](docs/removed.md) — **read it before re-adding a
-knob**; most entries also say what to do instead.
+`AvatarStateMachine`.
 
 ## Constraints
 
@@ -187,8 +185,7 @@ Three things no suite will tell you:
 - **The rig contract is new; the SVG faces are still behind an adapter.**
   `createSvgRig` (`src/rig.js`) is the migration shim. There is no second
   renderer, deliberately: the one that existed implemented the rig contract
-  instead of the wire and is why that page now opens with a warning box
-  ([removed.md § The Rive proof](docs/removed.md)).
+  instead of the wire and is why that page now opens with a warning box.
 - **There are exactly three non-published surfaces, and each answers one
   question.** [`server/`](server/README.md) — *does it work in a real call?* One
   pipecat process, canned LLM and TTS behind the real pipecat interfaces, **zero
@@ -197,8 +194,7 @@ Three things no suite will tell you:
   pointed at that same server. [`authoring/`](authoring/README.md) — *does the
   drawing read?* The workshop: rig pages, clip fixtures, headless tools, no
   build step. A thing that belongs in one of them and lands in another is how
-  this repo grew three answers to "show me the avatar"
-  ([removed.md § Removed in 0.3 — the demo surfaces](docs/removed.md)).
+  this repo once grew three answers to "show me the avatar".
 - **Studio is not a rig workbench, and no longer pretends to be.** It imports
   `@voqalize/avatar` and nothing else from this repo — no `src/`, no
   `/internal` — so a thing it cannot do is a thing a consumer cannot do. It is
@@ -207,21 +203,15 @@ Three things no suite will tell you:
   you drive the server. There is no fake clock, no trace fixture and no
   demo-only state machine anywhere in it, and it does not compose wire messages
   — every control that moves the face asks the *server* to send one. **One
-  avatar, at shipping size, and no wire log**: compare mode and the decoded
-  message list were both cut on the stakeholder's read that they answer
-  transport questions on a page whose subject is the face
-  ([removed.md](docs/removed.md) § Studio's wire log, compare mode and
-  transcript panel). Deleting the log also deleted the repo's only wire reader
-  written from `contract-wire.md` alone — recorded there as a cost, not a
-  cleanup.
+  avatar, at shipping size, and no wire log**: a compare mode and a decoded
+  message list answer transport questions on a page whose subject is the face.
 - **The vocabulary is the nine core states, everywhere above the mixer.** The
   render-state pass-throughs (`TYPING_CHAT`, `WANTS_IN`, …) are gone from
   `src/behavior.js`; they are still real states *in* `src/avatar.js`, reached
   with `avatar.setState`, which is whose state it is. Only the `TYPING` alias
-  was deleted outright ([removed.md](docs/removed.md) § The behavior-state
-  aliases). Seven of the nine map 1:1 to a render state; `STRAINING` is the
-  first one that does not (it draws as `CANT_HEAR`), which is the two-column
-  table finally earning itself.
+  was deleted outright. Seven of the nine map 1:1 to a render state; `STRAINING`
+  is the first one that does not (it draws as `CANT_HEAR`), which is the
+  two-column table finally earning itself.
 - **Everything below `SPEAKING`/`LISTENING` is inference, and the reasoning is
   written down once.** A face that goes blank while a model is mid-inference
   reads as *disconnected*, so `IDLE` is the wrong answer to almost all of the

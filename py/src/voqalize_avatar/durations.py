@@ -4,8 +4,7 @@ The fast viseme leg runs the moment a sentence is handed to TTS, which is before
 any of its audio exists — so it has to be told how long the sentence will be.
 That number is the single most load-bearing input in the whole fast path.
 Measured over a real corpus with the true timeline as reference (the spike the
-fast leg came out of; its numbers survive in `docs/removed.md`
-§ The textsync experiment):
+fast leg came out of):
 
     duration error   exact frame agreement
         -20%              48.0%
@@ -26,8 +25,8 @@ short interjections, and they are the ones this project cares most about.
 **Two numbers, fitted once against vql-speech, and no table.** There used to be a
 per-(voice, language) table with a fallback ladder, from when the processor could
 be told which voice the TTS had opened its context with. It cannot any more
-(`AvatarProcessor()` takes nothing — see `docs/removed.md`), so every lookup
-resolved to the same cross-voice mean of two piper reference voices, and that
+(`AvatarProcessor()` takes nothing), so every lookup resolved to the same
+cross-voice mean of two piper reference voices, and that
 mean was 19.1% off vql-speech's actual median — deep inside the band the table
 above says costs half the fast leg's frame agreement. "Okay." was predicted at
 449 ms against a measured 810-850. Fitting the one model that is actually

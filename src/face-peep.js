@@ -619,9 +619,9 @@ function markup(id, t) {
      preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%">
   <defs><clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath></defs>
 
-  <!-- The neck stays behind the skull. This explicit split is the pitch-rig
-       contract: a nod can now shorten the neck and pivot the head surface
-       without treating the entire portrait as one vertically sliding layer. -->
+  <!-- The neck stays behind the skull. This explicit split is what makes a nod
+       a nod: it lets one shorten the neck and pivot the head surface instead of
+       treating the entire portrait as one vertically sliding layer. -->
   <g id="${id}-neck">
     <path d="${NECK_FILL}" fill="${t.paper}"/>
     ${ink(taper(NECK_L, [3, 8, 6]))}
@@ -707,7 +707,7 @@ function markup(id, t) {
 // ---------------------------------------------------------------------------
 let uid = 0;
 
-export function createFace(mount, theme = {}, options = {}) {
+export function createFace(mount, theme = {}) {
   const t = Object.assign({}, THEME, theme);
   const id = `peep${++uid}`;
   const { svg, $, set } = createFaceShell(mount, id, markup(id, t));
@@ -719,12 +719,9 @@ export function createFace(mount, theme = {}, options = {}) {
     mouthIn: $('mouthIn'), lips: $('lips'), clipMouth: $('clipMouthP'),
     teeth: $('teeth'), teethLo: $('teethLo'), tongue: $('tongue'),
   };
-  // Kept as an opt-out solely for the pitch-rig comparison lab. Production
-  // mounts take the corrective contract above; legacy faces omit it entirely.
-  const pose = options.pitchRig === false ? { ...POSE, pitch: null } : POSE;
 
   function apply(p) {
-    poseTransforms(p, set, el, pose);
+    poseTransforms(p, set, el, POSE);
 
     // --- eyes -------------------------------------------------------------
     // With no sclera the whole bean travels; see the header for what that costs

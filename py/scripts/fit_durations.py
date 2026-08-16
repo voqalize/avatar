@@ -4,9 +4,8 @@
 The fast leg turns text into mouth shapes by stretching a predicted phone
 timeline over a duration. It is *extremely* sensitive to that duration: measured
 over a real corpus, a 10% error costs ~20 points of frame agreement and a 20%
-error costs ~35 (avatar `docs/removed.md` § The textsync experiment, "duration
-accuracy is the ballgame"). So the estimator is not a nicety around the
-edge of the feature; it is most of the feature.
+error costs ~35 — duration accuracy is the ballgame. So the estimator is not a
+nicety around the edge of the feature; it is most of the feature.
 
 `ms = MS_PER_CHAR * chars + ONSET_MS`, one pair of numbers, printed here and
 pasted into `durations.py`. Characters beat words comfortably and adding words as

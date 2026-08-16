@@ -64,8 +64,8 @@ Every drive button names the wire message it asks the server for. Hovering or
 focusing one puts that id and what to watch for in the line under the set; a
 click pins the same line for five seconds and flashes the button, so the thing
 you pressed and the thing that went out are legible without a wire log — which
-was cut deliberately, and stays cut ([removed.md](../docs/removed.md) § Studio's
-wire log, compare mode and transcript panel).
+this screen deliberately does not have, because a decoded message list answers
+transport questions on a page whose subject is the face.
 
 Mode is read from the transport, once, in one place — `usePipecatClientTransportState()`
 — so the button, the panel and every disabled control cannot disagree about
@@ -85,11 +85,11 @@ the browser snippet, `pip install` above the pipeline — and a **Copy** button
 that takes the install and the code as one block, because a snippet you have to
 reassemble by hand is a screenshot.
 
-**One avatar at a time.** A compare mode used to mount all three faces side by
-side; it made the frame small enough that nothing in it could be judged, which
-is the opposite of what a comparison is for. The faces are separate drawings
-rather than renderings of one, so a difference between them is usually not the
-finding it looks like ([removed.md](../docs/removed.md)).
+**One avatar at a time**, at shipping size. Mounting all three faces side by
+side makes the frame small enough that nothing in it can be judged, which is the
+opposite of what a comparison is for. The faces are separate drawings rather
+than renderings of one, so a difference between them is usually not the finding
+it looks like.
 
 **Your pipeline** is the one band with nothing to press. The browser half is
 complete without it and that is exactly the trap: a reader who stopped at the

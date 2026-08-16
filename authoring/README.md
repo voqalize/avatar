@@ -51,8 +51,7 @@ extreme, plus the mouth-detail row where letter collisions are visible),
 **Does this motion read?** — `clip-strip.html` (a gesture as a filmstrip, so
 phase relationships between shoulders, brows and mouth are legible in a still),
 `body-lab.html` (the mixer driven by hand under a seeded RNG — same seed, same
-*t*, same pixels), `expression-lab.html` (clips and beats against real audio),
-`pitch-rig-lab.html`.
+*t*, same pixels), `expression-lab.html` (clips and beats against real audio).
 
 **Does the mouth match the sound?** — `lipsync-review.html` (ten clips, both
 viseme legs, text shown, swap mid-sentence) and `lipsync-eval.html` (the same

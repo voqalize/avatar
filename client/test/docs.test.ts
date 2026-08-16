@@ -12,11 +12,9 @@
  * "the state we used to call TYPING" is not a claim about the current code, and
  * is not checked.
  *
- * Two kinds of file are exempt, because naming things that are not in the code
- * is their whole job:
- *   - `docs/removed.md`, the graveyard.
- *   - `docs/research-*.md`, which cite outside literature and propose channels
- *     and clips that do not exist yet.
+ * One kind of file is exempt, because naming things that are not in the code is
+ * its whole job: `docs/research-*.md`, which cite outside literature and propose
+ * channels and clips that do not exist yet.
  *
  * Anything else that needs an exception goes in RETIRED below, one line each,
  * with the reason. That list is meant to stay short; if it is growing, the doc
@@ -63,7 +61,7 @@ const DOC_FILES = [
   "authoring/tools/README.md",
 ];
 const DOC_DIR = "docs";
-const DOC_EXEMPT = /^(removed|research-.*)\.md$/;
+const DOC_EXEMPT = /^research-.*\.md$/;
 
 const IDENTIFIER = /\b[A-Z][A-Z0-9_]{2,}\b/g;
 const BACKTICKED = /`([A-Z][A-Z0-9_]{2,})`/g;

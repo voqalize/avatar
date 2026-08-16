@@ -32,7 +32,7 @@ describe("AvatarClient dispatch", () => {
     expect(() => client.dispatch({ type: "avatar", cmd: "future_thing", foo: 1 })).not.toThrow();
 
     // No widget method should have fired for an unrecognized cmd, and there is
-    // deliberately no callback reporting it — see docs/removed.md.
+    // deliberately no callback reporting it.
     expect(calls.setState).toHaveLength(0);
     expect(calls.action).toHaveLength(0);
     expect(calls.speak).toHaveLength(0);

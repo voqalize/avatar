@@ -25,7 +25,7 @@ may render it as anything at all, and the word on the wire stays `WORKING`
 either way. It used to arrive at the renderer as `TYPING` — one rendering's
 name promoted to a behaviour's — which is the shape of the mistake even when
 the picture is right. Choosing among several work activities is a renderer's
-business, and lives there ([removed.md](removed.md) § State programs).
+business, and lives there.
 
 `STRAINING` is the first state where that separation does real work rather than
 being merely respected: it says the avatar is trying harder to hear, and this

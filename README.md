@@ -268,7 +268,7 @@ for the current frame; every renderer needs that and none should write it twice.
 [internal-rig.md](docs/internal-rig.md) are how *our* SVG mixer talks to *our*
 faces. That page reads like the renderer seam, and a Rive experiment implemented
 it — reconstructing a viseme letter and a `CANT_HEAR` intent out of pose floats
-the wire had already stated plainly ([removed.md](docs/removed.md)).
+the wire had already stated plainly.
 Designing a second public contract stays premature until a second renderer says
 what it needs.
 
@@ -296,7 +296,7 @@ implements or depends on. The rest are our own internals, and are named so.
 The two bold rows are the contracts, and only they carry a semver promise.
 Everything below them is named `internal-*` for the same reason it ships under
 `@voqalize/avatar/internal`: a future renderer must not plug into the wrong
-seam, and one already did ([removed.md § The Rive proof](docs/removed.md)).
+seam, and one already did.
 
 ### Repo map
 
@@ -322,8 +322,7 @@ by `python3 authoring/serve.py 8777`. The hero images above came out of it.
 `docs/` is the prose half of the contracts, binding on both packages. The full
 tree, path by path: [design-library-split.md § Layout](docs/design-library-split.md),
 which is also why this is a library rather than a product and what each
-published artifact owns. What 0.2 and 0.3 cut from the public surface, and how
-to get any of it back: [removed.md](docs/removed.md).
+published artifact owns.
 
 ### Verifying
 

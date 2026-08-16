@@ -34,8 +34,8 @@ implementation; nothing reads them but them.
 The [rig pose model](internal-rig.md) is 30 float pose channels. It reads like the
 renderer seam — it is the seam a Rive experiment plugged into — and that was the
 mistake: **it implemented the lower-level protocol that was SVG focussed instead
-of the wire protocol.** The evidence, all from that one adapter (removed
-2026-08-12, [removed.md](removed.md); the finding is why this page exists):
+of the wire protocol.** The evidence, all from that one adapter, and the finding
+is why this page exists:
 
 - The `.riv` had no head/gaze axes to receive `headYaw`/`headPitch`/`torsoTurn`,
   but did have a `headYes` trigger that wanted `ACK_NOD`.
@@ -88,7 +88,7 @@ isn't. The factory stays strict.
 - No `onPresenceChange`, no `onRemoteAudioLevel`, no `data-avatar-state`. A
   callback is a contract — publishing one obliges every implementation to emit
   the seven states with our precedence rules, which is the second public
-  contract this design exists to avoid. See [removed.md](removed.md).
+  contract this design exists to avoid.
 - `<Avatar>` renders a static `role="img"`. The implementation owns the DOM
   inside the mount and is the only thing that knows what it is portraying.
 - `WORKING` reaches the renderer as `WORKING`. It used to arrive as `TYPING` —

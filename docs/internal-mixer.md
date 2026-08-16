@@ -206,10 +206,9 @@ spoken action in flight. `speakEnd` fires when the track completes.
 
 **Server viseme track > clip mouth track.** While a server track plays, it
 owns the mouth outright: an action fired mid-utterance contributes head
-and brows only, and its mouth track is dropped. There used to be a third tier —
-an amplitude/spectral guesser off the bot's own audio element, for a server
-that sent no cues at all ([removed.md § Amplitude lipsync](removed.md)).
-Anything that degrades this ordering is a regression.
+and brows only, and its mouth track is dropped. There is deliberately no third
+tier: with no cues the mouth stays shut rather than being guessed at from the
+bot's audio level. Anything that degrades this ordering is a regression.
 
 ## The user's voice — `setUserSpeaking(bool)`
 
@@ -241,10 +240,10 @@ and tuned on the rig.
 | `gaze` | `name` | `setGaze(name)` |
 | `action` | `id` | `action(id)` |
 
-**A server cannot send one of these.** `perform` is not on the wire and was
-deliberately taken off it ([removed.md § The `perform` command](removed.md));
-what remains is a local authoring surface. `authoring/perf-clips.json` scripts its
-turns this way and `authoring/expression-lab.html` plays them:
+**A server cannot send one of these.** `perform` is not on the wire, and
+deliberately so; this is a local authoring surface only.
+`authoring/perf-clips.json` scripts its turns this way and
+`authoring/expression-lab.html` plays them:
 
 ```js
 avatar.speak({ cues, audio });          // the utterance

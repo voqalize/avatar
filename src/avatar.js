@@ -459,7 +459,7 @@ export function createAvatar(opts = {}) {
     // 4. mouth. The server's viseme track wins; a clip's mouth track fills the
     // gaps. There is deliberately no third leg: with no cues the mouth stays
     // shut, and a still mouth under speech is the *visible* symptom of a
-    // backend that could not align — see docs/removed.md § Amplitude lipsync.
+    // backend that could not align.
     const clipOut = clip.update(dtMs);
     let mouth = speech.sample();
     let mouthOwner = mouth ? 'speech' : null;
