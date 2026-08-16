@@ -152,8 +152,8 @@ const GENERATED = new Set([
 ]);
 
 const OUR_DIRS = [
-  "src", "client", "docs", "py", "tools", "studio", "server", "authoring",
-  "native", "experiments", "demo", ".github",
+  "src", "client", "docs", "py", "studio", "server", "authoring", "native",
+  ".github",
 ];
 
 /** Repo-relative paths a file claims exist: markdown link targets and backticks. */

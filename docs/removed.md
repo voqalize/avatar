@@ -501,6 +501,62 @@ URL, licence, and a note of modifications — in the tree beside it.
 
 ---
 
+## The textsync experiment (`experiments/`)
+
+**Was:** `experiments/rhubarb-textsync/` — the spike that asked whether mouth
+shapes can be had from *text*, before a sample of audio exists. A patch against
+a pristine `rhubarb-lip-sync` 1.14.0 tree, two C++ front ends (`textsync`, a
+resident one-request-per-line process, and `residentbench`), a fitted per-phone
+duration table, and three Python tools that built ground truth over a phrase
+cache, fitted the weights and scored the result. It was the whole of
+`experiments/`, alongside the active-listening log.
+
+**What it found**, because four files cited these numbers and the citations now
+land here. Rhubarb's `rhubarbLib.cpp` is two steps and only the first needs
+audio: `recognizePhones()` discovers a phone timeline, `animate()` — where every
+bit of co-articulation, tweening and pause handling lives — turns it into
+shapes. Predict the timeline from cmudict plus fitted phone weights and
+recognition is not needed at all. Scored per 10 ms frame over 300 real clips
+against `pocketSphinx -d <text>`, with the disagreement between two *shipping*
+Rhubarb recognizers on the same audio as the yardstick: **71.3% exact against
+that yardstick's 59.8%**, and **86.7% on clips under 700 ms** — best exactly
+where this project spends most of its speech, and decaying to parity by 2 s.
+Median compute 0.15 ms a sentence, against 159–323 ms of acoustic-model init,
+which is why it can run on the event loop. And the finding the whole fast path
+now rests on: **duration accuracy is the ballgame.** A 10% error in the
+predicted sentence length costs ~20 points of frame agreement (71.3 → 57.5 at
+−10%, 50.5 at +10%) and a 20% error costs ~35 (48.0 / 35.8). A perfect phone
+model fed a wrong duration is worse than a crude one fed the right one.
+
+**Why it went:** it stopped being an experiment. Every part of it that mattered
+shipped — the prediction is `avs_text_cues` in
+[`native/avatarsync/`](../native/avatarsync/README.md), the fitted weights ride
+inside the wheel, and the duration sensitivity above is the reason
+`voqalize_avatar.durations` is a fitted model rather than a rule of thumb
+([the per-voice duration table](#the-per-voice-duration-table)). What was left
+in the tree was a patch against a source tree nobody here builds any more, and a
+README four shipped files cited as if it were live documentation. A fourth
+non-published tree also blurs the one thing that keeps `server/`, `studio/` and
+`authoring/` legible: each answers one question, and *"a place for things that
+are not any of those"* is not a question.
+
+**Instead:** the numbers are above; the shipped leg is `native/avatarsync/` and
+`py/src/voqalize_avatar/durations.py`. Re-deriving any of it means re-running
+the fit against a corpus of your own, which is what the recovered tools do. Two
+findings from it are worth not re-deriving: measured phone durations are much
+flatter than the literature prior (0.53–1.90 fitted over 5,297 aligned phones,
+against the prior's 0.45–1.45, because the aligner attributes a stop's closure
+to the preceding segment), and inserting silence at word boundaries makes
+agreement *worse*, since `animate()` already opens the mouth between words.
+
+**Recover:** `git show 0488e8e:experiments/rhubarb-textsync/README.md` to read
+it, `git checkout 0488e8e -- experiments/rhubarb-textsync` to bring the patch,
+the C++ front ends and the fitting tools back. It was never in a release tag —
+it lived on `main` from the initial public release until 0.3, so a sha is the
+only handle.
+
+---
+
 ## The `AVATARS` registry and `avatar: 'name'`
 
 **Was:** `AVATARS`, `AVATAR_NAMES` and `DEFAULT_AVATAR` in `src/avatar.js`, and

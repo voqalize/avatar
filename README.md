@@ -298,15 +298,32 @@ Everything below them is named `internal-*` for the same reason it ships under
 `@voqalize/avatar/internal`: a future renderer must not plug into the wrong
 seam, and one already did ([removed.md § The Rive proof](docs/removed.md)).
 
-Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
-Why a library rather than a product, and what each published artifact owns:
-the same document. What 0.2 and 0.3 cut from the public surface, and how to get
-any of it back: [removed.md](docs/removed.md).
+### Repo map
 
-Drawing or repairing an avatar happens somewhere else again — `authoring/` is
-the workshop, no build step, served by `python3 authoring/serve.py 8777`
-([authoring/README.md](authoring/README.md)). The hero images above came out of
-its headless tooling.
+Four trees ship:
+
+| | |
+|---|---|
+| `src/` | the widget itself — mixer, rig, the three drawings. Dependency-free ES modules with no build step: what you screenshot is what ships. |
+| `client/` | `AvatarClient` (splice, clock anchor) and the React binding, compiled with plain `tsc`. With `src/`, this is `@voqalize/avatar`. |
+| `py/` | the pipecat backend, `voqalize-avatar`: state inference from stock frames, and both viseme legs. |
+| `native/avatarsync/` | the aligner — our Rhubarb fork, built into the shared library that rides inside the wheel. |
+
+Three more do not ship, and each answers exactly one question.
+[`server/`](server/README.md) — *does it work in a real call?* — is one pipecat
+process with canned LLM and TTS behind the real interfaces, zero API keys, and
+the only place lipsync is ever judged. [`studio/`](studio/README.md) — *is the
+published interface enough?* — is the IDE, pointed at that server and importing
+`@voqalize/avatar` exactly as a consumer would.
+[`authoring/`](authoring/README.md) — *does the drawing read?* — is the
+workshop: rig pages, clip fixtures and headless tooling, no build step, served
+by `python3 authoring/serve.py 8777`. The hero images above came out of it.
+
+`docs/` is the prose half of the contracts, binding on both packages. The full
+tree, path by path: [design-library-split.md § Layout](docs/design-library-split.md),
+which is also why this is a library rather than a product and what each
+published artifact owns. What 0.2 and 0.3 cut from the public surface, and how
+to get any of it back: [removed.md](docs/removed.md).
 
 ### Verifying
 

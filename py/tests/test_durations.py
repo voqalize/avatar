@@ -2,8 +2,8 @@
 
 The fast leg stretches a predicted phone timeline over whatever duration it is
 given, and measured over a real corpus a 10% duration error costs ~20 points of
-frame agreement while a 20% error costs ~35
-(`experiments/rhubarb-textsync/README.md`). So the estimator's error band *is*
+frame agreement while a 20% error costs ~35 (`docs/removed.md`
+§ The textsync experiment). So the estimator's error band *is*
 the fast leg's quality ceiling; a regression here is invisible in every other
 test and obvious on someone's face.
 

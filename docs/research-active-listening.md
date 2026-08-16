@@ -1,5 +1,11 @@
 # Active listening — experiment log
 
+The design-research log behind the listening behaviours that shipped — the
+`AVERSION` gaze profiles in `src/gaze.js`, the transcript-free `Boundary` tick,
+and the backchannel decision function a consumer runs on top of it. It was
+written as a spike under `experiments/` and moved here when that tree went; the
+hypotheses below are numbered as they were proposed, and several of them lost.
+
 **Status:** open. Started 2026-08-09.
 
 **Question.** Within the academic research on listener behaviour, the realities of

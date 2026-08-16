@@ -290,7 +290,8 @@ host reaching past the export map for the raw widget genuinely does not need it.
 `src/` stayed exactly where it was. Moving it would break every rig page and
 every headless tool for no gain a consumer can see, and the widget is this
 repo's primary artifact — it has earned the short path. Everything else is a
-sibling, and each sibling answers one question:
+sibling, and the siblings come in two kinds: the trees that ship, and the three
+that do not, each of which answers exactly one question.
 
 ```
 src/                    the mixer, the rig, the faces — reached through
@@ -300,16 +301,24 @@ client/                 AvatarClient (splice, clock anchor) + React binding
                         -> @voqalize/avatar, whose public export is createAvatar
 py/                     voqalize-avatar: pyproject + src/voqalize_avatar/ + tests
 native/avatarsync/      the rhubarb fork: patch, capi.cpp, build.sh, libavatarsync.*
+package.json            @voqalize/avatar and its export map
+
+server/                 does it work in a real call? one pipecat process, canned
+                        services, zero API keys — the only place lipsync is verified
+studio/                 is the published interface enough? the IDE for the published
+                        options, pointed at that same server
+authoring/              does the drawing read? the workshop: rig pages, clip
+                        fixtures, serve.py
+  tools/                headless render / screenshot / diff / motion
+
 docs/                   the contracts, binding for both packages
   removed.md            what 0.2 and 0.3 cut from the surface, and how to undo it
-package.json            @voqalize/avatar and its export map
-studio/                 Avatar Studio — the IDE for the published options
-server/                  one pipecat process, canned services, zero API keys
-                        — the only place lipsync is verified
-authoring/              the workshop: rig pages, clip fixtures, serve.py
-  tools/                headless render / screenshot / diff / motion
-experiments/            server-side spikes; ships nowhere near the widget
 ```
+
+There is no fourth non-published tree, and that is load-bearing rather than
+tidy: `experiments/` was one, and a tree defined as "the things that are not any
+of those three" collects work nobody can say what it answers
+([removed.md § The textsync experiment](removed.md)).
 
 `studio/` is the second compiled tree and the second exception to "no build
 step" (`client/` is the first). Nothing in `src/` may depend on either — what

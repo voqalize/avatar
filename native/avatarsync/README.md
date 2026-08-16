@@ -72,8 +72,9 @@ legs**, in the caller's process.
   cleanup — is in `animate()`, which is a pure function. Given a duration we can
   predict the timeline (cmudict + fitted per-phone weights) and skip recognition
   entirely. Accuracy against real recognition, and the sensitivity to duration
-  error that makes `voqalize_avatar.durations` load-bearing, are measured in
-  `experiments/rhubarb-textsync/README.md`.
+  error that makes `voqalize_avatar.durations` load-bearing, were measured by the
+  spike this leg came out of and are recorded in `docs/removed.md`
+  § The textsync experiment.
 - **`avs_audio_cues`** — the accurate leg over a *finished* clip, ~21 ms for a
   0.94 s clip (~24 ms of CPU per second of audio). Real `phonetic` recognition
   over PCM. This is the by-hand call: the CLI and the measurement scripts have a

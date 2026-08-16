@@ -3,8 +3,9 @@
 The fast viseme leg runs the moment a sentence is handed to TTS, which is before
 any of its audio exists — so it has to be told how long the sentence will be.
 That number is the single most load-bearing input in the whole fast path.
-Measured over a real corpus with the true timeline as reference
-(`experiments/rhubarb-textsync/README.md`):
+Measured over a real corpus with the true timeline as reference (the spike the
+fast leg came out of; its numbers survive in `docs/removed.md`
+§ The textsync experiment):
 
     duration error   exact frame agreement
         -20%              48.0%
