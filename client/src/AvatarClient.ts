@@ -131,12 +131,20 @@ export const RTVI_EVENTS = {
   userStoppedSpeaking: "userStoppedSpeaking",
   botStartedSpeaking: "botStartedSpeaking",
   botStoppedSpeaking: "botStoppedSpeaking",
+  // Mute is a Pipecat fact, not a claim: the server's mute strategy emits
+  // `UserMuteStarted/StoppedFrame`, the RTVI observer forwards them, and the
+  // browser client raises these. So "has muted you" costs no wire verb —
+  // reading the events the peer already sends is exactly the authority model.
+  userMuteStarted: "userMuteStarted",
+  userMuteStopped: "userMuteStopped",
 } as const satisfies Record<string, string>;
 
 /** The resolved, factual presence state a host may render around the avatar. */
-export type AvatarPresenceState = "IDLE" | "LISTENING" | "THINKING" | "WORKING" | "SPEAKING" | "DEGRADED" | "OFFLINE";
+export type AvatarPresenceState =
+  | "IDLE" | "LISTENING" | "STRAINING" | "THINKING" | "WORKING"
+  | "MUTED" | "SPEAKING" | "DEGRADED" | "OFFLINE";
 type LifecycleState = AvatarPresenceState;
-type ServerClaim = "THINKING" | "WORKING" | null;
+type ServerClaim = "STRAINING" | "THINKING" | "WORKING" | null;
 
 /** Defensive unwrap for the `RTVIEvent.ServerMessage` `{ data }` quirk: some
  * transports deliver the payload directly and some wrap it once more. */
@@ -160,6 +168,7 @@ export class AvatarClient {
   private serverClaim: ServerClaim = null;
   private userSpeaking = false;
   private botSpeaking = false;
+  private muted = false;
   private listening = false;
   // Idle is earned after a connected, quiet listening interval. A newly
   // mounted avatar is available, not already "stepped aside".
@@ -310,13 +319,24 @@ export class AvatarClient {
   }
 
   private lifecycleState(): LifecycleState {
+    // The one copy of the ladder is docs/pipecat-lifecycle-protocol.md; this is
+    // its implementation, in the same order.
+    //
     // Audio truth is the P0 invariant: no lower claim or microphone event may
     // put the face in a non-speaking pose while bot speech is audible.
     if (this.botSpeaking) return "SPEAKING";
     if (this.userSpeaking) return "LISTENING";
+    // A broken session outranks mute, because a mute nobody can hear about is
+    // not the thing worth saying about a dead call.
     if (this.failure) return this.failure;
-    if (this.serverClaim === "WORKING") return "WORKING";
-    if (this.serverClaim === "THINKING") return "THINKING";
+    if (this.muted) return "MUTED";
+    // Every claim resolves to the presence state of the same name, so there is
+    // nothing to rank here — a claim is a single value and only one can be in
+    // flight. STRAINING > THINKING > WORKING is decided where more than one
+    // condition can hold at once, which is the server: `AvatarStateMachine.
+    // _resolve()`. Ranking them again on this side would be a second, silent
+    // copy of that ladder, and the two would drift.
+    if (this.serverClaim) return this.serverClaim;
     if (this.idle) return "IDLE";
     return "LISTENING";
   }
@@ -339,14 +359,22 @@ export class AvatarClient {
 
   private armIdleIfEligible(): void {
     this.clearIdleTimer();
-    if (!this.listening || this.userSpeaking || this.botSpeaking || this.serverClaim || this.failure) return;
+    // Quiet under a mute is not the quiet that earns IDLE — the silence was
+    // imposed, and letting the timer run behind it would reveal a stepped-aside
+    // face the moment the microphone came back.
+    if (!this.eligibleForIdle()) return;
     this.idleTimer = this.setTimer(() => {
       this.idleTimer = null;
-      if (!this.userSpeaking && !this.botSpeaking && !this.serverClaim && !this.failure) {
+      if (this.eligibleForIdle()) {
         this.idle = true;
         this.applyProjection();
       }
     }, this.idleDelayMs);
+  }
+
+  private eligibleForIdle(): boolean {
+    return this.listening && !this.userSpeaking && !this.botSpeaking
+      && !this.muted && !this.serverClaim && !this.failure;
   }
 
   private enterListening(): void {
@@ -421,6 +449,20 @@ export class AvatarClient {
     this.maybePlayInterrupted();
   };
 
+  private onUserMuteStarted = (): void => {
+    this.muted = true;
+    this.idle = false;
+    this.clearIdleTimer();
+    this.applyProjection();
+  };
+
+  private onUserMuteStopped = (): void => {
+    this.muted = false;
+    // Whatever the avatar was waiting on before the mute, it is waiting on the
+    // user again now — the same place a turn ends.
+    this.enterListening();
+  };
+
   private onError = (raw: unknown): void => {
     const data = (raw as { data?: unknown })?.data as { fatal?: unknown } | undefined;
     this.failure = data?.fatal === true ? "OFFLINE" : "DEGRADED";
@@ -464,6 +506,8 @@ export class AvatarClient {
       [RTVI_EVENTS.userStoppedSpeaking, this.onUserStoppedSpeaking],
       [RTVI_EVENTS.botStartedSpeaking, this.onBotStartedSpeaking],
       [RTVI_EVENTS.botStoppedSpeaking, this.onBotStoppedSpeaking],
+      [RTVI_EVENTS.userMuteStarted, this.onUserMuteStarted],
+      [RTVI_EVENTS.userMuteStopped, this.onUserMuteStopped],
     ];
     for (const [event, listener] of subscriptions) client.on(event as RTVIEvent, listener as never);
     return () => {

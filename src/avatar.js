@@ -106,6 +106,33 @@ export const STATES = {
       mouthPress: 0.45, mouthCornerL: -0.22, mouthCornerR: -0.22,
     },
   },
+  // The user's microphone is closed, and the agent is the one that closed it.
+  // Authored against CANT_HEAR as its exact inverse, because that contrast is
+  // the whole read: straining leans *in* to get more of the user, this settles
+  // *back* — nothing more is coming through and the avatar knows why. The eyes
+  // stay on the user, because a deliberate hold is not inattention; what
+  // carries it is the mouth, pressed shut and staying shut, and the slow,
+  // unhurried blink of waiting rather than working. No engagement lean: you
+  // cannot nod along to a channel you have muted yourself. No filter, ever —
+  // DEGRADED and OFFLINE own "something is broken", and this is a decision.
+  MUTED: {
+    gaze: 'USER', emotion: 'neutral', engagement: false,
+    idle: { sway: 0.45, blinkGap: [4.5, 7.0],
+            hold: { every: [3.0, 6.0], dur: [0.9, 1.6] } },
+    // Line-face scaled (see CANT_HEAR): peep's resting mouth is drawn smiling,
+    // so a closed mouth has to be authored clearly past flat to read as closed
+    // at all. Corners were -0.20 first, which rendered as a straight line and
+    // at 130 px against LISTENING said nothing — the delta a viewer gets is
+    // curvature, and flat is the halfway point of it, not the end. -0.34 is as
+    // far as it goes before the hold starts reading as sulking. No squint and
+    // no lid drop: one is straining, the other was asleep. browInner carries
+    // the "one moment" without the worry lift.
+    pose: {
+      torsoLean: -0.28, headPitch: 0.04,
+      browRaiseL: 0.08, browRaiseR: 0.06, browInnerL: 0.28, browInnerR: 0.22,
+      mouthPress: 0.78, mouthCornerL: -0.34, mouthCornerR: -0.34,
+    },
+  },
   // --- application state ---------------------------------------------------
   // "Momentarily busy on the thing you asked for." No hands in frame, so the
   // whole read comes from four cheap cues (docs/research-biomechanics.md §6.4):

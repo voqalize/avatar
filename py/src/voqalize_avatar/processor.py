@@ -68,6 +68,7 @@ processor of your own (see `frames.py`).
 
 from __future__ import annotations
 
+import asyncio
 from collections import deque
 from collections.abc import Sequence
 from typing import Any
@@ -97,6 +98,19 @@ from .visemes import VisemeEngine, build_viseme_engine, cues_to_wire
 # Room for a resync or two. Nothing legitimate queues more than a handful before
 # the pipeline starts.
 _PRESTART_BUFFER = 8
+
+#: How long a reply may stay outstanding before the face stops waiting for it and
+#: leans in instead (`AvatarStateMachine.waited`).
+#:
+#: It has to clear the slowest legitimate path from the end of the user's turn to
+#: the first sign of a response: a cloud STT finalising (a few hundred ms), the
+#: aggregator assembling a context, and the LLM service pushing
+#: `LLMFullResponseStartFrame` — which happens *before* inference, so no model
+#: latency is inside this budget. Two seconds clears that with room to spare, and
+#: the cost of being wrong is asymmetric: too long and the face waits patiently
+#: for another moment, too short and it gives up on every ordinary turn, which is
+#: worse than the IDLE this replaced.
+_REPLY_GRACE_S = 2.0
 
 
 def _is_sentence_announcement(frame: Frame) -> bool:
@@ -166,6 +180,11 @@ class AvatarProcessor(FrameProcessor):
         # is what a full buffer drops.
         self._before_start: deque[AvatarMessage] = deque(maxlen=_PRESTART_BUFFER)
         self._started = False
+        # The one clock in the library. `AvatarStateMachine` is synchronous by
+        # constraint — every decision it makes is a pure function of the frames
+        # it was handed — so "we have been waiting too long" cannot live there.
+        # It lives here, and it says exactly one thing to the machine.
+        self._grace: asyncio.Task[None] | None = None
 
     # ─── The pipeline ───────────────────────────────────────────────────
 
@@ -217,6 +236,34 @@ class AvatarProcessor(FrameProcessor):
         messages = self._machine.on_frame(frame)
         await self.push_frame(frame, direction)
         await self._emit(messages)
+        await self._sync_grace()
+
+    # ─── The one clock ──────────────────────────────────────────────────
+
+    async def _sync_grace(self) -> None:
+        """Run a grace timer exactly while a reply is outstanding.
+
+        Driven off the machine's own latch rather than off a list of frames, so
+        there is no second copy of *which* frames start and end the wait — the
+        machine already decides that, and a copy here would drift from it.
+
+        Restarting the timer on every frame of an open wait would be wrong: the
+        budget is measured from the end of the user's turn, not from the last
+        thing that happened, and mid-wait frames (a transcript, an interim, a
+        heartbeat) would otherwise push the deadline out forever. So an already
+        running timer is left alone.
+        """
+        waiting = self._machine.awaiting_reply
+        if waiting and self._grace is None:
+            self._grace = self.create_task(self._grace_expired())
+        elif not waiting and self._grace is not None:
+            task, self._grace = self._grace, None
+            await self.cancel_task(task)
+
+    async def _grace_expired(self) -> None:
+        await asyncio.sleep(_REPLY_GRACE_S)
+        self._grace = None
+        await self._emit(self._machine.waited())
 
     # ─── Visemes ────────────────────────────────────────────────────────
 
@@ -354,6 +401,9 @@ class AvatarProcessor(FrameProcessor):
         await self._emit([message])
 
     async def cleanup(self) -> None:
+        grace, self._grace = self._grace, None
+        if grace is not None:
+            await self.cancel_task(grace)
         engine, self._engine = self._engine, None
         if engine is not None:
             await engine.aclose()

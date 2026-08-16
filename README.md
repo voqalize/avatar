@@ -313,4 +313,5 @@ unchanged, and travels with that directory.
 | [piper](https://github.com/OHF-Voice/piper1-gpl) voices `en_US-ljspeech-high`, `en_US-libritts_r-medium` | spoke every wav in `authoring/*-audio/` and `py/tests/fixtures/` | LJSpeech public domain; LibriTTS-R CC BY 4.0 |
 
 The three avatars are original drawings. All demo audio is synthesised from
-text written for this repo.
+text written for this repo; `server/audio/` is Voqalize's own `omnivoice`
+voices, which is why that corpus is not in the table above.

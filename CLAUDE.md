@@ -86,9 +86,10 @@ Non-obvious, and recorded nowhere else.
   defect.** The library never chooses a TTS — but anything that *demonstrates*
   the library does, and a face read as one gender speaking in another is the
   first thing anyone notices, before a single nod is judged. So `server/`'s
-  corpus is recorded once per voice, each row naming both its `omnivoice/*` id
-  and the licence-clean piper stand-in committed here, and the picker sits
-  before the call because a TTS opens its context with a voice id
+  corpus is recorded once per voice from vql-speech itself — one `omnivoice/*`
+  id per row, covering both the committed WAVs and the live stream, so the run
+  everybody makes first is not demonstrating a voice nobody ships — and the
+  picker sits before the call because a TTS opens its context with a voice id
   ([server/README.md § Two voices](server/README.md)).
 - **Autonomy is contingent, never decorative.** The renderer must never invent
   an acknowledgement — every nod, receipt and empathy beat is an explicit
@@ -213,12 +214,24 @@ Three things no suite will tell you:
   transcript panel). Deleting the log also deleted the repo's only wire reader
   written from `contract-wire.md` alone — recorded there as a cost, not a
   cleanup.
-- **The vocabulary is the seven core states, everywhere above the mixer.** The
-  render-state pass-throughs (`TYPING_CHAT`, `CANT_HEAR`, `WANTS_IN`, …) are
-  gone from `src/behavior.js`; they are still real states *in* `src/avatar.js`,
-  reached with `avatar.setState`, which is whose state it is. Only the `TYPING`
-  alias was deleted outright ([removed.md](docs/removed.md) § The
-  behavior-state aliases).
+- **The vocabulary is the nine core states, everywhere above the mixer.** The
+  render-state pass-throughs (`TYPING_CHAT`, `WANTS_IN`, …) are gone from
+  `src/behavior.js`; they are still real states *in* `src/avatar.js`, reached
+  with `avatar.setState`, which is whose state it is. Only the `TYPING` alias
+  was deleted outright ([removed.md](docs/removed.md) § The behavior-state
+  aliases). Seven of the nine map 1:1 to a render state; `STRAINING` is the
+  first one that does not (it draws as `CANT_HEAR`), which is the two-column
+  table finally earning itself.
+- **Everything below `SPEAKING`/`LISTENING` is inference, and the reasoning is
+  written down once.** A face that goes blank while a model is mid-inference
+  reads as *disconnected*, so `IDLE` is the wrong answer to almost all of the
+  silence in a call. Which latch is armed by which frame, why `WORKING` sits
+  under `THINKING` without being masked by it, why `STRAINING` needs a clock,
+  and the one heuristic that is deliberately unimplemented (the held-open turn —
+  the JS client exposes no VAD event, so the claim could never win):
+  [pipecat-lifecycle-protocol.md § The silence problem](docs/pipecat-lifecycle-protocol.md).
+  `MUTED` is not a claim at all — pipecat's own mute events reach the browser,
+  and that is the authority model working as designed.
 - **Animation quality is the open avatar work.** `myna` is stakeholder-approved
   as a *static* character (2026-08-07); an animation expert found the motion not
   up to the mark. From the graded 2026-08 review: adopted ballistic head-follow

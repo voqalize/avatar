@@ -29,7 +29,7 @@ export interface AvatarCue {
 /** A durable, lower-priority server claim. `null` explicitly clears it. */
 export interface AvatarClaimCmd {
   cmd: "claim";
-  state: "THINKING" | "WORKING" | null;
+  state: "STRAINING" | "THINKING" | "WORKING" | null;
 }
 
 /** A self-completing authored sequence: face, body, and optionally a hand. */
@@ -108,7 +108,7 @@ export function parseAvatarCommand(msg: AvatarEnvelope): AvatarCommand | null {
   switch (msg.cmd) {
     case "claim": {
       const state = msg.state;
-      if (state === null || state === "THINKING" || state === "WORKING") {
+      if (state === null || state === "STRAINING" || state === "THINKING" || state === "WORKING") {
         return { cmd: "claim", state };
       }
       return null;

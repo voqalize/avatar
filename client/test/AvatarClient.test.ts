@@ -263,6 +263,8 @@ describe("RTVI_EVENTS", () => {
     expect(RTVI_EVENTS.userStoppedSpeaking).toBe(RTVIEvent.UserStoppedSpeaking);
     expect(RTVI_EVENTS.botStartedSpeaking).toBe(RTVIEvent.BotStartedSpeaking);
     expect(RTVI_EVENTS.botStoppedSpeaking).toBe(RTVIEvent.BotStoppedSpeaking);
+    expect(RTVI_EVENTS.userMuteStarted).toBe(RTVIEvent.UserMuteStarted);
+    expect(RTVI_EVENTS.userMuteStopped).toBe(RTVIEvent.UserMuteStopped);
   });
 
   // `remoteAudioLevel` was subscribed only to relay a gain to a host waveform.
@@ -412,6 +414,48 @@ describe("AvatarClient authority resolver", () => {
     vi.advanceTimersByTime(1);
     expect(adapter.presenceState).toBe("IDLE");
     vi.useRealTimers();
+  });
+
+  it("renders a mute strategy without the server claiming anything", () => {
+    // "Has muted you" needs no wire verb: Pipecat's mute frames reach the
+    // browser client as ordinary events, so the fact arrives with the same
+    // authority as the speech states above it.
+    const { calls, emit } = attached();
+
+    emit(RTVI_EVENTS.userMuteStarted);
+    expect(calls.setState.at(-1)?.name).toBe("MUTED");
+
+    emit(RTVI_EVENTS.userMuteStopped);
+    expect(calls.setState.at(-1)?.name).toBe("LISTENING");
+  });
+
+  it("does not let a mute quietly earn idle underneath itself", () => {
+    vi.useFakeTimers();
+    const fake = createFakeAvatar();
+    const adapter = new AvatarClient(fake.api, { idleDelayMs: 600 });
+    const listeners = new Map<string, (...args: any[]) => void>();
+    adapter.attach({ on(event: string, listener: (...args: any[]) => void) { listeners.set(event, listener); }, off() {} } as never);
+
+    listeners.get(RTVI_EVENTS.connected)?.();
+    listeners.get(RTVI_EVENTS.userMuteStarted)?.();
+    vi.advanceTimersByTime(5_000);
+    // The silence was imposed, so it buys nothing: unmuting reveals an
+    // available avatar, not one that stepped aside while it could not hear.
+    listeners.get(RTVI_EVENTS.userMuteStopped)?.();
+    expect(adapter.presenceState).toBe("LISTENING");
+    vi.useRealTimers();
+  });
+
+  it("renders a straining claim below speech and above thinking's silence", () => {
+    const { calls, emit, adapter } = attached();
+
+    adapter.dispatch({ type: "avatar", cmd: "claim", state: "STRAINING" });
+    expect(calls.setState.at(-1)?.name).toBe("CANT_HEAR");
+
+    // Precedence among claims is the server's, since only one can be in
+    // flight; what this side owes is that observed speech still outranks it.
+    emit(RTVI_EVENTS.userStartedSpeaking);
+    expect(calls.setState.at(-1)?.name).toBe("LISTENING");
   });
 
   it("plays an acknowledgement only when the backend sends its explicit action", () => {

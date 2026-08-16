@@ -11,10 +11,13 @@ instant. It has an authority source, entry and exit conditions, and precedence
 against other candidate states. It remains active until those facts change; it
 does not complete on a timer.
 
-Core states are `IDLE`, `LISTENING`, `THINKING`, `WORKING`, `SPEAKING`,
-`DEGRADED`, and `OFFLINE`. These seven are the whole vocabulary an avatar
-implementation receives; a state supplies sustained pose, gaze policy, and an
-idle/liveness profile.
+Core states are `IDLE`, `LISTENING`, `STRAINING`, `THINKING`, `WORKING`,
+`MUTED`, `SPEAKING`, `DEGRADED`, and `OFFLINE`. These nine are the whole
+vocabulary an avatar implementation receives; a state supplies sustained pose,
+gaze policy, and an idle/liveness profile. Where each one comes from and what
+outranks what is
+[pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md) — one copy, and
+it is that one.
 
 **A state names what is happening, never how to draw it.** `WORKING` is the
 canonical case: our SVG rig renders it as typing at a screen, another avatar
@@ -23,6 +26,12 @@ either way. It used to arrive at the renderer as `TYPING` — one rendering's
 name promoted to a behaviour's — which is the shape of the mistake even when
 the picture is right. Choosing among several work activities is a renderer's
 business, and lives there ([removed.md](removed.md) § State programs).
+
+`STRAINING` is the first state where that separation does real work rather than
+being merely respected: it says the avatar is trying harder to hear, and this
+renderer draws that as `CANT_HEAR`, a pose with a specific lean and squint. A
+renderer with nothing of the sort may point it at ordinary listening and be
+correct.
 
 ## Action
 

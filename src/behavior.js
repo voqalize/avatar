@@ -5,9 +5,9 @@
  * It is not a seam any avatar implementation sees: an implementation receives
  * a PipecatClient and decides for itself what a state means.
  *
- * The vocabulary is exactly the seven core states. It used to be seventeen —
- * the seven plus every SVG render state (TYPING, CANT_HEAR, SEARCHING_SCREEN,
- * …) passed straight through, so that tooling could drive one of *those* from
+ * The vocabulary is the nine core states. It used to be seventeen — the core
+ * set plus every SVG render state (TYPING, CANT_HEAR, SEARCHING_SCREEN, …)
+ * passed straight through, so that tooling could drive one of *those* from
  * here. That made the mixer's private state list look like part of the
  * behaviour vocabulary. Tooling that wants a render state calls
  * `avatar.setState` on the mixer, which is whose state it is.
@@ -15,15 +15,22 @@
 
 /**
  * Durable states the behavior layer resolves, and the render state each one
- * asks the bundled SVG mixer for. The mapping is 1:1 today and is still written
- * out, because the right-hand column belongs to a renderer: `WORKING` may draw
- * as anything, and this is where a divergence would land rather than leak.
+ * asks the bundled SVG mixer for. The right-hand column belongs to a renderer:
+ * `WORKING` may draw as anything, and this is where a divergence lands rather
+ * than leaks. `STRAINING` is the first row to actually use that — the two
+ * columns were written out for years while the mapping stayed 1:1.
  */
 export const BEHAVIOR_STATES = Object.freeze({
   IDLE: { renderState: 'IDLE' },
   LISTENING: { renderState: 'LISTENING' },
+  // What the server calls straining, this renderer draws as CANT_HEAR: the
+  // behavior name claims only that the avatar is trying harder to hear, while
+  // the pose is one particular drawing of that. A renderer with no such pose
+  // may legitimately point this at LISTENING.
+  STRAINING: { renderState: 'CANT_HEAR' },
   THINKING: { renderState: 'THINKING' },
   WORKING: { renderState: 'WORKING' },
+  MUTED: { renderState: 'MUTED' },
   SPEAKING: { renderState: 'SPEAKING' },
   DEGRADED: { renderState: 'DEGRADED' },
   OFFLINE: { renderState: 'OFFLINE' },

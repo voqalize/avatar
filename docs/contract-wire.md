@@ -15,7 +15,7 @@ deliberate semantic actions, and TTS-context-correlated Rhubarb cues.
 
 | Command | Values | Meaning |
 |---|---|---|
-| `claim` | `THINKING`, `WORKING`, `null` | Candidate durable state; `null` clears it. |
+| `claim` | `STRAINING`, `THINKING`, `WORKING`, `null` | Candidate durable state; `null` clears it. |
 | `action` | promoted action IDs | Start one self-completing behavior action. |
 | `cues` | `ctx`, `from_ms`, `cues`, `final?` | Correlated viseme splice. |
 
@@ -31,3 +31,11 @@ The client maps stable wire IDs to behavior-library actions. New behavior
 actions are library-only until deliberately promoted here. Claims are retired
 by a new user turn, bot playout, or explicit `null`; they must not return after
 a factual boundary.
+
+Only one claim is in flight at a time — a later one replaces the earlier — so
+the three names carry no ordering on this wire. Which condition wins when
+several hold at once is decided before a message is sent
+([pipecat-lifecycle-protocol.md § The silence problem](pipecat-lifecycle-protocol.md)).
+There is no claim for a muted microphone: pipecat's own mute events already
+reach the browser client, and a claim would be a second, lower-authority
+spelling of a fact.

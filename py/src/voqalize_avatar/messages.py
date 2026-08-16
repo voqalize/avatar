@@ -23,8 +23,13 @@ AVATAR_MESSAGE_TYPE = "avatar"
 
 
 class AvatarClaim(StrEnum):
-    """Durable server intent below Pipecat's factual speech states."""
+    """Durable server intent below Pipecat's factual speech states.
 
+    Ordered most to least urgent, which is also the order the state machine
+    resolves them in when more than one condition holds at once.
+    """
+
+    STRAINING = "STRAINING"
     THINKING = "THINKING"
     WORKING = "WORKING"
 
