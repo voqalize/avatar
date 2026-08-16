@@ -12,7 +12,9 @@ open http://127.0.0.1:4173/                   # AVATAR_STUDIO_PORT overrides
 
 Both halves are needed. Studio is a page, not a bot: without `server/` running
 there is nothing to call, and the Start-call button will say so.
-(`pm2 start ecosystem.config.cjs` runs the dev server supervised.)
+`pm2 start ecosystem.config.cjs` runs both halves supervised, plus the
+`authoring/` workshop on 8777 — three surfaces, one command, no terminal to
+keep open.
 
 ## The rule
 
