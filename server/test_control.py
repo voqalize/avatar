@@ -132,11 +132,37 @@ async def test_saying_a_line_by_hand_still_runs_the_beats(session: control.Sessi
     """Pointing at a line does not make it a different kind of speech. The
     states an application would be in before it talks are in front of this one
     too, or the panel that sets them would be showing something the only button
-    that speaks never does."""
+    that speaks never does.
+
+    What goes on the wire is the ordinary frames those states are inferred
+    *from* — no avatar command is authored here at all — so the assertion is on
+    the completion's shape rather than on a claim.
+    """
     session.beats(think_ms=1, work_ms=1)
     await session.say(session.lines.lines[0].id)
 
-    assert [m["state"] for m in sent(session)] == ["THINKING", "WORKING", None]
+    kinds = [type(f).__name__ for f in session.worker.frames]  # type: ignore[attr-defined]
+    assert kinds.index("LLMFullResponseStartFrame") == 0
+    assert kinds.index("FunctionCallInProgressFrame") < kinds.index("LLMTextFrame")
+    assert kinds.index("FunctionCallResultFrame") < kinds.index("LLMTextFrame")
+    assert sent(session) == [], "the beats are inferred, not claimed"
+
+
+async def test_muting_puts_pipecat_frames_on_the_pipeline_and_nothing_else(
+    session: control.Session,
+) -> None:
+    """The claim being made is that "has muted you" costs no wire verb.
+
+    So the assertion is about what is *absent*: the avatar library says nothing
+    here, and the face changes — if it does — because stock mute frames reached
+    the browser through the RTVI observer.
+    """
+    await session.mute(True)
+    await session.mute(False)
+
+    kinds = [type(f).__name__ for f in session.worker.frames]  # type: ignore[attr-defined]
+    assert kinds == ["UserMuteStartedFrame", "UserMuteStoppedFrame"]
+    assert sent(session) == []
 
 
 async def test_an_unknown_line_is_an_error_not_a_silence(session: control.Session) -> None:
@@ -239,6 +265,7 @@ def test_choosing_a_voice_needs_no_call(client: TestClient) -> None:
         ("/api/action", {"action": "ACK_NOD"}),
         ("/api/misbehave", {"kind": "action-storm"}),
         ("/api/beats", {"think_ms": 500, "work_ms": 0}),
+        ("/api/mute", {"on": True}),
     ],
 )
 def test_driving_a_call_that_is_not_happening_is_a_409(

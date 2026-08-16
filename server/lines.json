@@ -2,40 +2,37 @@
   "_comment": [
     "The closed corpus this server speaks. Text is authored here once and",
     "recorded once per voice by `record.py`; every WAV IS committed, so a clone",
-    "can hear the avatar without fetching a speech model — see that script and",
+    "can hear the avatar without a credential — see that script and",
     "server/README.md.",
     "",
     "Two voices, because the avatar has a gender and the voice has to agree with",
-    "it. `vql_speech` is the real id — what `--tts vql-speech` asks Voqalize's own",
-    "service for. `piper` is the stand-in that keeps `--tts canned` free of every",
-    "credential: a licence-clean local model recorded into `audio/<voice>/`.",
-    "Choosing a voice picks the whole row, so the two backends can never disagree",
-    "about which one is speaking.",
+    "it. `vql_speech` is the id both halves use: what `--tts vql-speech` asks",
+    "Voqalize's own service for in a live call, and what `record.py` asked for",
+    "when it wrote `audio/<voice>/`. One row, one id — the recorded voice and the",
+    "streamed voice cannot drift apart.",
     "",
-    "22050 Hz is piper's native rate for these voices, not a choice. Resampling",
-    "to 24 kHz here would add a dependency and a lossy step to reach a number",
-    "nothing needs: pipecat's output transport resamples to the transport rate",
-    "anyway (base_output.py, `_resampler.resample`).",
+    "24000 Hz is what vql-speech emits (`pcm_s16le`, mono). It is not resampled",
+    "on the way in: pipecat's output transport resamples to the transport rate",
+    "anyway (base_output.py, `_resampler.resample`), so a lossy step here would",
+    "buy nothing.",
     "",
     "Sentences are split the way TTSService aggregates them, because that is how",
-    "they arrive at synthesis — one `run_tts` call each. Keep them short. This",
-    "avatar listens far more than it speaks, and a backchannel that lands is",
-    "worth more here than a paragraph that does not."
+    "they arrive at synthesis — one `run_tts` call each. Keep them short, and keep",
+    "them about the library: this corpus is the demo script, and the thing a",
+    "developer is deciding is whether to use it. Backchannels stay one word. This",
+    "avatar listens far more than it speaks, and a *go on* that lands is worth",
+    "more here than a paragraph that does not."
   ],
-  "sample_rate": 22050,
+  "sample_rate": 24000,
   "default_voice": "female",
   "voices": {
     "female": {
       "label": "Female",
-      "vql_speech": "omnivoice/gauri",
-      "piper": "en_US-ljspeech-high",
-      "piper_licence": "public domain (LJSpeech)"
+      "vql_speech": "omnivoice/gauri"
     },
     "male": {
       "label": "Male",
-      "vql_speech": "omnivoice/gaurav",
-      "piper": "en_US-joe-medium",
-      "piper_licence": "CC0 (OHF-Voice joe)"
+      "vql_speech": "omnivoice/gaurav"
     }
   },
   "lines": [
@@ -48,36 +45,36 @@
           "audio": "greet-0.wav"
         },
         {
-          "text": "I'm a talking head for A I voice calls.",
+          "text": "I'm a talking head for your voice agent.",
           "audio": "greet-1.wav"
         }
       ]
     },
     {
-      "id": "what",
+      "id": "dropin",
       "tag": "explain",
       "sentences": [
         {
-          "text": "There is no video model here.",
-          "audio": "what-0.wav"
+          "text": "I'm one line in your pipeline.",
+          "audio": "dropin-0.wav"
         },
         {
-          "text": "I'm a drawing, moved by a small behavior library.",
-          "audio": "what-1.wav"
+          "text": "An avatar processor, seated between the T T S and the transport.",
+          "audio": "dropin-1.wav"
         }
       ]
     },
     {
-      "id": "listen",
+      "id": "novideo",
       "tag": "explain",
       "sentences": [
         {
-          "text": "Most of my job is listening.",
-          "audio": "listen-0.wav"
+          "text": "There is no video model here.",
+          "audio": "novideo-0.wav"
         },
         {
-          "text": "So watch what I do while you talk, not just while I do.",
-          "audio": "listen-1.wav"
+          "text": "I'm a drawing, moved by a small behavior library.",
+          "audio": "novideo-1.wav"
         }
       ]
     },
@@ -92,12 +89,96 @@
       ]
     },
     {
+      "id": "lipsync",
+      "tag": "explain",
+      "sentences": [
+        {
+          "text": "My mouth runs on two clocks.",
+          "audio": "lipsync-0.wav"
+        },
+        {
+          "text": "One predicts from the text, the other measures the audio.",
+          "audio": "lipsync-1.wav"
+        }
+      ]
+    },
+    {
+      "id": "legs",
+      "tag": "explain",
+      "sentences": [
+        {
+          "text": "The predicted mouth moves the instant audio starts.",
+          "audio": "legs-0.wav"
+        },
+        {
+          "text": "The measured one rewrites it a few frames later, and you shouldn't see the seam.",
+          "audio": "legs-1.wav"
+        }
+      ]
+    },
+    {
+      "id": "wire",
+      "tag": "explain",
+      "sentences": [
+        {
+          "text": "Three kinds of message reach the browser.",
+          "audio": "wire-0.wav"
+        },
+        {
+          "text": "A claim, an action, and mouth cues.",
+          "audio": "wire-1.wav"
+        }
+      ]
+    },
+    {
       "id": "ack-see",
       "tag": "backchannel",
       "sentences": [
         {
           "text": "I see.",
           "audio": "ack-see-0.wav"
+        }
+      ]
+    },
+    {
+      "id": "frames",
+      "tag": "explain",
+      "sentences": [
+        {
+          "text": "My states come from the frames you already push.",
+          "audio": "frames-0.wav"
+        },
+        {
+          "text": "You emit nothing extra to make me listen.",
+          "audio": "frames-1.wav"
+        }
+      ]
+    },
+    {
+      "id": "authority",
+      "tag": "explain",
+      "sentences": [
+        {
+          "text": "I never decide what the agent is doing.",
+          "audio": "authority-0.wav"
+        },
+        {
+          "text": "The server claims a state, and the audio overrules it.",
+          "audio": "authority-1.wav"
+        }
+      ]
+    },
+    {
+      "id": "surface",
+      "tag": "explain",
+      "sentences": [
+        {
+          "text": "The whole interface is create avatar, with a mount and a client.",
+          "audio": "surface-0.wav"
+        },
+        {
+          "text": "It hands back a destroy function and nothing else.",
+          "audio": "surface-1.wav"
         }
       ]
     },
@@ -112,54 +193,44 @@
       ]
     },
     {
-      "id": "lipsync",
+      "id": "anytts",
       "tag": "explain",
       "sentences": [
         {
-          "text": "My mouth runs on two clocks.",
-          "audio": "lipsync-0.wav"
+          "text": "Any T T S works, word timings or not.",
+          "audio": "anytts-0.wav"
         },
         {
-          "text": "One guesses from the words, the other measures the audio.",
-          "audio": "lipsync-1.wav"
+          "text": "Without them I just stay on the predicted mouth.",
+          "audio": "anytts-1.wav"
         }
       ]
     },
     {
-      "id": "moment",
-      "tag": "thinking",
-      "sentences": [
-        {
-          "text": "One moment.",
-          "audio": "moment-0.wav"
-        },
-        {
-          "text": "Let me think about that.",
-          "audio": "moment-1.wav"
-        }
-      ]
-    },
-    {
-      "id": "authority",
+      "id": "nobuild",
       "tag": "explain",
       "sentences": [
         {
-          "text": "I never decide what I'm doing.",
-          "audio": "authority-0.wav"
+          "text": "The renderer has no build step.",
+          "audio": "nobuild-0.wav"
         },
         {
-          "text": "The server tells me, and the audio corrects it.",
-          "audio": "authority-1.wav"
+          "text": "Plain modules, no dependencies — what you screenshot is what ships.",
+          "audio": "nobuild-1.wav"
         }
       ]
     },
     {
-      "id": "ack-sure",
-      "tag": "backchannel",
+      "id": "actions",
+      "tag": "explain",
       "sentences": [
         {
-          "text": "Sure.",
-          "audio": "ack-sure-0.wav"
+          "text": "I never invent an acknowledgement.",
+          "audio": "actions-0.wav"
+        },
+        {
+          "text": "Every nod and every receipt is something your server asked for.",
+          "audio": "actions-1.wav"
         }
       ]
     },
@@ -174,106 +245,44 @@
       ]
     },
     {
-      "id": "canned",
-      "tag": "explain",
-      "sentences": [
-        {
-          "text": "Nothing I say is generated.",
-          "audio": "canned-0.wav"
-        },
-        {
-          "text": "There's no language model in this call at all.",
-          "audio": "canned-1.wav"
-        }
-      ]
-    },
-    {
-      "id": "sorry",
-      "tag": "concern",
-      "sentences": [
-        {
-          "text": "Sorry, I didn't catch that.",
-          "audio": "sorry-0.wav"
-        }
-      ]
-    },
-    {
-      "id": "roles",
-      "tag": "explain",
-      "sentences": [
-        {
-          "text": "I can take any role you give me.",
-          "audio": "roles-0.wav"
-        },
-        {
-          "text": "Nothing about me assumes what this call is for.",
-          "audio": "roles-1.wav"
-        }
-      ]
-    },
-    {
-      "id": "faces",
-      "tag": "explain",
-      "sentences": [
-        {
-          "text": "There are several faces.",
-          "audio": "faces-0.wav"
-        },
-        {
-          "text": "Each one is drawn by hand, not rendered from a photograph.",
-          "audio": "faces-1.wav"
-        }
-      ]
-    },
-    {
-      "id": "ack-makes-sense",
-      "tag": "backchannel",
-      "sentences": [
-        {
-          "text": "That makes sense.",
-          "audio": "ack-makes-sense-0.wav"
-        }
-      ]
-    },
-    {
       "id": "still",
       "tag": "explain",
       "sentences": [
         {
-          "text": "I try to stay still.",
+          "text": "I stay deliberately still.",
           "audio": "still-0.wav"
         },
         {
-          "text": "A restless face costs bandwidth and says nothing.",
+          "text": "A restless face costs you bitrate and says nothing.",
           "audio": "still-1.wav"
         }
       ]
     },
     {
-      "id": "take-time",
-      "tag": "warm",
+      "id": "listen",
+      "tag": "explain",
       "sentences": [
         {
-          "text": "Take your time.",
-          "audio": "take-time-0.wav"
+          "text": "Most of my job is listening.",
+          "audio": "listen-0.wav"
         },
         {
-          "text": "There's no rush.",
-          "audio": "take-time-1.wav"
+          "text": "Watch what I do while you talk, not while I talk.",
+          "audio": "listen-1.wav"
         }
       ]
     },
     {
-      "id": "wire",
-      "tag": "explain",
+      "id": "moment",
+      "tag": "thinking",
       "sentences": [
         {
-          "text": "Everything you see arrives as three kinds of message.",
-          "audio": "wire-0.wav"
+          "text": "One moment.",
+          "audio": "moment-0.wav"
         },
         {
-          "text": "A claim, an action, and the mouth shapes.",
-          "audio": "wire-1.wav"
+          "text": "Let me look that up.",
+          "audio": "moment-1.wav"
         }
       ]
     },

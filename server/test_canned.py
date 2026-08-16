@@ -24,6 +24,9 @@ from pipecat.frames.frames import (
     BotStoppedSpeakingFrame,
     ErrorFrame,
     Frame,
+    FunctionCallCancelFrame,
+    FunctionCallInProgressFrame,
+    InterruptionFrame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
     LLMTextFrame,
@@ -41,7 +44,7 @@ from pipecat.processors.frame_processor import (
 from pipecat.utils.asyncio.task_manager import TaskManager, TaskManagerParams
 
 from pipecat.processors.frameworks.rtvi.frames import RTVIServerMessageFrame
-from voqalize_avatar import AvatarClaim, AvatarControlFrame, AvatarProcessor
+from voqalize_avatar import AvatarControlFrame, AvatarProcessor
 
 from canned import CannedLines, CannedLLMService, CannedTTSService
 
@@ -221,7 +224,7 @@ def test_every_sentence_has_a_clip(lines: CannedLines) -> None:
             assert lines.find(sentence.text) is sentence
 
 
-def test_a_voice_is_one_row_in_both_spellings() -> None:
+def test_a_voice_is_one_row_and_one_id() -> None:
     """Picking a voice has to move the recordings *and* the vendor id together.
 
     The defect this guards is inaudible in the default pipeline and obvious in
@@ -229,6 +232,10 @@ def test_a_voice_is_one_row_in_both_spellings() -> None:
     `--tts vql-speech` asks for the male omnivoice id, because the two were
     threaded through separately. The avatar is drawn as a person; a voice that
     disagrees with the drawing is noticed before anything about the face is.
+
+    Since the recordings are now vql-speech's own output, one id covers both
+    paths and this is a narrower claim than it was — the id that named the
+    stand-in is gone, and with it the way the two could differ.
     """
     female = CannedLines.load(LINES, "female")
     male = CannedLines.load(LINES, "male")
@@ -236,7 +243,6 @@ def test_a_voice_is_one_row_in_both_spellings() -> None:
     assert female.voice.name == "female"
     assert female.voice.vql_speech == "omnivoice/gauri"
     assert male.voice.vql_speech == "omnivoice/gaurav"
-    assert female.voice.piper != male.voice.piper
 
     # Same text, different audio: one corpus, recorded twice.
     assert [n.text for n in female.lines] == [n.text for n in male.lines]
@@ -279,7 +285,7 @@ def test_rejects_a_clip_that_is_not_what_the_corpus_declares(
                 "sample_rate": lines.sample_rate,
                 "default_voice": "wren",
                 "voices": {
-                    "wren": {"label": "Wren", "vql_speech": "omnivoice/x", "piper": "en_US-x"}
+                    "wren": {"label": "Wren", "vql_speech": "omnivoice/x"}
                 },
                 "lines": [
                     {"id": "x", "tag": "t", "sentences": [{"text": "hi", "audio": "bad.wav"}]}
@@ -328,39 +334,76 @@ async def test_turns_advance_through_the_corpus(lines: CannedLines) -> None:
         assert said == [line.id for line in lines.lines[:3]]
 
 
-async def test_the_beats_run_before_the_speech_and_clear(lines: CannedLines) -> None:
-    """`THINKING`, `WORKING`, cleared, and only then the words.
+async def test_the_beats_are_inferred_rather_than_announced(lines: CannedLines) -> None:
+    """`THINKING`, then `WORKING`, and nobody claimed either one.
 
-    Order is the whole assertion. A claim is durable, so one that arrives after
-    the sentence it belonged to leaves the face in it; and a turn that never
-    clears drops back into `WORKING` the moment the audio stops. Both look like
-    a renderer bug from the browser and neither is one.
+    The point of the whole test is the seat it reads from. This server used to
+    push the two states as `AvatarControlFrame` claims, so what it proved was
+    that a claim travels — which was never in doubt. Reading the avatar's own
+    output instead measures the path a real deployment takes: an ordinary LLM
+    response frame and an ordinary tool call, inferred into the same two states
+    by a processor nothing told.
+
+    Order is the rest of the assertion. A claim is durable, so one that lands
+    after the sentence it belonged to leaves the face in it.
     """
-    async with Chain(lines, think_ms=40, work_ms=40) as chain:
+    async with Chain(lines, avatar=True, think_ms=40, work_ms=40) as chain:
         await chain.push(UserStoppedSpeakingFrame())
         await chain.until(lambda: bool(chain.mid.of(LLMFullResponseEndFrame)))
 
-    claims = [f.message.payload["state"] for f in chain.mid.of(AvatarControlFrame)]
-    assert claims == [AvatarClaim.THINKING, AvatarClaim.WORKING, None]
+        assert _claims(chain) == ["THINKING", "WORKING", "THINKING"]
+        # The application authored no avatar traffic at all.
+        assert chain.mid.of(AvatarControlFrame) == []
 
-    # And in front of the speech, not merely present somewhere in the turn.
-    kinds = chain.mid.names()
-    last_beat = len(kinds) - 1 - kinds[::-1].index("AvatarControlFrame")
-    assert kinds.index("LLMTextFrame") > last_beat
+        # And the states are in front of the speech, not somewhere in the turn.
+        kinds = chain.mid.names()
+        assert kinds.index("LLMTextFrame") > kinds.index("FunctionCallResultFrame")
 
 
 async def test_a_beat_of_zero_is_skipped_entirely(lines: CannedLines) -> None:
-    """Off is off: no claim, not a claim held for no time.
+    """Off is off: no tool call, not a tool call that returns instantly.
 
-    A zero-length `WORKING` would still put a message on the wire, and the face
+    A zero-length work beat would still put `WORKING` on the wire, and the face
     would flick through a state the application never meant to be in.
     """
-    async with Chain(lines, think_ms=40, work_ms=0) as chain:
+    async with Chain(lines, avatar=True, think_ms=40, work_ms=0) as chain:
         await chain.push(UserStoppedSpeakingFrame())
         await chain.until(lambda: bool(chain.mid.of(LLMFullResponseEndFrame)))
 
-    claims = [f.message.payload["state"] for f in chain.mid.of(AvatarControlFrame)]
-    assert claims == [AvatarClaim.THINKING, None]
+        assert _claims(chain) == ["THINKING"]
+        assert not chain.mid.of(FunctionCallInProgressFrame)
+
+
+async def test_an_interruption_mid_tool_retires_the_working_claim(
+    lines: CannedLines,
+) -> None:
+    """The one way a canned tool call can end without a result.
+
+    Nothing else retires a call, and `WORKING` is the bottom of the ladder — so
+    a dangling one is not a missed beat, it is the state the face falls back to
+    for the remainder of the session.
+    """
+    async with Chain(lines, avatar=True, work_ms=5_000) as chain:
+        await chain.push(UserStoppedSpeakingFrame())
+        await chain.until(lambda: _claims(chain) == ["THINKING", "WORKING"])
+
+        await chain.push_up(BotStartedSpeakingFrame())
+        await chain.push(InterruptionFrame())
+        await chain.until(lambda: bool(chain.mid.of(FunctionCallCancelFrame)))
+        await chain.push_up(BotStoppedSpeakingFrame())
+
+        # The end of playout is where a stranded call would show itself: with
+        # nothing else set, `WORKING` is what the ladder resolves to. Cancelled,
+        # it resolves to nothing and the last thing said stands.
+        assert _claims(chain) == ["THINKING", "WORKING", None]
+
+
+def _claims(chain: Chain) -> list[str | None]:
+    return [
+        f.data["state"]
+        for f in chain.out.of(RTVIServerMessageFrame)
+        if f.data.get("cmd") == "claim"
+    ]
 
 
 async def test_a_turn_still_in_its_beats_will_not_start_a_second(

@@ -82,6 +82,12 @@ class Beats(BaseModel):
     work_ms: int = 0
 
 
+class Mute(BaseModel):
+    """Whether the agent is holding the user's microphone closed."""
+
+    on: bool
+
+
 class Voice(BaseModel):
     """Which row of `lines.json` the *next* call speaks as."""
 
@@ -260,6 +266,18 @@ def build_app(tts_name: str) -> FastAPI:
         """
         _live().beats(think_ms=body.think_ms, work_ms=body.work_ms)
         return {"think_ms": max(0, body.think_ms), "work_ms": max(0, body.work_ms)}
+
+    @app.post("/api/mute")
+    async def mute(body: Mute):
+        """Mute or unmute the user, as a mute strategy would.
+
+        The one control here that sends no avatar command: it puts pipecat's own
+        mute frames on the pipeline and lets the browser client raise them. If
+        the face changes, it changed because of stock pipecat traffic — which is
+        the claim being tested.
+        """
+        await _live().mute(body.on)
+        return {"muted": body.on}
 
     @app.post("/api/misbehave")
     async def misbehave(body: Misbehave):

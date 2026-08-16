@@ -37,6 +37,9 @@ from pipecat.frames.frames import (
     BotStoppedSpeakingFrame,
     ErrorFrame,
     Frame,
+    FunctionCallCancelFrame,
+    FunctionCallInProgressFrame,
+    FunctionCallResultFrame,
     InterruptionFrame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
@@ -48,7 +51,11 @@ from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.llm_service import LLMService
 from pipecat.services.settings import LLMSettings, TTSSettings
 from pipecat.services.tts_service import TTSService
-from voqalize_avatar import AvatarClaim, AvatarControlFrame, AvatarMessage
+
+#: Every canned tool call is named from this. One prefix, so a test can tell a
+#: beat's call from anything else in the frame stream without matching on a
+#: literal spelled in two files.
+TOOL_CALL_PREFIX = "canned-tool-"
 
 #: Lookup key for a sentence. Pipecat's aggregator hands `run_tts` text that has
 #: been through filters and transforms, so it may differ from the corpus by
@@ -83,21 +90,20 @@ class Line:
 
 @dataclass(frozen=True)
 class Voice:
-    """Who is speaking, in both spellings at once.
+    """Who is speaking — one id, both paths.
 
     The avatar is drawn as a person and a voice that disagrees with the drawing
     breaks the illusion faster than any lipsync error does — so the voice is a
     choice a caller makes, and it has to mean the same thing whichever TTS is
-    behind it. `vql_speech` is the real id (`omnivoice/gauri`); `piper` is the
-    licence-clean local model that stands in for it when there is no credential,
-    which is the default and the only path with no setup. One row, so the two
-    can never drift apart into a call whose voice depends on a flag.
+    behind it. `vql_speech` is that id: what `--tts vql-speech` streams live, and
+    what `record.py` already asked for when it wrote `audio/<name>/`. The default
+    path and the vendor path are the same person, which they were not while the
+    recordings were a licence-clean stand-in.
     """
 
     name: str
     label: str
     vql_speech: str
-    piper: str
 
 
 def load_voices(path: Path) -> dict[str, Voice]:
@@ -109,7 +115,7 @@ def load_voices(path: Path) -> dict[str, Voice]:
     """
     raw = json.loads(path.read_text())
     return {
-        name: Voice(name=name, label=v["label"], vql_speech=v["vql_speech"], piper=v["piper"])
+        name: Voice(name=name, label=v["label"], vql_speech=v["vql_speech"])
         for name, v in raw["voices"].items()
     }
 
@@ -371,6 +377,7 @@ class CannedLLMService(LLMService):
         self._cursor = 0
         self._speaking = False
         self._turn: asyncio.Task | None = None
+        self._tool_call_id: str | None = None
         self.think_ms = self.DEFAULT_THINK_MS
         self.work_ms = self.DEFAULT_WORK_MS
 
@@ -433,31 +440,67 @@ class CannedLLMService(LLMService):
         if self._in_turn():
             await self.cancel_task(self._turn)
         self._turn = None
+        if self._tool_call_id is not None:
+            # A cancelled task never reaches its own result frame, and nothing
+            # else retires a call. Left unsaid, the avatar spends the rest of
+            # the session claiming `WORKING` on a tool that stopped existing.
+            await self.push_frame(
+                FunctionCallCancelFrame(
+                    function_name="canned_tool", tool_call_id=self._tool_call_id
+                )
+            )
+            self._tool_call_id = None
 
     async def preamble(self) -> None:
-        """Hold `THINKING`, then `WORKING`, then clear — the beats before speech.
+        """Hold the pre-speech beats — as the frames a real LLM emits, not as claims.
 
-        Pushed downstream as `AvatarControlFrame`, which is the documented seam
-        for exactly this (`voqalize_avatar/frames.py`): an application saying
-        something the pipeline cannot infer. A generic processor cannot know that
-        an LLM is thinking, because thinking is not a frame.
+        These used to be `AvatarControlFrame` claims, on the reasoning that
+        thinking is not a frame. It is, near enough. `LLMFullResponseStartFrame`
+        goes out *before* the model is asked, so the stretch from there to the
+        first audible word is the wait itself, and `AvatarProcessor` infers
+        `THINKING` across it without being told anything. A tool call is less
+        ambiguous still — pipecat has frames for precisely that, and the state
+        machine counts them.
 
-        The clear is not optional and not cosmetic. A claim is durable — it holds
-        until something replaces it — so a turn that went straight from
-        `WORKING` to speech would leave the claim standing underneath, and the
-        face would drop back into it the moment the audio stopped.
+        Faking both meant this server exercised the one path a real deployment
+        never takes while the inference every deployment depends on went unrun.
+        That is how a claimless model-latency window survived to be reported from
+        a live call rather than caught here.
+
+        There is no clear any more, and none is missing: a claim raised by
+        inference is retired by inference. `BotStartedSpeakingFrame` ends the
+        wait; the tool's result ends the work.
+
+        The call is cancelled rather than left dangling if the turn is abandoned
+        — see `_abandon_turn`. A tool with no result and no cancel is a `WORKING`
+        claim with nothing left to retire it.
         """
-        beats = ((AvatarClaim.THINKING, self.think_ms), (AvatarClaim.WORKING, self.work_ms))
-        for state, ms in beats:
-            if ms <= 0:
-                continue
-            await self.push_frame(AvatarControlFrame(message=AvatarMessage.claim(state)))
-            await asyncio.sleep(ms / 1000)
-        if self.think_ms > 0 or self.work_ms > 0:
-            await self.push_frame(AvatarControlFrame(message=AvatarMessage.claim(None)))
+        if self.think_ms > 0:
+            await asyncio.sleep(self.think_ms / 1000)
+        if self.work_ms > 0:
+            call = dict(
+                function_name="canned_tool",
+                tool_call_id=f"{TOOL_CALL_PREFIX}{self._cursor}",
+                arguments={},
+            )
+            # Held across the sleep so an interruption can cancel it by id; not
+            # cleared in a `finally`, because the cancelling code runs *after*
+            # this coroutine unwinds and would find it already gone.
+            self._tool_call_id = call["tool_call_id"]
+            await self.push_frame(
+                FunctionCallInProgressFrame(**call, cancel_on_interruption=True)
+            )
+            await asyncio.sleep(self.work_ms / 1000)
+            await self.push_frame(FunctionCallResultFrame(**call, result={}))
+            self._tool_call_id = None
 
     async def say(self, line: Line, *, preamble: bool = True) -> None:
         """Emit one line as a vendor LLM would emit a completion.
+
+        The start frame comes first, before the beats: a vendor LLM pushes it
+        immediately before asking the model, so everything the turn spends
+        waiting happens *inside* the response, not in front of it. That ordering
+        is the whole reason the beats no longer need to announce themselves.
 
         The end frame is not optional: `TTSService` uses it to flush its sentence
         aggregator and close the audio context, so without it the last sentence
@@ -465,11 +508,11 @@ class CannedLLMService(LLMService):
 
         `preamble=False` is for the misbehaviours, which author a precise
         sequence of their own and would be describing a different one if a beat
-        were injected in front of it.
+        were injected into it.
         """
+        await self.push_frame(LLMFullResponseStartFrame())
         if preamble:
             await self.preamble()
-        await self.push_frame(LLMFullResponseStartFrame())
         for sentence in line.sentences:
             # The trailing space is load-bearing. `TTSService`'s aggregator sees a
             # token stream, not sentences, so a full stop alone is not a boundary —

@@ -26,6 +26,7 @@ import asyncio
 from dataclasses import dataclass, field
 
 from loguru import logger
+from pipecat.frames.frames import UserMuteStartedFrame, UserMuteStoppedFrame
 from pipecat.pipeline.worker import PipelineWorker
 from voqalize_avatar import AvatarAction, AvatarClaim, AvatarControlFrame, AvatarMessage
 
@@ -102,6 +103,25 @@ class Session:
 
     async def action(self, action: AvatarAction) -> None:
         await self.send(AvatarMessage.action(action))
+
+    async def mute(self, on: bool) -> None:
+        """Close the user's microphone from the agent's side, or open it again.
+
+        Not an avatar command — nothing in the library is involved. These are the
+        two stock frames a pipecat mute strategy broadcasts
+        (`turns/user_mute/`), the RTVI observer turns them into
+        `user-mute-started`/`user-mute-stopped`, and the browser client raises
+        them as events. The face reads those directly, which is why "has muted
+        you" costs no wire verb at all.
+
+        Queued rather than driven by a real strategy because this pipeline has no
+        context aggregator to hang one on — there is no STT and no LLM context
+        here (`bot.py`). What goes on the wire is identical either way; what a
+        strategy would add is a *reason*, and the reason is a person pressing the
+        button.
+        """
+        frame = UserMuteStartedFrame() if on else UserMuteStoppedFrame()
+        await self.worker.queue_frame(frame)
 
     async def misbehave(self, kind: str) -> None:
         """Send something wrong on purpose. See `MISBEHAVIOURS`."""

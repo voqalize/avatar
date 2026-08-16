@@ -86,10 +86,13 @@ takes its turn when you stop talking; it does not answer what you said. That is
 the honest description of a closed corpus, and it is enough to exercise every
 avatar state the wire has.
 
-`lines.json` holds that corpus — 20 lines, 33 sentences, cycled round-robin,
-each of them about the avatar project rather than about you. Backchannels are
-over-represented on purpose: this face listens far more than it speaks, so a
-*go on* that lands is worth more here than a paragraph that does not.
+`lines.json` holds that corpus — 20 lines, 36 sentences, cycled round-robin,
+each of them about the library rather than about you: what the seam is, how
+lipsync gets its two clocks, which frames the states come from. It is the demo
+script, and what a developer standing in front of it is deciding is whether to
+use this. Backchannels stay one word and are over-represented on purpose: this
+face listens far more than it speaks, so a *go on* that lands is worth more here
+than a paragraph that does not.
 
 This demonstrates the face, not a conversation. Watch what it does while you
 are talking, which is most of what it is for.
@@ -143,15 +146,17 @@ closed at the handshake with a 403.
 
 `lines.json` carries a `voices` table, and the corpus is recorded once per row:
 
-| row | vql-speech | the committed stand-in |
-|---|---|---|
-| `female` | `omnivoice/gauri` | `en_US-ljspeech-high` — public domain |
-| `male` | `omnivoice/gaurav` | `en_US-joe-medium` — CC0 |
+| row | voice |
+|---|---|
+| `female` | `omnivoice/gauri` |
+| `male` | `omnivoice/gaurav` |
 
-One row is two spellings of one voice, and both legs are load-bearing: the
-`vql_speech` id is what a real call asks for, the `piper` one is what `audio/`
-holds so a clone can hear it without a credential. `test_canned.py` runs its
-whole suite once per row, and asserts the two spellings stay paired.
+One id per row, used twice: it is what `--tts vql-speech` streams in a live
+call, and it is what `record.py` asked for when it wrote `audio/<row>/`. So the
+default path and the vendor path are the same person. They were not always —
+`audio/` used to hold a licence-clean piper stand-in, which meant the only run
+anybody makes first was the one demonstrating a voice nobody ships.
+`test_canned.py` runs its whole suite once per row.
 
 Which row is live is a server setting, not a wire message — `GET /api/lines`
 reports it alongside the vocabularies and `POST /api/voice {"name": "male"}`
@@ -195,41 +200,44 @@ which is the point of judging here.
 
 ## The audio is committed
 
-`audio/` — 66 WAVs, 5.5 MB, one directory per voice — is in git deliberately,
+`audio/` — 72 WAVs, 8.6 MB, one directory per voice — is in git deliberately,
 which is the opposite call
 from the aligner in `native/avatarsync/`, whose library and model tree were taken
 out of git in favour of `native/avatarsync/get.sh`.
 
 The distinction is what it costs to get the bytes back. The aligner is one
 command away from a published wheel, so storing it bought nothing but a large
-diff. The corpus audio can only be reproduced by downloading a ~60 MB speech
-model, and a reader who clones this repo should be able to hear the avatar
-without that.
+diff. The corpus audio cannot be reproduced at all without a credential this
+repository does not carry, and a reader who clones it should be able to hear the
+avatar anyway.
 
 `record.py` is the other half of that promise — the checked-in answer to "how do
 I add a line?", which used to be "ask whoever made the last one". Edit the text
 in `lines.json`, then:
 
 ```
-cd server && uv run --with piper-tts python record.py          # every voice
-cd server && uv run --with piper-tts python record.py male     # or just one
+cd server \
+  && VQL_SPEECH_HOST=speech.<env>.example.com \
+     VQL_SPEECH_KEY_PEM=/path/to/signing-key.pem \
+     uv run --with "cartesia[websockets]>=3,<4" --with "pyjwt[crypto]" python record.py
 ```
 
-It fetches each voice into `.voices/` (gitignored) on first run, re-records
-every sentence into `audio/<voice>/`, and refuses any clip whose rate, channel
-count or bit depth is not what `lines.json` declares — the same properties the
-corpus re-checks when it loads, alongside the file simply being absent. Every
-one of those failures looks identical at runtime: the mouth moves and no sound
-comes out, which reads as a lipsync bug and is not one.
+A voice name as an argument records only that row. It writes every sentence into
+`audio/<voice>/` at the rate `lines.json` declares, and refuses a clip that comes
+back silent — that and a missing file are the two failures the corpus re-checks
+at load, and both look identical in a call: the mouth moves and no sound comes
+out, which reads as a lipsync bug and is not one.
 
-Both piper voices are chosen for their licence rather than their sound: they
-are stand-ins for the `omnivoice/*` pair, which needs a credential this repo
-does not carry. LJSpeech is public domain and OHF-Voice `joe` is CC0. This repo
-is public and AGPL, and every WAV in it is redistributed to everyone who clones
-it — which rules out the obvious shortcut of macOS `say`, whose voices produce
-the exact target format and are Apple's to license, not ours to ship, and which
-also rules out the better-sounding `ryan` and `hfc_male` (CC BY-NC-SA: no
-commercial use, and a share-alike that AGPL cannot absorb).
+Recording needs the same credential a live `--tts vql-speech` call needs, and
+neither the key nor the host has a default here — both would be Voqalize's
+infrastructure, written down in a repository anybody can read. `<4` on the
+cartesia pin is load-bearing: cartesia 4 negotiates a newer API version and the
+handshake comes back `403`, which reads exactly like an untrusted key.
+
+Recording used to run on piper, chosen for its licence rather than its sound —
+LJSpeech and OHF-Voice `joe`, standing in for the `omnivoice` pair. That is the
+part that changed: the corpus is now the real voice, so what a clone hears with
+no credential at all is what production sounds like.
 
 ## Editing while it runs
 
