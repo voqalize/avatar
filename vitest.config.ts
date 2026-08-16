@@ -1,7 +1,8 @@
 /**
- * The client tests, plus the two that reach into `src/`.
+ * The client tests, plus the two that reach into the widget.
  *
- * `src/` is the widget — dependency-free ES modules judged by eye, not by a DOM
+ * `packages/avatar/src/` is the widget — dependency-free ES modules judged by
+ * eye, not by a DOM
  * emulator (CLAUDE.md § Verifying). Two files here reach into it anyway, and
  * both are careful about what they claim: `mount.smoke.test.ts` proves the
  * *package boundary* (the subpath resolves, the modules load, the SVG lands in
@@ -13,7 +14,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["client/test/**/*.test.ts"],
+    include: ["packages/avatar/test/**/*.test.ts"],
     environment: "node",
   },
 });

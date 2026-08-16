@@ -135,7 +135,7 @@ ends.
 **Anything about what was said.** No state above reads text, sentiment, intent
 or content. Every one of them is a statement about the *flow* of frames, which
 is why they can be tested without running a call at all
-(`py/tests/test_state_machine.py`), and why none of them can quietly become
+(`packages/avatar-py/tests/test_state_machine.py`), and why none of them can quietly become
 client-side conversational inference.
 
 ## Ownership
@@ -189,7 +189,7 @@ participant, so it never had state authority, and relaying it would be a
 high-frequency subscription serving decoration.
 
 `IDLE` is reached by a quiet timer — `idleDelayMs`, default 12 s
-(`client/src/AvatarClient.ts`). It is an `AvatarClient` option, not a
+(`packages/avatar/client/AvatarClient.ts`). It is an `AvatarClient` option, not a
 `createAvatar` one: nothing on the public seam sets it, and nothing reads the
 resulting state back. Shortening it to *watch* the transition means
 constructing `AvatarClient` yourself, which is what the lab below does.
@@ -205,7 +205,7 @@ JavaScript extension API.
 
 ## Verification lab
 
-Open [the Pipecat lifecycle lab](../authoring/pipecat-lifecycle-lab.html)
+Open [the Pipecat lifecycle lab](../apps/authoring/pipecat-lifecycle-lab.html)
 through the development server. It mounts the real `AvatarClient` against a
 Pipecat-shaped local event emitter and exposes six repeatable traces:
 

@@ -4,20 +4,22 @@ node_modules/
 tmp/
 # Screenshots taken to review the rig by eye. Regenerate them; do not commit.
 .review/
-# Built by `npm run build` / `prepare`. The widget in src/ has no build step;
-# only the TypeScript client does.
-client/dist/
-studio/dist/
+# Built by `pnpm run build` / `prepare`. The widget in packages/avatar/src has
+# no build step; only the TypeScript client does.
+packages/avatar/dist/
+apps/studio/dist/
 # Third-party JS the local server pre-bundles so a browser can load it
 # (`pnpm run server:vendor`). Nothing of ours is in it — see vendor.entry.js.
-server/vendor/
+apps/server/vendor/
 __pycache__/
-# The piper voice `server/record.py` fetches to re-record the canned corpus.
-# ~60 MB, and needed only to change what the server says — the WAVs it produces
-# ARE committed, so a clone can hear the avatar without fetching a speech model.
-server/.voices/
-# Staged by py/scripts/stage_native.py just before a wheel build: the aligner
-# library and its 56 MB model tree. It is a build input, never a source file —
-# the canonical copies are produced by .github/workflows/wheels.yml.
-py/src/voqalize_avatar/_native/
-py/dist/
+# The piper voice `apps/server/record.py` fetches to re-record the canned
+# corpus. ~60 MB, and needed only to change what the server says — the WAVs it
+# produces ARE committed, so a clone can hear the avatar without fetching a
+# speech model.
+apps/server/.voices/
+# Staged by packages/avatar-py/scripts/stage_native.py just before a wheel
+# build: the aligner library and its 56 MB model tree. It is a build input,
+# never a source file — the canonical copies are produced by
+# .github/workflows/wheels.yml.
+packages/avatar-py/src/voqalize_avatar/_native/
+packages/avatar-py/dist/

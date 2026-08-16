@@ -132,7 +132,7 @@ Practical consequences for us:
 - The Preston Blair working method — "the best trick to getting lip synch
   looking correct is having an easy way to repeatedly preview your sequence
   along with your soundtrack ... fine tuning poses" — is what
-  `authoring/lipsync-eval.html` exists to be.
+  `apps/authoring/lipsync-eval.html` exists to be.
 
 **Open question — a minimum-perceptible hold.** `MIN_CUE_MS = 30` in
 `visemes.js` is a *drop* threshold (cues closer than that merge), which is a
@@ -386,7 +386,7 @@ listener."
   et al., 2019)." We quoted that as our amplitude bound. On checking, the full
   text of Hendrikse et al. (2019) does not contain the claim — so the number is
   a secondary-source assertion whose primary attribution we could not verify,
-  and it may be a citation slip in the review. Nothing in `src/` depends on it
+  and it may be a citation slip in the review. Nothing in `packages/avatar/src/` depends on it
   (nod amplitude is authored in rig pixels via `headPitch`, which `face-core.js`
   maps as `p.headPitch * spec.pitchPx` — pixels, not degrees, so a degree figure
   was never directly convertible anyway). Keep it as a rough sanity range at

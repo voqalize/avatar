@@ -1,16 +1,19 @@
 # One lockfile for the whole repo.
 #
-# There were three (`package-lock.json` at the root, in `studio/` and in
+# There were three (`package-lock.json` at the root, in `apps/studio/` and in
 # the tools package), which meant three resolutions of `typescript`, `react` and
 # `@types/*` that could drift apart silently — and did: the root pinned
-# `@pipecat-ai/client-js` at 1.7.0 while `studio/` resolved its own copy, so the
-# IDE and the package under test could have been running different transports.
+# `@pipecat-ai/client-js` at 1.7.0 while `apps/studio/` resolved its own copy,
+# so the IDE and the package under test could have been running different
+# transports.
 #
-# The root package IS `@voqalize/avatar` (published); the other two are private
-# dev tooling that never ships.
+# `packages/avatar` is the published one (`@voqalize/avatar`); the other two are
+# private dev tooling that never ships, and the root manifest is a workspace
+# manifest with nothing publishable in it.
 packages:
-  - "studio"
-  - "authoring/tools"
+  - "packages/avatar"
+  - "apps/studio"
+  - "apps/authoring/tools"
 
 # The versions that must agree across the workspace, named once. `catalog:` in a
 # manifest resolves to the entry here, so the root package and the IDE cannot
@@ -31,8 +34,8 @@ catalog:
   typescript: "^5.7.3"
 
 # puppeteer downloads a browser and esbuild unpacks its platform binary; both
-# are no-ops without their install script, and `node authoring/tools/shot.mjs` fails with
-# a missing-Chrome error that reads like a bug in the tool. pnpm blocks install
+# are no-ops without their install script, and `node apps/authoring/tools/shot.mjs`
+# fails with a missing-Chrome error that reads like a bug in the tool. pnpm blocks install
 # scripts by default, so the two that genuinely need one are named here.
 onlyBuiltDependencies:
   - esbuild

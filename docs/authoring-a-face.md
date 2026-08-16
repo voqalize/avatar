@@ -15,7 +15,7 @@ face *good*, which is a much longer job than making one *work* — the plumbing
 took an afternoon on both of the faces added since this document existed, and
 the drawing took days.
 
-*Living document. Describes the code as of `src/face*.js` on `main`;
+*Living document. Describes the code as of `packages/avatar/src/face*.js` on `main`;
 [Adding a new avatar](#adding-a-new-avatar) is the staged process, and CLAUDE.md
 § In flight flags what is about to change.*
 
@@ -30,17 +30,17 @@ too small to matter.
 Four facts about the surrounding code, because they constrain what you can
 write:
 
-- **There is no build step, and that is deliberate.** `src/` is dependency-free
+- **There is no build step, and that is deliberate.** `packages/avatar/src/` is dependency-free
   ES modules loaded straight into the browser: edit the file, reload the page,
-  look. Your module may import from `src/` and nothing else — not `client/`, not
-  `studio/`, no npm package. A face that needs a bundler has broken the shape of
+  look. Your module may import from `packages/avatar/src/` and nothing else — not `packages/avatar/client/`, not
+  `apps/studio/`, no npm package. A face that needs a bundler has broken the shape of
   the project even if it renders.
 - **Roughly sixty times a second the mixer hands you one object of ~30 floats
   and you write it into the DOM.** There is no animation in your module: no
   timer, no `requestAnimationFrame`, no easing, no state that survives a frame.
 - **Nothing above the face knows what a face looks like; nothing in the face
   knows what a call is.** If a visual change needs `params.js` touched,
-  reconsider; if it needs anything outside `src/face*.js`, it's a bug.
+  reconsider; if it needs anything outside `packages/avatar/src/face*.js`, it's a bug.
 - **The drawing is generated markup, not an asset.** Every face here is a
   template string built at mount time, so geometry can be computed from
   landmarks and the ink can be re-themed per instance. There is no `.svg` file
@@ -78,8 +78,8 @@ export const <yourname> = { create: createFace, meta: META };
   ([Shipping a face](#shipping-a-face)).
 
 **A face must be callable standalone.** Three rig-tooling pages —
-`authoring/contact-sheet.html`, `authoring/torso-check.html` and
-`authoring/clip-strip.html` — call `FACES[name].create(mount)` directly with no
+`apps/authoring/contact-sheet.html`, `apps/authoring/torso-check.html` and
+`apps/authoring/clip-strip.html` — call `FACES[name].create(mount)` directly with no
 mixer and drive `apply()` from a raw vector; a face that only works under
 `createAvatar` is broken.
 
@@ -231,7 +231,7 @@ Three rules are hiding in that file, and all three have cost someone a session:
   `viewBox` *after* `apply()` and relies on you not touching it.
 
 This skeleton uses plain `stroke` to get a shape on screen fast. The house idiom
-is that nothing is a stroke — see [Art units](#art-units) and `src/line-art.js`.
+is that nothing is a stroke — see [Art units](#art-units) and `packages/avatar/src/line-art.js`.
 
 ### Driving it without a mixer
 
@@ -245,8 +245,8 @@ face.apply(makeParams({ mouthOpen: 0.85, headYaw: 0.4 }));
 
 `makeParams` fills every channel from `REST` and applies your overrides on top,
 so you can name only the channel you are looking at. That is the whole harness
-the rig pages use, and `authoring/control-plane.html` is a ready-made one:
-`src/face-peep-control-plane.js` is peep with all static art deleted and only
+the rig pages use, and `apps/authoring/control-plane.html` is a ready-made one:
+`packages/avatar/src/face-peep-control-plane.js` is peep with all static art deleted and only
 the elements `apply()` writes left behind, so you can see exactly which nodes a
 frame actually touches. `window.pose({ mouthOpen: .7, teethUpper: 1 })` in the
 console of that page.
@@ -280,7 +280,7 @@ Both are the normal first findings, and both are in the checklist.
 ## Visemes are vectors, not drawings
 
 The headline feature is lipsync, and the most common wrong mental model is that
-a viseme is a shape you draw. It is not. `src/visemes.js` holds `VISEME_SHAPES`
+a viseme is a shape you draw. It is not. `packages/avatar/src/visemes.js` holds `VISEME_SHAPES`
 — the nine Rhubarb letters `A`–`H` plus `X` for silence — and each one is a set
 of values for seven mouth channels, scaled by loudness and given a `jaw` from
 the same arithmetic. The letter never reaches your module. What reaches it is
@@ -312,7 +312,7 @@ Three rigs were built independently and their `apply()` implementations
 converged on the same eight blocks in the same order — torso lean → shoulders
 → parallax layer loop → eyes → brows → mouth → teeth → tongue — with the same
 memoizer and the same return shape. That convergence now lives in
-**`src/face-core.js`**, which owns:
+**`packages/avatar/src/face-core.js`**, which owns:
 
 - the shell: mount, id-scoped selector, the memoized `set(node, attr, val)`;
 - `poseTransforms(p, set, el, POSE)` — lean, shoulders, parallax, driven by a
@@ -416,7 +416,7 @@ trap: **translations convert, degrees don't** — a rotation is already
 unit-independent, which is why `shrugTiltDeg` never takes the `units` factor.
 
 `viewBox` is not a rig constant. Hosts derive aspect from `META.viewBox` (or
-`api.meta.viewBox`); the rig pages under `authoring/` do.
+`api.meta.viewBox`); the rig pages under `apps/authoring/` do.
 
 **Two soft constraints on the window, if you are choosing one from scratch.**
 Pick the same 576-wide portrait window the three shipped faces use unless you
@@ -430,7 +430,7 @@ The one thing to fix before anything else is that **the art has to run off the
 frame**, not stop at it. Every torso channel moves the shirt, and a shirt drawn
 to the frame edge shows ground the first time it leans back or shrugs.
 
-Line-art characters build every mark with `src/line-art.js` — `taper`,
+Line-art characters build every mark with `packages/avatar/src/line-art.js` — `taper`,
 `taperRing`, `region`, filled variable-width outlines rather than strokes,
 because a uniform `stroke-width` with round caps is a rope with a blob at each
 end and that is the whole difference between "vector illustration" and "someone
@@ -454,19 +454,19 @@ createAvatar({ mount, client, face: peep });
 Adding a face to *this* repo is four edits, and the first one is worth doing on
 day one because every review tool enumerates that table:
 
-1. **`src/faces.js`** — import your module and add a row to `FACES`. That is
+1. **`packages/avatar/src/faces.js`** — import your module and add a row to `FACES`. That is
    what makes the face visible to `rig-check`, the contact sheet, the torso
-   check, the clip strip, `authoring/tools/baseline.mjs` and the conformance
+   check, the clip strip, `apps/authoring/tools/baseline.mjs` and the conformance
    sweep in `pnpm test`. `FACE_NAMES` and `DEFAULT_FACE` follow from it;
    `DEFAULT_FACE` stays `peep` unless a stakeholder says otherwise.
 2. **A `.d.ts` beside the module**, three lines: `createFace`, `META`, `THEME`
-   and the record, typed from `./avatar.js` exactly as `src/face-peep.d.ts`
+   and the record, typed from `./avatar.js` exactly as `packages/avatar/src/face-peep.d.ts`
    does.
 3. **A `package.json` `exports` entry** for `./faces/<name>`, pointing at the
    `.js` and the `.d.ts`. Separate entry points are why importing one face costs
    one drawing.
-4. **`studio/src/look.ts`**, only if the face should be selectable in Studio —
-   which imports the published subpaths, never `src/`.
+4. **`apps/studio/src/look.ts`**, only if the face should be selectable in Studio —
+   which imports the published subpaths, never `packages/avatar/src/`.
 
 Both halves of the record are required. `create` without `meta` used to be
 tolerated, with `viewBox` re-read off the produced svg — a face could ship half
@@ -486,7 +486,7 @@ Palettes: there is no barrel `THEME` export — each face module owns its
 palette, and `api.theme` returns the mounted avatar's. A host needs it
 whenever it paints anything *around* the widget: every rig is drawn portrait,
 so a 16:9 call tile leaves a margin either side of the drawing, and the host
-chooses that surrounding surface. `server/index.html` and `studio/src/styles.css`
+chooses that surrounding surface. `apps/server/index.html` and `apps/studio/src/styles.css`
 both do the plain version — a tile in the palette, the drawing letterboxed
 inside it. The elaborate version is a mask feathering the drawing's two vertical
 edges, because peep's white shirt is drawn to run off its own frame and
@@ -498,7 +498,7 @@ its theme keys stay overridable, but do not add a `dark` selector.
 
 ## The hand — a layer no face draws
 
-`src/hand.js` puts a hand into the bottom of the frame for `GESTURE_*` actions
+`packages/avatar/src/hand.js` puts a hand into the bottom of the frame for `GESTURE_*` actions
 (protocol side: [internal-mixer.md](internal-mixer.md) § Hand gestures).
 It is deliberately **not** part of this contract's parameter space: it writes a
 transform on its own `<g>` appended over the face's svg, it has no channel in
@@ -535,7 +535,7 @@ Setup, once: `pnpm install` at the repository root (for `pnpm test` and the
 headless tools), then serve.
 
 ```sh
-python3 authoring/serve.py 8777        # never python3 -m http.server
+python3 apps/authoring/serve.py 8777        # never python3 -m http.server
 open http://localhost:8777/authoring/  # index.html describes every page
 ```
 
@@ -546,38 +546,38 @@ one of which produced a module error that was simply a lie. Do not work around
 it with `?v=` either — that puts two copies of the module in the graph and
 fails differently and worse.
 
-The pages below want your face registered in `src/faces.js`, so do that first.
+The pages below want your face registered in `packages/avatar/src/faces.js`, so do that first.
 Anything on a page can also be rendered headlessly to a PNG —
-`authoring/tools/shot.mjs` for one page, `baseline.mjs` for the standard set,
+`apps/authoring/tools/shot.mjs` for one page, `baseline.mjs` for the standard set,
 `diff.mjs` to prove a refactor changed no pixel, `motion.mjs` to measure how
-much actually moves ([authoring/tools/README.md](../authoring/tools/README.md)).
+much actually moves ([apps/authoring/tools/README.md](../apps/authoring/tools/README.md)).
 That is how you review a face without a browser open, and how you keep a record
 of what it looked like yesterday.
 
-1. `authoring/rig-check.html` — every registered avatar side by side, driven by
+1. `apps/authoring/rig-check.html` — every registered avatar side by side, driven by
    one command, so any difference on screen is the drawing and never the
    driving. First place to open; also carries the **run sweep** button and
    `window.pose({…})` from the console.
-2. `authoring/contact-sheet.html?face=NAME` — every viseme, emotion, gaze and
+2. `apps/authoring/contact-sheet.html?face=NAME` — every viseme, emotion, gaze and
    channel extreme. Check the **mouth-detail crop row**, not just full heads:
    two visemes can be numerically distinct and visually identical (`G` vs `B`
    both read as a white strip until `G` was rebuilt as nearly-all-teeth). At
    avatar size a viseme is ~40 px tall; letter collisions are invisible on the
    full-head row. The crop row frames itself from your `META.mouthCrop`.
-3. `authoring/torso-check.html?face=NAME` — shoulders × lean × head pose.
+3. `apps/authoring/torso-check.html?face=NAME` — shoulders × lean × head pose.
    These channels only fail *in combination*; this is where a rig leaks
    background from behind the shirt if it is going to.
-4. `authoring/clip-strip.html?clip=NOD_SMALL&face=NAME` — phase relationships
+4. `apps/authoring/clip-strip.html?clip=NOD_SMALL&face=NAME` — phase relationships
    through the mixer's own smoothing, as a filmstrip.
 5. `pnpm test` — the conformance sweep: params finite,
    `|v| ≤ 2`, svg connected, across every state/emotion/gaze/interjection and
    a viseme track, plus `checkHandFraming` against your window and a pass of
-   every hand gesture. (`authoring/rig-check.html`'s **run sweep** button is the
+   every hand gesture. (`apps/authoring/rig-check.html`'s **run sweep** button is the
    same sweep in real time, if you want to watch it land.) It also cannot see
    *looks*; it reaches shoulders/torso
    only through clips, so drive those with a `setOverrides` loop over
    `[-1, 0, 1]` per channel — and look at one hand gesture at peak extension
-   (`authoring/body-lab.html?face=NAME&gesture=GESTURE_GREET&at=0.4`), because figure/ground
+   (`apps/authoring/body-lab.html?face=NAME&gesture=GESTURE_GREET&at=0.4`), because figure/ground
    between hand and shirt is a judgement the framing check cannot make.
 6. Auto-traced art has known failure modes to budget for: zero-margin abutting
    contours open seams under parallax; the trace stops at the source crop;
@@ -620,7 +620,7 @@ three of this project's "findings" turned out to be mid-blink frames.
 
 ## Adding a new avatar
 
-Both halves of the old Direction section landed (`src/face-core.js` and
+Both halves of the old Direction section landed (`packages/avatar/src/face-core.js` and
 `META`), and the recipe has been run end-to-end twice: `wren` as the plumbing
 proof, and `myna` (2026-08-07) as the proof of the *staged* process below —
 which is where the time and the judgement actually went.
@@ -669,7 +669,7 @@ A new face module supplies:
 1. **Static art** — the markup function: layer groups, the element table's
    nodes, theme-keyed fills. Hand-authored or cleaned trace; budget for the
    auto-trace failure modes in the checklist if tracing. For a line-art
-   character, build every mark with `src/line-art.js` (`taper`, `taperRing`,
+   character, build every mark with `packages/avatar/src/line-art.js` (`taper`, `taperRing`,
    `region` — filled variable-width marks, width profiles over normalized s);
    the width *profiles* are per-character and stay in the face module.
 2. **A `POSE` spec** for `poseTransforms` — the named scalars (travels,
@@ -687,15 +687,15 @@ A new face module supplies:
    parameterized factories the way the stroke engine was extracted.
 4. **`META`** — viewBox and mouthCrop.
 5. **The exported record and its four edits** — `export const <name> =
-   { create, meta }` at the foot of your module, plus the `src/faces.js` row,
+   { create, meta }` at the foot of your module, plus the `packages/avatar/src/faces.js` row,
    the `.d.ts` and the `exports` entry (§ Shipping a face).
    Nothing resolves a face by name at runtime.
 
 What you get for free: the mixer, visemes, emotions, gaze, idle, clips,
 interjections, the frame-edge hand (§ The hand — it needs only your viewBox and
 two theme keys), the pose mechanics, the memoizer, and every tool whose job is
-comparing faces — `authoring/rig-check.html`, the contact sheet, the torso
-check, the clip strip and the conformance sweep all enumerate `src/faces.js`.
+comparing faces — `apps/authoring/rig-check.html`, the contact sheet, the torso
+check, the clip strip and the conformance sweep all enumerate `packages/avatar/src/faces.js`.
 The wren run measured the split: the
 plumbing steps (2, 4, 5) are mechanical; the art (step 1) and the read of
 every state at tile size (the checklist) are where the judgement — and the

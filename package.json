@@ -1,101 +1,21 @@
 {
-  "name": "@voqalize/avatar",
-  "version": "0.2.2",
-  "description": "A JavaScript-programmable 2-D talking head for AI voice calls: server-synced lipsync, state through motion, zero dependencies.",
+  "name": "avatar-workspace",
+  "private": true,
+  "type": "module",
+  "description": "Workspace root. Nothing here is published — the manifest that ships is packages/avatar/package.json.",
   "license": "MIT",
-  "author": "Voqalize",
-  "homepage": "https://github.com/voqalize/avatar#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/voqalize/avatar.git"
-  },
-  "bugs": {
-    "url": "https://github.com/voqalize/avatar/issues"
-  },
-  "keywords": [
-    "avatar",
-    "talking-head",
-    "lipsync",
-    "viseme",
-    "rhubarb",
-    "pipecat",
-    "voice-agent",
-    "svg",
-    "animation"
-  ],
   "engines": {
     "node": ">=20"
   },
   "packageManager": "pnpm@10.32.1",
-  "publishConfig": {
-    "access": "public"
-  },
-  "type": "module",
-  "sideEffects": false,
-  "exports": {
-    ".": {
-      "types": "./client/dist/index.d.ts",
-      "default": "./client/dist/index.js"
-    },
-    "./react": {
-      "types": "./client/dist/react.d.ts",
-      "default": "./client/dist/react.js"
-    },
-    "./internal": {
-      "types": "./client/dist/internal.d.ts",
-      "default": "./client/dist/internal.js"
-    },
-    "./faces/peep": {
-      "types": "./src/face-peep.d.ts",
-      "default": "./src/face-peep.js"
-    },
-    "./faces/wren": {
-      "types": "./src/face-wren.d.ts",
-      "default": "./src/face-wren.js"
-    },
-    "./faces/myna": {
-      "types": "./src/face-myna.d.ts",
-      "default": "./src/face-myna.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "files": [
-    "src",
-    "client/dist",
-    "client/src",
-    "docs/contract-wire.md",
-    "docs/contract-behavior.md",
-    "docs/design-avatar-interface.md",
-    "docs/internal-mixer.md",
-    "docs/internal-rig.md",
-    "docs/authoring-a-face.md",
-    "README.md"
-  ],
   "scripts": {
-    "build": "tsc -p client/tsconfig.json",
-    "typecheck": "tsc -p client/tsconfig.json --noEmit",
+    "build": "tsc -p packages/avatar/tsconfig.json",
+    "typecheck": "tsc -p packages/avatar/tsconfig.json --noEmit",
     "test": "vitest run",
-    "server:vendor": "esbuild server/vendor.entry.js --bundle --format=esm --outfile=server/vendor/pipecat.js",
+    "server:vendor": "esbuild apps/server/vendor.entry.js --bundle --format=esm --outfile=apps/server/vendor/pipecat.js",
     "studio:dev": "pnpm --filter @voqalize/avatar-studio dev",
     "studio:build": "pnpm --filter @voqalize/avatar-studio build",
-    "studio:typecheck": "pnpm --filter @voqalize/avatar-studio typecheck",
-    "prepare": "tsc -p client/tsconfig.json"
-  },
-  "peerDependencies": {
-    "@pipecat-ai/client-js": ">=1.4 <2",
-    "react": ">=18",
-    "react-dom": ">=18"
-  },
-  "peerDependenciesMeta": {
-    "@pipecat-ai/client-js": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    },
-    "react-dom": {
-      "optional": true
-    }
+    "studio:typecheck": "pnpm --filter @voqalize/avatar-studio typecheck"
   },
   "devDependencies": {
     "@pipecat-ai/client-js": "catalog:",

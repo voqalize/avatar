@@ -1,7 +1,8 @@
 # Build the distributable `voqalize-avatar` wheels — one per platform, each
 # carrying the `avatarsync` aligner and its model tree.
 #
-# **This workflow is canonical.** `native/avatarsync/build.sh` is the local loop:
+# **This workflow is canonical.** `packages/avatar-py/native/avatarsync/build.sh`
+# is the local loop:
 # it exists so a developer can compile and iterate on their own machine, and it
 # takes the same portability flags so a local build is debuggable against this
 # one. But nothing a laptop produces is ever published. Every byte that reaches
@@ -10,7 +11,8 @@
 #
 # The matrix is the supported-platform list. Adding a row is how this project
 # supports a new platform; there is no other list to update, because the wheel
-# tag is derived from the library rather than declared (py/scripts/stage_native.py).
+# tag is derived from the library rather than declared
+# (packages/avatar-py/scripts/stage_native.py).
 #
 # Linux builds inside the manylinux_2_28 image rather than on the runner. The
 # runner is Ubuntu 24.04 (glibc 2.39), which would produce a wheel that pip
@@ -76,11 +78,11 @@ jobs:
       # Compiles the library AND materialises res/ (the 56 MB model tree, which
       # is generated rather than committed). Both are wheel inputs.
       - name: compile avatarsync
-        working-directory: native/avatarsync
+        working-directory: packages/avatar-py/native/avatarsync
         run: ./build.sh
 
       - name: report the floor this library earned
-        working-directory: native/avatarsync
+        working-directory: packages/avatar-py/native/avatarsync
         run: |
           lib=bin/${{ matrix.id }}/libavatarsync.so
           if [ "${{ runner.os }}" = "Linux" ]; then
@@ -97,7 +99,7 @@ jobs:
       # not the legs. What the library can actually *say* is checked at the end,
       # against the installed wheel, through the shipped CLI.
       - name: smoke-test the library
-        working-directory: native/avatarsync
+        working-directory: packages/avatar-py/native/avatarsync
         run: |
           python3 - <<'PY'
           import ctypes, glob, re, sys
@@ -108,8 +110,10 @@ jobs:
           # different builds is precisely what this step exists to catch — and a
           # copy of the constant in a workflow is a copy that goes stale
           # silently, which is what it did: this asserted 1 against a library
-          # that had said 3 since the streaming legs landed.
-          binding = Path("../../py/src/voqalize_avatar/_native.py").read_text()
+          # that had said 3 since the streaming legs landed. Two up from
+          # `native/avatarsync` is the package root, since the aligner now lives
+          # inside the package whose wheel ships it.
+          binding = Path("../../src/voqalize_avatar/_native.py").read_text()
           expected = int(re.search(r"^ABI_VERSION = (\d+)", binding, re.M).group(1))
 
           path = (glob.glob("bin/*/libavatarsync.so") + glob.glob("bin/*/libavatarsync.dylib"))[0]
@@ -118,7 +122,7 @@ jobs:
           print(f"{path}: ABI {abi} (binding wants {expected}), {shapes} shapes")
           if abi != expected:
               sys.exit(f"library speaks ABI {abi}, _native.py speaks {expected}")
-          # A-H plus X. The widget's whole vocabulary; see docs/contract-protocol.md.
+          # A-H plus X. The widget's whole vocabulary; see docs/contract-wire.md.
           if shapes != 9:
               sys.exit(f"expected 9 shapes, library reports {shapes}")
           PY
@@ -134,8 +138,8 @@ jobs:
       - name: stage the payload and build the wheel
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          python3 py/scripts/stage_native.py
-          cd py && uv build --wheel
+          python3 packages/avatar-py/scripts/stage_native.py
+          cd packages/avatar-py && uv build --wheel
 
       # The failure this guards is silent and expensive: if staging is skipped or
       # the hook does not fire, hatchling happily produces a 64 KB py3-none-any
@@ -143,7 +147,7 @@ jobs:
       - name: refuse a wheel with no payload
         run: |
           set -e
-          whl=$(ls py/dist/*.whl)
+          whl=$(ls packages/avatar-py/dist/*.whl)
           echo "built $whl"
           case "$whl" in
             *py3-none-any.whl) echo "::error::pure wheel — the payload was not staged"; exit 1 ;;
@@ -167,7 +171,7 @@ jobs:
           # `py3-none-<plat>` and installs on any of them; this pin is about the
           # dependency tree the verification drags in, not about the artifact.
           uv venv --python 3.12 /tmp/verify
-          uv pip install --python /tmp/verify/bin/python py/dist/*.whl
+          uv pip install --python /tmp/verify/bin/python packages/avatar-py/dist/*.whl
           # From /tmp, so nothing can resolve out of the checkout.
           cd /tmp && /tmp/verify/bin/voqalize-avatar info | tee info.txt
           if grep -q MISSING info.txt; then
@@ -180,20 +184,21 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.id }}
-          path: py/dist/*.whl
+          path: packages/avatar-py/dist/*.whl
           if-no-files-found: error
 
       # The bare library, for inspecting a build without unzipping a 44 MB wheel
       # — `nm`, `strings`, a glibc-symbol check. Not a distribution channel:
       # run artifacts expire after 90 days, so anyone who wants this library on
-      # their machine runs `native/avatarsync/get.sh`, which unpacks it from the
+      # their machine runs `packages/avatar-py/native/avatarsync/get.sh`, which
+      # unpacks it from the
       # published wheel and stays pinnable.
       - uses: actions/upload-artifact@v4
         with:
           name: avatarsync-${{ matrix.id }}
           path: |
-            native/avatarsync/bin/${{ matrix.id }}/libavatarsync.*
-            native/avatarsync/bin/${{ matrix.id }}/avatarsync.recipe
+            packages/avatar-py/native/avatarsync/bin/${{ matrix.id }}/libavatarsync.*
+            packages/avatar-py/native/avatarsync/bin/${{ matrix.id }}/avatarsync.recipe
           if-no-files-found: error
 
   sdist:
@@ -205,9 +210,9 @@ jobs:
       # Source only — no library, no model tree. Installing it gives the state
       # channel and the widget's own amplitude fallback, which the library treats
       # as an ordinary condition rather than an error.
-      - run: cd py && uv build --sdist
+      - run: cd packages/avatar-py && uv build --sdist
       - uses: actions/upload-artifact@v4
         with:
           name: sdist
-          path: py/dist/*.tar.gz
+          path: packages/avatar-py/dist/*.tar.gz
           if-no-files-found: error

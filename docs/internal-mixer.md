@@ -8,11 +8,11 @@
 > [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md).
 >
 > What follows is the imperative surface underneath all of that — the one the
-> `authoring/` rig pages and the headless tools drive directly, and the one a
+> `apps/authoring/` rig pages and the headless tools drive directly, and the one a
 > behavior author works against. It ships under `@voqalize/avatar/internal`
 > with no semver promise. Studio pointedly does *not* use it: Studio is the
 > surface an integrator copies from, so it takes the published `createAvatar`
-> and nothing else ([studio/README.md](../studio/README.md)).
+> and nothing else ([apps/studio/README.md](../apps/studio/README.md)).
 
 Everything below is reachable from one import:
 
@@ -42,7 +42,7 @@ A state is a *condition*, not an event: it holds until replaced. Each state
 bundles a default gaze, emotion and idle-energy level. Passing `emotion`/`gaze`
 overrides the bundle; `keepGaze: true` preserves whatever gaze was already set.
 
-**The state list lives in `STATES` (`src/avatar.js`), and that is the only
+**The state list lives in `STATES` (`packages/avatar/src/avatar.js`), and that is the only
 copy.** Each entry carries the perceptual reasoning for its own numbers in a
 comment above it — why `THINKING` averts *downward*, why `CANT_HEAR`'s brows go
 down rather than up, why `WORKING` looks at `SCREEN_WORK` and not `NOTES`. A
@@ -97,7 +97,7 @@ then releases it when the action lands.
 ## Actions — `action(id)`
 
 Finite authored clips with baked plausible timings, so they are convincing with
-**no audio attached**. `src/interjections.js` holds two lists, each clip's
+**no audio attached**. `packages/avatar/src/interjections.js` holds two lists, each clip's
 duration and keyframes beside its intent:
 
 - `ACTION_IDS` / `ACTIONS` — the seven a *server* may send, and the only ids
@@ -107,7 +107,7 @@ duration and keyframes beside its intent:
 - `INTERNAL_CLIPS` — the full authoring library the seven are drawn from, ~33
   clips. It is a *timeline* library, not a second action vocabulary: nothing on
   the mixer's surface takes one of its ids, and the authoring pages that review
-  them (`authoring/clip-strip.html`) drive a bare `ClipPlayer` instead. That
+  them (`apps/authoring/clip-strip.html`) drive a bare `ClipPlayer` instead. That
   asymmetry is on purpose — promoting a clip to an action is a decision, and it
   should cost an edit to `ACTION_IDS`.
 
@@ -242,8 +242,8 @@ and tuned on the rig.
 
 **A server cannot send one of these.** `perform` is not on the wire, and
 deliberately so; this is a local authoring surface only.
-`authoring/perf-clips.json` scripts its turns this way and
-`authoring/expression-lab.html` plays them:
+`apps/authoring/perf-clips.json` scripts its turns this way and
+`apps/authoring/expression-lab.html` plays them:
 
 ```js
 avatar.speak({ cues, audio });          // the utterance
@@ -326,4 +326,4 @@ is usually a channel whose τ you have paid for twice.
   For tuning UIs and tests, not production.
 - `blink(double?)`, `step(dt)` (only under `{manual: true}`), `destroy()`.
 
-Types: [`src/avatar.d.ts`](../src/avatar.d.ts), hand-maintained beside the code.
+Types: [`packages/avatar/src/avatar.d.ts`](../packages/avatar/src/avatar.d.ts), hand-maintained beside the code.

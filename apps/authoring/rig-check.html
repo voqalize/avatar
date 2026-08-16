@@ -1,0 +1,135 @@
+<!doctype html>
+<!--
+  Rig conformance check — every registered avatar, driven side by side.
+
+  The contact sheet proves `apply(p)` renders sane geometry for a static vector.
+  This proves the other half: that the avatar survives the *live* rig — the
+  mixer, the smoothing, the gaze layer, idle blinks, clip deltas and a real
+  viseme track running off an audio-less clock.
+
+  Both avatars receive the identical command at the identical moment, so any
+  difference on screen is a difference in the avatar, never in the driving.
+  That is the whole point of putting them next to each other.
+-->
+<meta charset="utf-8">
+<title>Avatar — rig check (all avatars)</title>
+<style>
+  body { margin: 0; padding: 20px; background: #14171c; color: #c8ccd4;
+         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  h1 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+  #bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  #bar fieldset { border: 1px solid #2a3039; border-radius: 6px; margin: 0; padding: 6px 8px 8px; }
+  #bar legend { color: #7d8694; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+  button { background: #212832; color: #c8ccd4; border: 1px solid #333c48; border-radius: 4px;
+           padding: 3px 7px; font: inherit; font-size: 11px; cursor: pointer; }
+  button:hover { background: #2b3542; }
+  #stage { display: flex; gap: 16px; flex-wrap: wrap; }
+  .pane { background: #1c2027; border-radius: 8px; padding: 10px; }
+  .pane h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+             color: #7d8694; margin: 0 0 8px; font-weight: 600; }
+  /* Height is fixed so the panes stay row-aligned; width follows each
+     avatar's own aspect ratio, set from its descriptor below. */
+  .mount { height: 375px; }
+  .mount svg { width: 100%; height: 100%; display: block; }
+  #log { margin-top: 14px; color: #7d8694; font-size: 11px; white-space: pre-wrap; }
+  .bad { color: #e5736a; }
+</style>
+<body>
+<h1>Rig check — <span id="names"></span></h1>
+<div id="bar"></div>
+<div id="stage"></div>
+<div id="log"></div>
+
+<script type="module">
+import {
+  createAvatar, STATE_NAMES, EMOTION_NAMES, GAZE_NAMES,
+  ACTION_IDS, textToCues,
+} from '../../packages/avatar/src/avatar.js';
+import { conformanceSweep } from '../../packages/avatar/src/conformance.js';
+import { FACES, FACE_NAMES } from '../../packages/avatar/src/faces.js';
+
+const stage = document.getElementById('stage');
+const bar = document.getElementById('bar');
+const log = document.getElementById('log');
+document.getElementById('names').textContent = FACE_NAMES.join(' · ');
+
+// One rig per avatar. Same options otherwise — the avatar name is the only
+// variable in the experiment.
+const rigs = FACE_NAMES.map((name) => {
+  const pane = document.createElement('div');
+  pane.className = 'pane';
+  pane.innerHTML = `<h2>${name}</h2>`;
+  const mount = document.createElement('div');
+  mount.className = 'mount';
+  pane.append(mount);
+  stage.append(pane);
+  const avatar = createAvatar({ mount, face: FACES[name] });
+  const vb = avatar.meta.viewBox;
+  mount.style.width = `${375 * (vb.w / vb.h)}px`;
+  return { name, avatar };
+});
+
+/** Broadcast one call to every rig, so the panes stay frame-aligned. */
+const all = (fn) => rigs.forEach((r) => fn(r.avatar, r.name));
+
+// Exposed for scripted inspection from devtools — the rig is judged by eye, and
+// forcing both faces to an identical parameter vector is how you tell an avatar
+// bug from a mixer bug.
+window.rigs = rigs;
+window.pose = (overrides, ms = 650) => {
+  all((k) => k.setOverrides(overrides));
+  return new Promise((r) => setTimeout(r, ms));
+};
+window.unpose = () => all((k) => k.setOverrides(null));
+
+function group(title, items, fn) {
+  const fs = document.createElement('fieldset');
+  fs.innerHTML = `<legend>${title}</legend>`;
+  for (const it of items) {
+    const b = document.createElement('button');
+    b.textContent = it;
+    b.onclick = () => { all((k) => fn(k, it)); note(`${title}: ${it}`); };
+    fs.append(b);
+  }
+  bar.append(fs);
+}
+
+group('state', STATE_NAMES, (k, v) => k.setState(v));
+group('emotion', EMOTION_NAMES, (k, v) => k.setEmotion(v, 1));
+group('gaze', GAZE_NAMES, (k, v) => k.setGaze(v));
+group('action', ACTION_IDS, (k, v) => k.action(v));
+group('speech', ['speak', 'stop', 'blink'], (k, v) => {
+  if (v === 'stop') return k.stopSpeaking();
+  if (v === 'blink') return k.blink(true);
+  // No audio: `speak` with no clock source falls back to a performance.now()
+  // clock, which is exactly the muted/degraded path the brief requires to work.
+  k.speak({ cues: textToCues('tell me about a time you disagreed with your team') });
+});
+
+function note(msg) { log.textContent = msg + '\n' + log.textContent.split('\n').slice(0, 8).join('\n'); }
+
+// --- automatic conformance sweep -----------------------------------------
+// The manual buttons are for looking; this is for proving. The assertions and
+// the order they run in live in `src/conformance.js`, because the same sweep
+// runs headless in `packages/avatar/test/conformance.test.ts` and two copies of a gate
+// is one copy that quietly stops matching. What this page adds is real time
+// passing, on a face you can watch it happen to.
+window.sweep = async () => {
+  const { ok, problems, summary } = await conformanceSweep(rigs);
+  log.innerHTML = ok
+    ? `sweep passed — ${summary}`
+    : `<span class="bad">${problems.length} problems</span>\n` + problems.slice(0, 40).join('\n');
+  return { ok, problems };
+};
+
+const fs = document.createElement('fieldset');
+fs.innerHTML = '<legend>verify</legend>';
+const b = document.createElement('button');
+b.textContent = 'run sweep';
+b.onclick = () => window.sweep();
+fs.append(b);
+bar.append(fs);
+
+note('ready — ' + rigs.length + ' rigs live');
+</script>
+</body>

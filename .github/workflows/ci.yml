@@ -33,15 +33,16 @@ jobs:
           cache: pnpm
 
       # One install for the whole workspace — the package, the IDE and the rig
-      # tooling. `prepare` compiles client/ on install, so this also proves the
-      # one build step in the repo still works.
+      # tooling. `prepare` compiles packages/avatar/client/ on install, so this
+      # also proves the one build step in the repo still works.
       - run: pnpm install --frozen-lockfile
 
       - name: typecheck
         run: pnpm run typecheck
 
       - name: unit tests
-        # Includes the rig conformance sweep (`client/test/conformance.test.ts`)
+        # Includes the rig conformance sweep
+        # (`packages/avatar/test/conformance.test.ts`)
         # — every state, emotion, gaze and semantic action on every shipped
         # face, asserting finite in-range params and an attached drawing. It
         # used to be a puppeteer job; the assertions never looked at a pixel,
@@ -51,19 +52,21 @@ jobs:
       - name: studio typecheck and build
         # `build` is `tsc --noEmit && vite build`, so this is the typecheck too.
         # Studio resolves `@voqalize/avatar` through the workspace link — the
-        # real `exports` map, out of `client/dist` — so a build failing here is
-        # usually the published entrypoint being wrong rather than the IDE:
-        # it is the only thing in CI that consumes the package as a consumer
-        # does, from outside.
+        # real `exports` map, out of `packages/avatar/dist` — so a build
+        # failing here is
+        # usually the published entrypoint being wrong rather than the IDE: it
+        # is the only thing in CI that consumes the package as a consumer does,
+        # from outside.
         run: pnpm run studio:build
 
       - name: npm package contents
         # The tarball is the artifact consumers actually get; `files` has been
-        # wrong before (client/dist is gitignored, and npm applies .gitignore
-        # inside a files entry).
+        # wrong before (dist/ is gitignored, and npm applies .gitignore inside a
+        # files entry).
+        working-directory: packages/avatar
         run: |
           pnpm pack --dry-run
-          test -f client/dist/index.js
+          test -f dist/index.js
           # The one export re-exports the widget by relative path out of dist,
           # so `src/` has to be in the tarball too or the entrypoint is a
           # dangling import.
@@ -97,7 +100,8 @@ jobs:
       fail-fast: false
       matrix:
         # Both ends of the declared range. The floor is a real claim — one
-        # pipecat constructor moved inside it, and py/tests/helpers.py spans
+        # pipecat constructor moved inside it, and
+        # packages/avatar-py/tests/helpers.py spans
         # the seam — so "we support 1.4" is checked, not asserted.
         include:
           - pipecat: floor
@@ -120,16 +124,16 @@ jobs:
       # does and not when an unrelated line of build.sh does.
       - name: aligner cache key
         id: recipe
-        run: echo "id=$(native/avatarsync/build.sh --recipe-id)" >> "$GITHUB_OUTPUT"
+        run: echo "id=$(packages/avatar-py/native/avatarsync/build.sh --recipe-id)" >> "$GITHUB_OUTPUT"
 
       - name: cache the aligner library and model tree
         id: aligner-cache
         uses: actions/cache@v4
         with:
           path: |
-            native/avatarsync/bin
-            native/avatarsync/res
-            native/avatarsync/.cache
+            packages/avatar-py/native/avatarsync/bin
+            packages/avatar-py/native/avatarsync/res
+            packages/avatar-py/native/avatarsync/.cache
           key: avatarsync-${{ runner.os }}-${{ steps.recipe.outputs.id }}
 
       - name: install build dependencies
@@ -138,16 +142,16 @@ jobs:
 
       - name: build the aligner
         if: steps.aligner-cache.outputs.cache-hit != 'true'
-        run: native/avatarsync/build.sh
+        run: packages/avatar-py/native/avatarsync/build.sh
 
       - name: tests
-        working-directory: py
+        working-directory: packages/avatar-py
         env:
           UV_RESOLUTION: ${{ matrix.resolution }}
           # Turns "the aligner is missing" from a skip into a failure. Without
           # it a green backend job proves only that the pure-Python half works;
           # the decoder, the pool ceiling and both viseme legs go untested. See
-          # py/tests/conftest.py.
+          # packages/avatar-py/tests/conftest.py.
           AVATAR_REQUIRE_ALIGNER: "1"
         # `--frozen` is wrong here: the whole point of the matrix is to
         # re-resolve at each end of the range rather than replay the lockfile.
@@ -159,12 +163,12 @@ jobs:
       # contract does not vary with the dependency floor.
       - name: server frame contract
         if: matrix.pipecat == 'resolved'
-        working-directory: server
-        run: uv run --project ../py --group server --group dev python -m pytest -q
+        working-directory: apps/server
+        run: uv run --project ../../packages/avatar-py --group server --group dev python -m pytest -q
 
       - name: distributions build and validate
         if: matrix.pipecat == 'resolved'
-        working-directory: py
+        working-directory: packages/avatar-py
         run: |
           uv build
           uvx twine check dist/*

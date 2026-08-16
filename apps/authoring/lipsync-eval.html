@@ -1,0 +1,375 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Avatar — blind lipsync evaluation</title>
+<!--
+  Blind readability test for Rhubarb's output on real synthesised speech.
+
+  Every measurement so far has been agreement *against* Rhubarb, which cannot say
+  whether Rhubarb itself is good enough. This asks the only question that can:
+  can a person watching the rig read the speech? Text is hidden by default so the
+  judgement is not contaminated by knowing the answer — reading lips is far easier
+  when you already know the words, which is exactly the bias that makes
+  "looks fine to me" worthless here.
+
+  Two cue tracks per clip, both through Rhubarb's own animate(), so any visible
+  difference is the phone timeline and never the shape logic:
+    sphinx    pocketSphinx + dialog text, ~1.0x realtime — the accuracy ceiling,
+              too slow to run before playback.
+    phonetic  phone-loop recogniser, ~0.08x realtime — fast enough for the live
+              path, and the whole cheap approach depends on it being good enough.
+
+  The track is also hidden until reveal, so an A/B verdict stays honest.
+-->
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f25; --line: #2b2f37;
+    --ink: #e6e8ec; --dim: #8b929e; --accent: #6ea8fe;
+    --ok: #4ec988; --mid: #e0b341; --bad: #e0685f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: grid; grid-template-columns: minmax(0,1fr) 340px; height: 100vh;
+  }
+  /* The avatar scrolls if it must; the transport never does. On a short window a
+     centred flex column pushes the verdict buttons off the bottom edge with no
+     way to reach them, which quietly breaks the whole exercise. */
+  main { display: grid; grid-template-rows: 1fr auto; min-height: 0; padding: 16px 20px; }
+  #view { display: flex; flex-direction: column; align-items: center;
+          justify-content: safe center; gap: 14px; min-height: 0; overflow-y: auto; }
+  #transport { display: flex; flex-direction: column; align-items: center; gap: 10px;
+               padding-top: 12px; }
+  aside { border-left: 1px solid var(--line); background: var(--panel);
+          padding: 20px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+  @media (max-width: 820px) {
+    body { grid-template-columns: 1fr; height: auto; }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+  }
+  h1 { font-size: 15px; margin: 0; letter-spacing: .02em; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+       color: var(--dim); margin: 0 0 8px; font-weight: 600; }
+
+  #stage { width: min(40vh, 380px); flex: none; }
+  #stage svg { width: 100%; height: auto; display: block; }
+
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit; color: var(--ink); background: #262a31; border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 13px; cursor: pointer;
+  }
+  button:hover { background: #2f343c; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #10131a; font-weight: 600; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #10131a; }
+  kbd { font: 11px ui-monospace, monospace; color: var(--dim); border: 1px solid var(--line);
+        border-radius: 4px; padding: 0 4px; }
+
+  /* Hidden rather than absent so the layout does not jump on reveal — a shifting
+     page between clips makes the comparison harder than it needs to be. */
+  .veil { visibility: hidden; }
+  #text { font-size: 18px; line-height: 1.4; text-align: center; max-width: 52ch;
+          min-height: 2.8em; }
+  #meta { color: var(--dim); font: 12px ui-monospace, monospace; min-height: 1.4em; }
+
+  #strip { display: flex; width: 100%; max-width: 640px; height: 30px; gap: 1px;
+           font: 11px ui-monospace, monospace; }
+  #strip div { display: grid; place-items: center; background: #262a31;
+               border-radius: 2px; min-width: 0; overflow: hidden; color: var(--dim); }
+  #strip div.now { background: var(--accent); color: #10131a; font-weight: 700; }
+  /* A closed mouth is the one a viewer reads instantly, so it is worth seeing
+     where the track puts them. */
+  #strip div.shut { background: #33383f; color: #6d747f; }
+  #strip div.shut.now { background: var(--accent); color: #10131a; }
+
+  table { width: 100%; border-collapse: collapse; font: 12px ui-monospace, monospace; }
+  td { padding: 3px 0; }
+  td:last-child { text-align: right; color: var(--dim); }
+  .tally { display: flex; gap: 6px; }
+  .tally span { flex: 1; text-align: center; padding: 6px 0; border-radius: 5px;
+                background: #262a31; font: 12px ui-monospace, monospace; }
+  ol { margin: 0; padding-left: 18px; color: var(--dim); font-size: 12px; }
+  li { margin-bottom: 5px; }
+  #list { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+  #list button { padding: 5px 0; font: 11px ui-monospace, monospace; }
+  #list button.cur { outline: 2px solid var(--accent); }
+  #list button.v1 { background: #24402f; } #list button.v2 { background: #40391f; }
+  #list button.v3 { background: #40282a; }
+  #note { color: var(--dim); font-size: 12px; }
+</style>
+
+<main>
+  <div id="view">
+    <div id="stage"></div>
+    <div id="text" class="veil"></div>
+    <div id="meta" class="veil"></div>
+    <div id="strip"></div>
+  </div>
+  <div id="transport">
+    <div class="row">
+      <button id="prev">← Prev</button>
+      <button id="play" class="primary">▶ Play <kbd>space</kbd></button>
+      <button id="reveal">Reveal <kbd>R</kbd></button>
+      <button id="next">Next →</button>
+    </div>
+    <div class="row">
+      <span style="color:var(--dim)">Could you read it?</span>
+      <button data-v="1">1 — Yes</button>
+      <button data-v="2">2 — Partly</button>
+      <button data-v="3">3 — No</button>
+    </div>
+  </div>
+</main>
+
+<aside>
+  <div>
+    <h1>Blind lipsync evaluation</h1>
+    <div id="note" style="margin-top:6px">
+      Watch the mouth, guess the words, <em>then</em> reveal. Knowing the text first
+      makes almost any lipsync look convincing — that bias is what this page exists
+      to avoid.
+    </div>
+  </div>
+
+  <div>
+    <h2>Clip <span id="pos"></span></h2>
+    <div id="list"></div>
+  </div>
+
+  <div>
+    <h2>Mode</h2>
+    <div class="row">
+      <button id="blind" class="on">Blind: on</button>
+      <button id="auto">Autoplay: on</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="track" title="Hidden until reveal while blind">Track: hidden</button>
+    </div>
+  </div>
+
+  <div>
+    <h2>Verdicts</h2>
+    <div class="tally">
+      <span id="t1">–</span><span id="t2">–</span><span id="t3">–</span>
+    </div>
+    <table id="bykind"></table>
+    <div class="row" style="margin-top:10px">
+      <button id="copy">Copy results</button>
+      <button id="resetv">Reset</button>
+    </div>
+  </div>
+
+  <div>
+    <h2>What to look for</h2>
+    <ol>
+      <li>Do closed-mouth moments land on <em>p / b / m</em>?</li>
+      <li>Does the mouth move at all during vowels, or flap uniformly?</li>
+      <li>Does it start and stop with the voice, or lag?</li>
+      <li>On the interjections — is "Okay" distinguishable from "Sure"?</li>
+    </ol>
+  </div>
+
+  <div>
+    <h2>Shapes</h2>
+    <table>
+      <tr><td>A</td><td>closed — p b m</td></tr>
+      <tr><td>B</td><td>slightly open — consonants, EE</td></tr>
+      <tr><td>C</td><td>open — EH AE</td></tr>
+      <tr><td>D</td><td>wide — AA</td></tr>
+      <tr><td>E</td><td>rounded — AO ER</td></tr>
+      <tr><td>F</td><td>puckered — UW OW W</td></tr>
+      <tr><td>G</td><td>teeth on lip — F V</td></tr>
+      <tr><td>H</td><td>L</td></tr>
+      <tr><td>X</td><td>rest / silence</td></tr>
+    </table>
+  </div>
+</aside>
+
+<script type="module">
+import { createAvatar } from '../../packages/avatar/src/avatar.js';
+import { peep } from '../../packages/avatar/src/face-peep.js';
+
+// Clips and audio sit beside the pages, flat, because the JSON files embed
+// `eval-audio/…` relative paths — one copy of a hundred wavs, shared by both
+// lipsync pages and by packages/avatar-py/scripts/check_alignment.py.
+const DATA = './';
+const clips = await (await fetch(`${DATA}eval-clips.json`)).json();
+const avatar = createAvatar({ mount: document.getElementById('stage'), face: peep });
+
+const $ = (id) => document.getElementById(id);
+let i = 0, blind = true, autoplay = true, track = 'sphinx', revealed = false;
+let audio = null, raf = 0;
+const verdicts = new Map();
+
+// Preload every clip up front. A stall between pressing play and the first
+// viseme would be read as the rig lagging, which is exactly the defect being
+// judged — the measurement must not manufacture its own artefact.
+const media = clips.map((c) => {
+  const a = new Audio(DATA + c.audio);
+  a.preload = 'auto';
+  return a;
+});
+
+function cur() { return clips[i]; }
+
+function drawStrip() {
+  const c = cur();
+  const cues = c.tracks[track];
+  const strip = $('strip');
+  strip.innerHTML = '';
+  cues.forEach((cue, k) => {
+    const end = k + 1 < cues.length ? cues[k + 1].t : c.ms;
+    const d = document.createElement('div');
+    d.style.flexGrow = String(Math.max(1, end - cue.t));
+    d.textContent = cue.v;
+    // Only meaningful once the answer is on screen; while blind it would leak
+    // the phone count, and a long strip of letters is itself a hint.
+    if (cue.v === 'A' || cue.v === 'X') d.classList.add('shut');
+    strip.appendChild(d);
+  });
+  strip.classList.toggle('veil', blind && !revealed);
+}
+
+function paintPlayhead() {
+  const c = cur();
+  const cues = c.tracks[track];
+  const t = audio ? audio.currentTime * 1000 : 0;
+  let active = -1;
+  for (let k = 0; k < cues.length; k++) if (cues[k].t <= t) active = k;
+  [...$('strip').children].forEach((el, k) => el.classList.toggle('now', k === active));
+  if (audio && !audio.paused) raf = requestAnimationFrame(paintPlayhead);
+}
+
+function render() {
+  const c = cur();
+  revealed = false;
+  $('pos').textContent = `${i + 1} / ${clips.length}`;
+  $('text').textContent = c.text;
+  $('meta').textContent =
+    `${c.kind} · ${c.voice} · ${(c.ms / 1000).toFixed(1)}s · track: ${track}`;
+  $('text').classList.toggle('veil', blind);
+  $('meta').classList.toggle('veil', blind);
+  $('track').textContent = blind ? 'Track: hidden' : `Track: ${track}`;
+  $('track').disabled = blind;
+  drawStrip();
+  [...$('list').children].forEach((b, k) => {
+    b.classList.toggle('cur', k === i);
+    b.className = b.className.replace(/ ?v[123]/g, '');
+    const v = verdicts.get(clips[k].id);
+    if (v) b.classList.add('v' + v);
+    if (k === i) b.classList.add('cur');
+  });
+  updateTally();
+}
+
+function stop() {
+  cancelAnimationFrame(raf);
+  if (audio) { audio.pause(); audio.currentTime = 0; }
+  avatar.stopSpeaking();
+  avatar.setState('LISTENING');
+}
+
+function play() {
+  stop();
+  const c = cur();
+  audio = media[i];
+  audio.currentTime = 0;
+  // The rig reads its clock from the audio element, so the cue track cannot
+  // drift from playback even if the tab stalls — same mechanism a host would use.
+  avatar.speak({ cues: c.tracks[track], audio });
+  audio.onended = () => { avatar.stopSpeaking(); avatar.setState('LISTENING'); };
+  raf = requestAnimationFrame(paintPlayhead);
+}
+
+function go(n) {
+  stop();
+  i = (n + clips.length) % clips.length;
+  render();
+  if (autoplay) setTimeout(play, 180);
+}
+
+function reveal() {
+  revealed = true;
+  $('text').classList.remove('veil');
+  $('meta').classList.remove('veil');
+  $('strip').classList.remove('veil');
+  $('track').disabled = false;
+  $('track').textContent = `Track: ${track}`;
+}
+
+function updateTally() {
+  const counts = [0, 0, 0];
+  for (const v of verdicts.values()) counts[v - 1]++;
+  const label = ['read', 'partly', 'no'];
+  [1, 2, 3].forEach((v) => { $('t' + v).textContent = `${label[v - 1]} ${counts[v - 1]}`; });
+
+  const kinds = {};
+  for (const c of clips) {
+    const v = verdicts.get(c.id);
+    if (!v) continue;
+    (kinds[c.kind] ||= [0, 0, 0])[v - 1]++;
+  }
+  $('bykind').innerHTML = Object.entries(kinds).map(([k, n]) =>
+    `<tr><td>${k}</td><td>${n[0]}/${n[0] + n[1] + n[2]} read</td></tr>`).join('');
+}
+
+$('play').onclick = play;
+$('prev').onclick = () => go(i - 1);
+$('next').onclick = () => go(i + 1);
+$('reveal').onclick = reveal;
+$('blind').onclick = () => {
+  blind = !blind;
+  $('blind').textContent = `Blind: ${blind ? 'on' : 'off'}`;
+  $('blind').classList.toggle('on', blind);
+  render();
+};
+$('auto').onclick = () => {
+  autoplay = !autoplay;
+  $('auto').textContent = `Autoplay: ${autoplay ? 'on' : 'off'}`;
+};
+$('track').onclick = () => {
+  track = track === 'sphinx' ? 'phonetic' : 'sphinx';
+  $('track').textContent = `Track: ${track}`;
+  $('meta').textContent =
+    `${cur().kind} · ${cur().voice} · ${(cur().ms / 1000).toFixed(1)}s · track: ${track}`;
+  drawStrip();
+  play();
+};
+document.querySelectorAll('[data-v]').forEach((b) => {
+  b.onclick = () => {
+    verdicts.set(cur().id, Number(b.dataset.v));
+    if (!revealed) reveal();
+    updateTally();
+    render();
+    setTimeout(() => { if (i < clips.length - 1) go(i + 1); }, 400);
+  };
+});
+$('resetv').onclick = () => { verdicts.clear(); render(); };
+$('copy').onclick = () => {
+  const rows = clips.map((c) =>
+    `${c.id}\t${c.kind}\t${c.voice}\t${(c.ms / 1000).toFixed(1)}s\t${verdicts.get(c.id) || '-'}\t${c.text}`);
+  navigator.clipboard.writeText(
+    ['id\tkind\tvoice\tdur\tverdict(1=read,2=partly,3=no)\ttext', ...rows].join('\n'));
+  $('copy').textContent = 'Copied';
+  setTimeout(() => { $('copy').textContent = 'Copy results'; }, 1200);
+};
+
+clips.forEach((c, k) => {
+  const b = document.createElement('button');
+  b.textContent = k + 1;
+  b.title = `${c.kind} · ${(c.ms / 1000).toFixed(1)}s`;
+  b.onclick = () => go(k);
+  $('list').appendChild(b);
+});
+
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); play(); }
+  else if (e.key === 'r' || e.key === 'R') reveal();
+  else if (e.key === 'ArrowRight') go(i + 1);
+  else if (e.key === 'ArrowLeft') go(i - 1);
+  else if ('123'.includes(e.key)) document.querySelector(`[data-v="${e.key}"]`).click();
+});
+
+avatar.setState('LISTENING');
+render();
+</script>

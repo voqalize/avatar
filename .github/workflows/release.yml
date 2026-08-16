@@ -6,7 +6,7 @@
 # debugged in production. So there is one tag, `v<semver>`, it must equal both
 # manifests, and a release that cannot publish both publishes neither.
 #
-#   git tag v0.2.0 && git push origin v0.2.0
+#   git tag v0.3.0 && git push origin v0.3.0
 #
 # Neither job holds a long-lived credential. npm and PyPI both accept an OIDC
 # token minted by this workflow for this repository — see RELEASING.md for the
@@ -33,11 +33,13 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
-          npm_version=$(node -p "require('./package.json').version")
-          py_version=$(grep -m1 '^version = ' py/pyproject.toml | cut -d'"' -f2)
+          # The published manifests, not the workspace root — the root
+          # package.json is private and its version means nothing.
+          npm_version=$(node -p "require('./packages/avatar/package.json').version")
+          py_version=$(grep -m1 '^version = ' packages/avatar-py/pyproject.toml | cut -d'"' -f2)
           echo "tag=$tag  npm=$npm_version  pypi=$py_version"
           if [ "$tag" != "$npm_version" ] || [ "$tag" != "$py_version" ]; then
-            echo "::error::tag $tag disagrees with package.json ($npm_version) or pyproject.toml ($py_version)"
+            echo "::error::tag $tag disagrees with packages/avatar/package.json ($npm_version) or packages/avatar-py/pyproject.toml ($py_version)"
             exit 1
           fi
           echo "version=$tag" >> "$GITHUB_OUTPUT"
@@ -69,12 +71,16 @@ jobs:
       # OIDC trusted-publishing exchange below is npm's, and `npm publish` reads
       # the manifest, not the store.
       - run: npm install -g npm@latest
-      # Runs `prepare`, which compiles client/dist — the tarball's entrypoint.
+      # Runs `prepare`, which compiles packages/avatar/dist — the tarball's
+      # entrypoint.
       - run: pnpm install --frozen-lockfile
       # --provenance signs an attestation linking the tarball to this workflow
       # run and this commit. Free on a public repo, and the only way a consumer
-      # can check that what they installed came from what they can read.
+      # can check that what they installed came from what they can read. Run in
+      # the package: `npm publish` reads the manifest in its working directory,
+      # and the root one is the private workspace manifest.
       - run: npm publish --provenance --access public
+        working-directory: packages/avatar
 
   # One wheel per platform, each carrying the aligner, plus the sdist. Compiled
   # here from the pinned upstream tarball — never from a committed binary.
@@ -93,7 +99,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: py/dist
+          path: packages/avatar-py/dist
           pattern: "{wheel-*,sdist}"
           merge-multiple: true
       # PyPI rejects the whole upload if one file is wrong, so a bad set fails
@@ -101,14 +107,14 @@ jobs:
       # and whose macOS users silently do not.
       - name: check the set before uploading
         run: |
-          ls -la py/dist
-          test -n "$(ls py/dist/*.tar.gz 2>/dev/null)" || { echo "::error::no sdist"; exit 1; }
-          n=$(ls py/dist/*.whl | wc -l)
+          ls -la packages/avatar-py/dist
+          test -n "$(ls packages/avatar-py/dist/*.tar.gz 2>/dev/null)" || { echo "::error::no sdist"; exit 1; }
+          n=$(ls packages/avatar-py/dist/*.whl | wc -l)
           [ "$n" -ge 3 ] || { echo "::error::only $n wheels; expected one per platform"; exit 1; }
-          ! ls py/dist/*py3-none-any.whl 2>/dev/null || { echo "::error::a pure wheel got in"; exit 1; }
+          ! ls packages/avatar-py/dist/*py3-none-any.whl 2>/dev/null || { echo "::error::a pure wheel got in"; exit 1; }
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: py/dist
+          packages-dir: packages/avatar-py/dist
 
   github-release:
     name: github release

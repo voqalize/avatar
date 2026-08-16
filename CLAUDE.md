@@ -30,21 +30,21 @@ mistake has already been made once.
 
 | layer | owns | code | reference |
 |---|---|---|---|
-| **wire** | `claim` / `action` / `cues`, nothing else | `client/src/AvatarClient.ts` | **[contract-wire.md](docs/contract-wire.md)** |
-| **avatar** | `createAvatar({mount, client}) -> {destroy()}` — the only public seam | `client/src/createAvatar.ts` | **[design-avatar-interface.md](docs/design-avatar-interface.md)** |
-| lifecycle | effective-state precedence, cue-clock anchor, FIFO ctx bind — **the one copy of the precedence ladder** | `client/src/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
-| behavior | states, actions, wire→library mapping | `src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
-| backend | state inference from stock frames, the viseme legs | `py/src/voqalize_avatar/` | [py/README.md](py/README.md) |
-| mixer | layer order, per-channel smoothing, gaze, idle, clips — **the driving API, `/internal`, no semver promise** | `src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
-| rig | `apply({pose, hand})` / `destroy()`, the 30 pose channels — **internal to the SVG renderer, not a seam to implement** | `src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
-| SVG faces | the drawings; `createFace` / `META`, exported as a `{create, meta}` value per module — never resolved by name | `src/face-*.js`, `line-art.js`, `src/faces.js` (tooling only) | [authoring-a-face.md](docs/authoring-a-face.md) |
+| **wire** | `claim` / `action` / `cues`, nothing else | `packages/avatar/client/AvatarClient.ts` | **[contract-wire.md](docs/contract-wire.md)** |
+| **avatar** | `createAvatar({mount, client}) -> {destroy()}` — the only public seam | `packages/avatar/client/createAvatar.ts` | **[design-avatar-interface.md](docs/design-avatar-interface.md)** |
+| lifecycle | effective-state precedence, cue-clock anchor, FIFO ctx bind — **the one copy of the precedence ladder** | `packages/avatar/client/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
+| behavior | states, actions, wire→library mapping | `packages/avatar/src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
+| backend | state inference from stock frames, the viseme legs | `packages/avatar-py/src/voqalize_avatar/` | [packages/avatar-py/README.md](packages/avatar-py/README.md) |
+| mixer | layer order, per-channel smoothing, gaze, idle, clips — **the driving API, `/internal`, no semver promise** | `packages/avatar/src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
+| rig | `apply({pose, hand})` / `destroy()`, the 30 pose channels — **internal to the SVG renderer, not a seam to implement** | `packages/avatar/src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
+| SVG faces | the drawings; `createFace` / `META`, exported as a `{create, meta}` value per module — never resolved by name | `packages/avatar/src/face-*.js`, `line-art.js`, `packages/avatar/src/faces.js` (tooling only) | [authoring-a-face.md](docs/authoring-a-face.md) |
 
-**The state list has exactly one copy: `STATES` in `src/avatar.js`,** with each
+**The state list has exactly one copy: `STATES` in `packages/avatar/src/avatar.js`,** with each
 entry's perceptual reasoning in the comment above it. A prose table of states in
 a doc is the shape that rots — the last one advertised a `TYPING` state for
 weeks after it was renamed `WORKING`. `npm test` now fails if a doc puts any
 SCREAMING_CASE name in backticks that the code does not define
-(`client/test/docs.test.ts`); the research pages are exempt, because naming
+(`packages/avatar/test/docs.test.ts`); the research pages are exempt, because naming
 things the code does not have is their job.
 
 Repo layout: [design-library-split.md § Layout](docs/design-library-split.md).
@@ -83,19 +83,19 @@ Non-obvious, and recorded nowhere else.
 - **The voice is part of the character, and a mismatch outranks every animation
   defect.** The library never chooses a TTS — but anything that *demonstrates*
   the library does, and a face read as one gender speaking in another is the
-  first thing anyone notices, before a single nod is judged. So `server/`'s
+  first thing anyone notices, before a single nod is judged. So `apps/server/`'s
   corpus is recorded once per voice from vql-speech itself — one `omnivoice/*`
   id per row, covering both the committed WAVs and the live stream, so the run
   everybody makes first is not demonstrating a voice nobody ships — and the
   picker sits before the call because a TTS opens its context with a voice id
-  ([server/README.md § Two voices](server/README.md)).
+  ([apps/server/README.md § Two voices](apps/server/README.md)).
 - **Autonomy is contingent, never decorative.** The renderer must never invent
   an acknowledgement — every nod, receipt and empathy beat is an explicit
   `action`.
 - **No arms.** A full forearm/hand chain was removed 2026-08-05 on sight
   (*"I would rather not add all the complexity for a 1% use case"*). The door is
   ajar — *"that was just how we implemented it"* — but do not re-add without
-  asking. `src/hand.js` clears the constraint by being the other design: no
+  asking. `packages/avatar/src/hand.js` clears the constraint by being the other design: no
   forearm, no parameter channel, no per-face geometry, one drawing placed from
   the rig window. **A channel only one avatar can render is the shape of the
   mistake**, whatever the body part.
@@ -124,9 +124,9 @@ Non-obvious, and recorded nowhere else.
   Author a deliberate lead or lag *on top of* what the mixer already supplies,
   not from zero. The arithmetic and the worked numbers are in
   [internal-mixer.md § Smoothing](docs/internal-mixer.md) — one copy.
-- **`src/` has no build step, and that is a constraint, not a convenience.**
-  Dependency-free ES modules — what you screenshot is what ships. `client/`
-  (tsc) and `studio/` (vite) are compiled; nothing in `src/` may depend on
+- **`packages/avatar/src/` has no build step, and that is a constraint, not a convenience.**
+  Dependency-free ES modules — what you screenshot is what ships. `packages/avatar/client/`
+  (tsc) and `apps/studio/` (vite) are compiled; nothing in `packages/avatar/src/` may depend on
   either. A change that makes the widget need a build has broken the shape of
   the project even if it works.
 - **Do not duplicate the backend.** When a consumer must signal something the
@@ -143,22 +143,22 @@ Non-obvious, and recorded nowhere else.
 The rig is judged by eye; the packages are judged by test.
 
 ```
-pnpm test                 # client/, package boundary, and the rig conformance sweep
-                          # (`src/conformance.js`) — run before committing src/
+pnpm test                 # the client, the package boundary, and the rig conformance sweep
+                          # (`packages/avatar/src/conformance.js`) — run before committing src/
 pnpm run studio:dev       # Avatar Studio — the review environment
-cd py && uv run pytest     # backend, against the real avatarsync library
-cd server && uv run --project ../py --group server --group dev python -m pytest
-cd py && uv run --group server python ../server/server.py   # a real call
+cd packages/avatar-py && uv run pytest     # backend, against the real avatarsync library
+cd apps/server && uv run --project ../../packages/avatar-py --group server --group dev python -m pytest
+cd packages/avatar-py && uv run --group server python ../../apps/server/server.py   # a real call
 ```
 
-Headless render/screenshot/diff/motion tooling: [authoring/tools/README.md](authoring/tools/README.md).
-Which Studio route validates which layer: [studio/README.md](studio/README.md).
+Headless render/screenshot/diff/motion tooling: [apps/authoring/tools/README.md](apps/authoring/tools/README.md).
+Which Studio route validates which layer: [apps/studio/README.md](apps/studio/README.md).
 
 Three things no suite will tell you:
 
-- **Lipsync is only ever verified in [`server/`](server/README.md)**
+- **Lipsync is only ever verified in [`apps/server/`](apps/server/README.md)**
   — a real call, your microphone, live TTS, `AvatarProcessor()` seated between
-  the TTS and the transport. `authoring/lipsync-review.html` plays *baked* cue
+  the TTS and the transport. `apps/authoring/lipsync-review.html` plays *baked* cue
   tracks, so it shows what a leg's cues look like and not how the two legs
   interleave, latch or rewrite under a real generator. Studio joins the same
   real call, so the legs are live there too — but Studio is an option surface,
@@ -166,7 +166,7 @@ Three things no suite will tell you:
   mouth moves the instant audio starts, and that the accurate leg's arrival is
   not visible as a jump.
 
-- **Serve with `python3 authoring/serve.py 8777`, never `python3 -m
+- **Serve with `python3 apps/authoring/serve.py 8777`, never `python3 -m
   http.server`.** The stdlib server sends `Last-Modified` and no `Cache-Control`, so browsers apply
   heuristic freshness and stop revalidating modules you have edited. That has
   cost three debugging sessions, one of which produced a module error that was
@@ -183,22 +183,22 @@ Three things no suite will tell you:
 ## In flight
 
 - **The rig contract is new; the SVG faces are still behind an adapter.**
-  `createSvgRig` (`src/rig.js`) is the migration shim. There is no second
+  `createSvgRig` (`packages/avatar/src/rig.js`) is the migration shim. There is no second
   renderer, deliberately: the one that existed implemented the rig contract
   instead of the wire and is why that page now opens with a warning box.
 - **There are exactly three non-published surfaces, and each answers one
-  question.** [`server/`](server/README.md) — *does it work in a real call?* One
+  question.** [`apps/server/`](apps/server/README.md) — *does it work in a real call?* One
   pipecat process, canned LLM and TTS behind the real pipecat interfaces, **zero
   API keys**, and the only place lipsync is ever judged.
-  [`studio/`](studio/README.md) — *is the published interface enough?* The IDE,
-  pointed at that same server. [`authoring/`](authoring/README.md) — *does the
+  [`apps/studio/`](apps/studio/README.md) — *is the published interface enough?* The IDE,
+  pointed at that same server. [`apps/authoring/`](apps/authoring/README.md) — *does the
   drawing read?* The workshop: rig pages, clip fixtures, headless tools, no
   build step. A thing that belongs in one of them and lands in another is how
   this repo once grew three answers to "show me the avatar".
 - **Studio is not a rig workbench, and no longer pretends to be.** It imports
-  `@voqalize/avatar` and nothing else from this repo — no `src/`, no
+  `@voqalize/avatar` and nothing else from this repo — no `packages/avatar/src/`, no
   `/internal` — so a thing it cannot do is a thing a consumer cannot do. It is
-  one screen driving a real `SmallWebRTCTransport` call against `server/`, and
+  one screen driving a real `SmallWebRTCTransport` call against `apps/server/`, and
   the connection picks the mode: disconnected you build the avatar, in a call
   you drive the server. There is no fake clock, no trace fixture and no
   demo-only state machine anywhere in it, and it does not compose wire messages
@@ -207,7 +207,7 @@ Three things no suite will tell you:
   message list answer transport questions on a page whose subject is the face.
 - **The vocabulary is the nine core states, everywhere above the mixer.** The
   render-state pass-throughs (`TYPING_CHAT`, `WANTS_IN`, …) are gone from
-  `src/behavior.js`; they are still real states *in* `src/avatar.js`, reached
+  `packages/avatar/src/behavior.js`; they are still real states *in* `packages/avatar/src/avatar.js`, reached
   with `avatar.setState`, which is whose state it is. Only the `TYPING` alias
   was deleted outright. Seven of the nine map 1:1 to a render state; `STRAINING`
   is the first one that does not (it draws as `CANT_HEAR`), which is the
@@ -236,9 +236,9 @@ Three things no suite will tell you:
   alone. A TTS with no word timestamps — most of them — says the same thing with
   one whole-sentence `TTSTextFrame`, and that went unread, so the splice point
   never left zero. Fixed; the cost is quadratic in the turn and the mouth looks
-  right either way, which is why only counting the wire found it. `server/`'s
+  right either way, which is why only counting the wire found it. `apps/server/`'s
   canned TTS can now be either shape (`word_timings=`, pipecat's
-  `push_text_frames` inverted) and `server/test_canned.py` seats the avatar
+  `push_text_frames` inverted) and `apps/server/test_canned.py` seats the avatar
   behind both — the branch that regressed is the one with no second signal to
   fall back on, so it is also what every unrelated test there runs against.
 - **New avatars follow the staged process** in

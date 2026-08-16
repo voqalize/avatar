@@ -9,7 +9,7 @@ That is the whole public contract. `client` is a required `PipecatClient`.
 avatar state beyond what `PipecatClient` exposes, and the caller does not get to
 read the avatar's internal state — we do not commit to any such behaviour.
 
-Code: [`client/src/createAvatar.ts`](../client/src/createAvatar.ts).
+Code: [`packages/avatar/client/createAvatar.ts`](../packages/avatar/client/createAvatar.ts).
 
 ## Adding an avatar
 
@@ -55,7 +55,7 @@ what it needs.
 | | |
 |---|---|
 | **the viseme clock** | `VisemeTrack` — cues + clock → which letter is on screen now. Every renderer needs it, none should write it twice. A library class to construct, not a contract to implement. `@voqalize/avatar/internal`. |
-| **compound behaviour** | Necessary for SVG, unnecessary for a renderer that authors its own transitions — a Rive state machine, say, is this layer and the rig fused. Stays inside our implementation ([`src/behavior.js`](../src/behavior.js), the mixer in [`src/avatar.js`](../src/avatar.js)). |
+| **compound behaviour** | Necessary for SVG, unnecessary for a renderer that authors its own transitions — a Rive state machine, say, is this layer and the rig fused. Stays inside our implementation ([`packages/avatar/src/behavior.js`](../packages/avatar/src/behavior.js), the mixer in [`packages/avatar/src/avatar.js`](../packages/avatar/src/avatar.js)). |
 | **gaze** | Not in the interface, and not by omission. The question is what gaze *communicates*. The action should be *"highlight that element"* and gaze follows it — not a lower-level gaze point. Deferred until a need names itself. |
 
 ## Layers
@@ -64,9 +64,9 @@ Three, and only the first is public.
 
 | | owns | code |
 |---|---|---|
-| **Avatar** | `createAvatar`, the pipecat binding, effective-state precedence, cue-clock anchor | `client/src/{createAvatar,AvatarClient}.ts` · [contract-wire.md](contract-wire.md), [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md) |
-| **Behavior** | states → sustained pose/gaze/idle, actions → finite clips | `src/behavior.js` · [contract-behavior.md](contract-behavior.md) |
-| **Renderer** | the SVG mixer, the pose channels, the faces | `src/avatar.js`, `src/rig.js`, `src/face-*.js` · [internal-rig.md](internal-rig.md) |
+| **Avatar** | `createAvatar`, the pipecat binding, effective-state precedence, cue-clock anchor | `packages/avatar/client/{createAvatar,AvatarClient}.ts` · [contract-wire.md](contract-wire.md), [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md) |
+| **Behavior** | states → sustained pose/gaze/idle, actions → finite clips | `packages/avatar/src/behavior.js` · [contract-behavior.md](contract-behavior.md) |
+| **Renderer** | the SVG mixer, the pose channels, the faces | `packages/avatar/src/avatar.js`, `packages/avatar/src/rig.js`, `packages/avatar/src/face-*.js` · [internal-rig.md](internal-rig.md) |
 
 An avatar author reads the first two. The third is our implementation's internal
 reference, published under `/internal` with no semver promise.

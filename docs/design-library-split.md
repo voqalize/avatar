@@ -35,7 +35,7 @@ application's, not the library's.
 |---|---|---|---|
 | `@voqalize/avatar` | npm | `createAvatar` (`.`), `<Avatar>` (`./react`), the mixer (`./internal`), one face each (`./faces/*`) | optional peers: react, `@pipecat-ai/client-js` |
 | `voqalize-avatar` | pypi | processor, state machine, wire, viseme engine, `avatarsync` runtime | `pipecat-ai>=1.4,<2` |
-| `native/avatarsync` | *inside the pypi wheel* | the C++ fork, its build, the model tree | — |
+| `packages/avatar-py/native/avatarsync` | *inside the pypi wheel* | the C++ fork, its build, the model tree | — |
 | — | — | `docs/` contracts, binding for all of them | — |
 
 **One npm package, and the subpaths have to earn their place.** It shipped as
@@ -157,7 +157,7 @@ minted for this repository running this workflow. Setup and the token fallback
 are in `RELEASING.md`.
 
 The native aligner is not a package of its own either — it ships inside the
-pypi wheel; see the `native/avatarsync` note in decision 2.
+pypi wheel; see the `packages/avatar-py/native/avatarsync` note in decision 2.
 
 ### 4. Two tiers of state, and the seam between them
 
@@ -177,7 +177,7 @@ Everything else the presence state depends on — is the bot speaking, is the us
 speaking, is the transport up — the client already has from `PipecatClient`'s
 own events, and reads there rather than being told. Claims are *candidates*
 underneath those facts; the precedence ladder that resolves them lives once, in
-`client/src/AvatarClient.ts`
+`packages/avatar/client/AvatarClient.ts`
 ([pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md)). The behavior
 vocabulary those two inputs resolve to is exactly seven names, and
 [contract-behavior.md](contract-behavior.md) owns the list.
@@ -201,7 +201,7 @@ all. `AvatarControlFrame` carries an `AvatarMessage`, so a seam can say
 richer poses (`REVIEWING_SCREEN`, `SEARCHING_SCREEN`, `CANT_HEAR`,
 `TYPING_CHAT`, `DISTRACTED`, `WANTS_IN`, …) are still real, still authored, and
 still reachable — through `avatar.setState` on the mixer, which is `./internal`
-and whose state list has exactly one copy, `STATES` in `src/avatar.js`. A host
+and whose state list has exactly one copy, `STATES` in `packages/avatar/src/avatar.js`. A host
 that wants one drives the mixer for it. That keeps the contract small enough to
 be worth calling a contract, and it puts the pass-throughs where their cost is
 visible.
@@ -259,9 +259,9 @@ a turn with three tools shows one settled `THINKING` rather than a flicker.
 ### 5. The reorganization stops above the waist
 
 Nothing in this work touches the drawings, the pose channels or the mixer's
-motion. If a face module or `src/params.js` changes because the packaging
+motion. If a face module or `packages/avatar/src/params.js` changes because the packaging
 changed, something has gone wrong — the waist is exactly where this should not
-reach, and it held: `src/` is still dependency-free ES modules with no build
+reach, and it held: `packages/avatar/src/` is still dependency-free ES modules with no build
 step.
 
 Above the waist it did change, and the direction was inward. The public seam is
@@ -283,57 +283,99 @@ host reaching past the export map for the raw widget genuinely does not need it.
 
 ## Layout
 
-`src/` stayed exactly where it was. Moving it would break every rig page and
-every headless tool for no gain a consumer can see, and the widget is this
-repo's primary artifact — it has earned the short path. Everything else is a
-sibling, and the siblings come in two kinds: the trees that ship, and the three
-that do not, each of which answers exactly one question.
+*Rewritten 0.3.0. This section used to argue the opposite of what it now says,
+and the argument is worth keeping visible rather than quietly replacing.*
+
+The widget used to live at `src/` in the repository root, beside a `client/`
+that compiled to `client/dist/`, and this page defended the short path: moving
+it would break every rig page and every headless tool for no gain a consumer
+could see, and the widget is the repo's primary artifact, so it had earned the
+top of the tree.
+
+What that reasoning priced at zero was the seam between the two trees.
+`client/dist/*.js` imported `../../src/*.js` — a relative path that climbed
+*out* of one top-level directory and back down into another — and because the
+package's entry point resolved that way, **every surface that served the package
+had to reproduce the repository's directory depth by hand.** The local server
+mounted `/src` and `/client/dist` at exactly those URLs so a browser following
+`../../` from one landed on the other. Vite's `fs.allow` had to reach above the
+studio root. The npm tarball only worked because `files` shipped both trees at
+their repo-relative positions. Four places encoding one accident of where two
+directories sat, none of them able to say so out loud, and each of them a thing a
+consumer could get wrong on their own.
+
+**0.3.0 merged the two trees into one package, and the relative path became an
+ordinary sibling import.** `packages/avatar/dist/*.js` imports `../src/*.js`,
+which is within the package in every context that has ever mattered — a static
+file server, vite, an npm install — with no arrangement made for it anywhere.
+The server mounts `packages/avatar` once at `/pkg` and the browser resolves the
+rest itself. That is the whole of the gain, and it is worth more than a short
+path.
+
+What is left is the canonical shape: published packages under `packages/`,
+things that are never published under `apps/`, and each of the three `apps/`
+answers exactly one question.
 
 ```
-src/                    the mixer, the rig, the faces — reached through
+packages/
+  avatar/               @voqalize/avatar — one package, one manifest
+    src/                the mixer, the rig, the faces — reached through
                         ./internal and ./faces/*, never by deep path
-  *.d.ts                its types, hand-maintained next to the code
-client/                 AvatarClient (splice, clock anchor) + React binding
-                        -> @voqalize/avatar, whose public export is createAvatar
-py/                     voqalize-avatar: pyproject + src/voqalize_avatar/ + tests
-native/avatarsync/      the rhubarb fork: patch, capi.cpp, build.sh, libavatarsync.*
-package.json            @voqalize/avatar and its export map
+      *.d.ts            its types, hand-maintained next to the code
+    client/             AvatarClient (splice, clock anchor) + React binding,
+                        the TypeScript that dist/ is compiled from
+    dist/               tsc output; gitignored, and the tarball's entry point
+    test/              the client suite, the package boundary, the rig sweep
+    package.json        the published manifest and its export map
+  avatar-py/            voqalize-avatar: pyproject + src/voqalize_avatar/ + tests
+    native/avatarsync/  the rhubarb fork: patch, capi.cpp, build.sh,
+                        libavatarsync.* — nested inside the package whose
+                        wheel ships it
 
-server/                 does it work in a real call? one pipecat process, canned
+apps/
+  server/               does it work in a real call? one pipecat process, canned
                         services, zero API keys — the only place lipsync is verified
-studio/                 is the published interface enough? the IDE for the published
+  studio/               is the published interface enough? the IDE for the published
                         options, pointed at that same server
-authoring/              does the drawing read? the workshop: rig pages, clip
+  authoring/            does the drawing read? the workshop: rig pages, clip
                         fixtures, serve.py
-  tools/                headless render / screenshot / diff / motion
+    tools/              headless render / screenshot / diff / motion
 
 docs/                   the contracts, binding for both packages
+package.json            the workspace manifest — private, publishes nothing
 ```
 
-There is no fourth non-published tree, and that is load-bearing rather than
+There is no fourth entry under `apps/`, and that is load-bearing rather than
 tidy: `experiments/` was one, and a tree defined as "the things that are not any
 of those three" collects work nobody can say what it answers.
 
-`studio/` is the second compiled tree and the second exception to "no build
-step" (`client/` is the first). Nothing in `src/` may depend on either — what
-you screenshot in a rig page is what ships.
+`apps/studio/` is the second compiled tree and the second exception to "no build
+step" (`packages/avatar/client/` is the first). Nothing in
+`packages/avatar/src/` may depend on either — what you screenshot in a rig page
+is what ships.
 
-`py/scripts/measure_durations.py` speaks the duration corpus through vql-speech
-and `py/scripts/fit_durations.py` fits the two constants in `durations.py` from
+`packages/avatar-py/scripts/measure_durations.py` speaks the duration corpus through vql-speech
+and `packages/avatar-py/scripts/fit_durations.py` fits the two constants in `durations.py` from
 what came back — measure, then fit, then paste. Both live beside the corpus they
-read, `py/tests/fixtures/duration_corpus.json`.
+read, `packages/avatar-py/tests/fixtures/duration_corpus.json`.
 
-`client/` is compiled with plain `tsc` — no bundler, no tsup. The emitted
-modules keep their relative import of `../../src/avatar.js`, which from
-`client/dist/` resolves to the package's own `src/`, so there is exactly one
-copy of the widget in a consumer's graph. A bundler would have inlined a second
-one into the React binding, which is how a "widget updated but the React tile
-didn't" bug gets built.
+`packages/avatar/client/` is compiled with plain `tsc` — no bundler, no tsup —
+with `rootDir: client` and `outDir: dist`, which is what makes the emitted
+import land on `../src/`. There is therefore exactly one copy of the widget in a
+consumer's graph. A bundler would have inlined a second one into the React
+binding, which is how a "widget updated but the React tile didn't" bug gets
+built.
 
-`files` lists `client/dist` explicitly rather than relying on the `client`
-directory, because `client/dist` is gitignored and npm applies `.gitignore`
-*within* a `files` entry — an explicitly named path is the documented way to
-win that argument. `npm pack` is the check: all three faces, both contracts.
+`files` is `src`, `client`, `dist` — the widget, the sources the maps point at,
+and the compiled entry point. `dist` is named explicitly rather than left to the
+directory walk because it is gitignored and npm applies `.gitignore` *within* a
+`files` entry; an explicitly named path is the documented way to win that
+argument. **The contract documents no longer ship in the tarball.** They shipped
+until 0.3.0, on the reasoning that the wire is what an implementer needs; what
+that produced was a second copy of `docs/` going stale on npm between releases,
+against a repository that is public and always current. `README.md` and
+`LICENSE` are what npm includes on its own, and the README links out. `npm pack
+--dry-run` is the check.
 
 ## What the split cost, and what it left behind
 

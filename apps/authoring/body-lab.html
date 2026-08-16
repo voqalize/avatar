@@ -1,0 +1,98 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Avatar — body motion lab</title>
+<!--
+  The rig driven by hand, one fixed tick at a time, so that MOTION can be
+  rendered.
+
+  Every other page here answers "what does this pose look like". None of them
+  can answer "does the body look alive", because that question is only asked of
+  a sequence and every sequence we run is stochastic — random blink gaps, random
+  hold windows, random sway phases. Two runs never match, so two runs cannot be
+  compared, so a change to the liveness layer has never been provable.
+
+  This page fixes all three: Math.random is replaced by a seeded LCG *before*
+  the rig is built (so the phases, gaps and hold windows are drawn from a known
+  stream), the avatar is created with {manual:true} so no rAF ever runs, and
+  window.stepTo(t) walks the mixer to an absolute simulated time in 1/60 s
+  ticks. Same seed, same t, same pixels — which is what lets apps/authoring/tools/motion.mjs
+  difference frames and call the result a measurement.
+
+  ?face=peep&state=LISTENING&seed=7&w=440&talk=0&user=0
+  ?gesture=GESTURE_GREET&at=0.4&side=1 fires a semantic gesture action at an absolute sim time, so a
+                              frame-edge hand can be filmstripped the same way
+                              body motion is. `at` gives the idle layer time to
+                              settle first — a gesture fired at t=0 is measured
+                              against a rig that has not started moving yet.
+-->
+<style>
+  html, body { margin:0; background:#fff; }
+  #m { display:block; }
+  #m svg { display:block; width:100%; height:auto; }
+</style>
+<div id="m"></div>
+<script type="module">
+// Seed BEFORE the rig module's constructors run. IdleLayer draws its sway
+// phases in its constructor, so a post-hoc seed would leave the largest term
+// in the whole layer un-reproducible.
+const q = new URLSearchParams(location.search);
+let _s = (Number(q.get('seed') || 7) >>> 0) || 7;
+Math.random = () => {
+  // Numerical Recipes LCG; we need repeatability, not spectral quality.
+  _s = (Math.imul(1664525, _s) + 1013904223) >>> 0;
+  return _s / 4294967296;
+};
+
+const { createAvatar } = await import('../../packages/avatar/src/avatar.js');
+const { FACES, DEFAULT_FACE } = await import('../../packages/avatar/src/faces.js');
+
+const mount = document.getElementById('m');
+mount.style.width = (Number(q.get('w') || 440)) + 'px';
+
+const avatar = createAvatar({
+  mount,
+  face: FACES[q.get('face') || DEFAULT_FACE],
+  manual: true,
+  handSide: Number(q.get('side') || 1),
+});
+avatar.setState(q.get('state') || 'LISTENING');
+if (q.get('user') === '1') avatar.setUserSpeaking(true);
+
+// Faking speech without audio: the mixer's `talk` follows whether a mouth
+// source is live, and the viseme track is the only source that needs no
+// AudioContext. A held-open cue stream is a crude phrase, but `talk` is all
+// the body layer reads from it.
+if (q.get('talk') === '1') {
+  const cues = [];
+  for (let t = 0; t < 600000; t += 120) {
+    cues.push({ t, v: 'ABCDEFGH'[(t / 120) % 8 | 0] });
+  }
+  avatar.speak({ cues, clock: () => sim * 1000 });
+}
+
+const DT = 1 / 60;
+let sim = 0;
+
+// A hand gesture is fired from inside the stepper rather than up here, because
+// its clock is the mixer's `elapsed` — firing before the first step would start
+// it at t=0 with the body still at its rest pose.
+const gesture = q.get('gesture');
+const gestureAt = Number(q.get('at') || 0.4);
+let gestureFired = false;
+
+/** Walk the mixer to absolute simulated time `t`. Monotonic — never rewinds. */
+window.stepTo = (t) => {
+  let n = 0;
+  while (sim < t - DT / 2) {
+    if (gesture && !gestureFired && sim >= gestureAt) { avatar.action(gesture); gestureFired = true; }
+    avatar.step(DT);
+    sim += DT;
+    n++;
+  }
+  return n;
+};
+window.simTime = () => sim;
+window.avatar = avatar;
+window.params = () => ({ ...avatar.params });
+window.ready = true;
+</script>

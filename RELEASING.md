@@ -12,16 +12,26 @@ format — the widget renders what the backend sends — so a version pair that 
 drift is a protocol mismatch waiting to be debugged in production. `.github/workflows/release.yml`
 refuses to publish either half if the tag disagrees with either manifest.
 
+**The npm tarball's layout changed in 0.3.0.** The published manifest moved to
+`packages/avatar/package.json`, the compiled client is `dist/` rather than
+`client/dist/`, and `files` is now `src`, `client`, `dist` — the contract
+documents no longer ship inside the package, because a second copy of `docs/`
+going stale on npm is worse than a link to a public repository that is current.
+The export map is unchanged, so nothing a consumer imports moved.
+
 ## Cutting a release
 
 ```sh
 # 1. bump both manifests to the same version
-#      package.json        "version": "0.2.0"
-#      py/pyproject.toml   version = "0.2.0"
+#      packages/avatar/package.json      "version": "0.3.0"
+#      packages/avatar-py/pyproject.toml version = "0.3.0"
 # 2. commit, then
-git tag v0.2.0
+git tag v0.3.0
 git push origin main --follow-tags
 ```
+
+The root `package.json` is the workspace manifest and publishes nothing; its
+version is not read by anything and the guard ignores it.
 
 That is all. The workflow runs the full CI gate first (widget sweep, client
 tests, backend tests at both ends of the pipecat range), then publishes npm and
@@ -31,7 +41,7 @@ If one half fails and the other succeeded, fix the cause and re-run: **Actions �
 release → Run workflow**, and pick the *tag* as the ref. The successful half
 will fail with "already published", which is the correct and harmless outcome.
 
-Pre-release tags work too — `v0.2.0-rc.1` matches the trigger, and npm will tag
+Pre-release tags work too — `v0.3.0-rc.1` matches the trigger, and npm will tag
 it `latest` unless you add `--tag next` to the publish step, so use them
 deliberately.
 
@@ -82,8 +92,8 @@ and everything after it is automatic.
 #    https://www.npmjs.com/org/create   ->   name: voqalize
 # b. from a clean checkout of the tag, as a member of that org:
 npm login
-pnpm install --frozen-lockfile   # runs `prepare`, which compiles client/dist
-npm publish --access public
+pnpm install --frozen-lockfile   # runs `prepare`, which compiles packages/avatar/dist
+cd packages/avatar && npm publish --access public
 ```
 
 Then, on the package page: **Settings → Trusted publisher → GitHub Actions**
@@ -117,7 +127,7 @@ is a credential that outlives the person who created it.
 # .github/workflows/release.yml, pypi job
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: py/dist
+          packages-dir: packages/avatar-py/dist
           password: ${{ secrets.PYPI_API_TOKEN }}
 ```
 
@@ -152,7 +162,7 @@ serves every supported interpreter on that platform.
 
 [`.github/workflows/wheels.yml`](.github/workflows/wheels.yml) is **canonical**
 and its matrix is the supported-platform list — adding a row is how this project
-supports a new platform. `native/avatarsync/build.sh` is the local development
+supports a new platform. `packages/avatar-py/native/avatarsync/build.sh` is the local development
 loop and publishes nothing; every distributed byte is compiled in that workflow
 from the pinned upstream tarball.
 
@@ -160,7 +170,7 @@ Three properties are enforced rather than trusted, because each failure mode is
 silent:
 
 - **The wheel tag is derived from the binary**, not declared.
-  `py/scripts/stage_native.py` reads the highest versioned glibc symbol (Linux)
+  `packages/avatar-py/scripts/stage_native.py` reads the highest versioned glibc symbol (Linux)
   or the recorded deployment target (macOS). A binary built somewhere newer
   moves its own tag instead of installing onto machines it cannot run on.
 - **A dynamically linked libstdc++ is rejected outright.** A wheel tag can only

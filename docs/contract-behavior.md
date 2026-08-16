@@ -49,7 +49,7 @@ An action during bot speech contributes compatible head/body/hand channels but
 not a competing mouth shape. `turn.interrupted` waits for bot playout to stop,
 then its held mouth can communicate the cut.
 
-The vocabulary is seven, and `BEHAVIOR_ACTIONS` in `src/behavior.js` is the one
+The vocabulary is seven, and `BEHAVIOR_ACTIONS` in `packages/avatar/src/behavior.js` is the one
 copy: `ack.receive`, `ack.nod`, `turn.interrupted`, `gesture.greet`,
 `gesture.farewell`, `gesture.approve`, `gesture.wait`. Each maps to exactly one
 promoted wire id ([contract-wire.md](contract-wire.md)) — the two lists are the

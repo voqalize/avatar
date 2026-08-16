@@ -60,7 +60,7 @@ viewbox, landmark, or crop metadata crosses this boundary.
 
 ## The pose channels
 
-30 float channels (`src/params.js`). Rest is the neutral face; range is the
+30 float channels (`packages/avatar/src/params.js`). Rest is the neutral face; range is the
 post-mix clamp; τ is the smoothing time constant the *mixer* applies, so a rig
 never eases anything itself. Sign conventions are from the **viewer's**
 perspective.
@@ -133,8 +133,8 @@ An author reviews rest and channel extremes, meaningful extreme composites,
 every viseme at full-frame and close scale, curated transitions (`X→A→X`,
 `A→D→A`, `D→F→B`, `B→G→H`, and rapid closures), the same raw frame across
 registered rigs, and numeric conformance (finite values, mounted renderer,
-clean teardown). The pages under `authoring/` implement this review —
+clean teardown). The pages under `apps/authoring/` implement this review —
 `contact-sheet.html`, `torso-check.html`, `clip-strip.html`, `rig-check.html`
-([authoring/README.md](../authoring/README.md)). Studio does not: it drives the
+([apps/authoring/README.md](../apps/authoring/README.md)). Studio does not: it drives the
 published contract and never reaches a pose channel
-([studio/README.md](../studio/README.md)).
+([apps/studio/README.md](../apps/studio/README.md)).

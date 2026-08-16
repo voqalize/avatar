@@ -63,7 +63,7 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@22.20.1)(jsdom@25.0.1)
 
-  authoring/tools:
+  apps/authoring/tools:
     dependencies:
       pixelmatch:
         specifier: ^7.2.0
@@ -75,7 +75,7 @@ importers:
         specifier: ^25.5.0
         version: 25.7.0
 
-  studio:
+  apps/studio:
     dependencies:
       '@pipecat-ai/client-js':
         specifier: 'catalog:'
@@ -91,7 +91,7 @@ importers:
         version: 0.13.0(@daily-co/daily-js@0.90.0)(@pipecat-ai/client-js@1.13.0)(@pipecat-ai/client-react@1.8.1(@pipecat-ai/client-js@1.13.0)(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@pipecat-ai/small-webrtc-transport@1.10.6(@pipecat-ai/client-js@1.13.0))(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@voqalize/avatar':
         specifier: workspace:*
-        version: link:..
+        version: link:../../packages/avatar
       react:
         specifier: 'catalog:'
         version: 18.3.1
@@ -114,6 +114,18 @@ importers:
       vite:
         specifier: ^7.3.6
         version: 7.3.6(@types/node@22.20.1)
+
+  packages/avatar:
+    dependencies:
+      '@pipecat-ai/client-js':
+        specifier: '>=1.4 <2'
+        version: 1.13.0
+      react:
+        specifier: '>=18'
+        version: 18.3.1
+      react-dom:
+        specifier: '>=18'
+        version: 18.3.1(react@18.3.1)
 
 packages:
 

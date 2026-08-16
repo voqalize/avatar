@@ -89,7 +89,7 @@ quiet timer falling through to `IDLE`. **The normative ladder — all of its
 rungs, in order, with what retires each one — is
 [pipecat-lifecycle-protocol.md § Authority model](pipecat-lifecycle-protocol.md),
 and that is the only copy.** It exists once in prose and once in code
-(`client/src/AvatarClient.ts`); a second normative copy would drift, and this
+(`packages/avatar/client/AvatarClient.ts`); a second normative copy would drift, and this
 project has watched that happen.
 
 Two things the ladder is protecting are worth stating here, because they are
@@ -173,14 +173,14 @@ which you already have; the package declares it an *optional* peer and imports
 its types only, so nothing about the avatar's entry point fails to load without
 it. Our own Avatar Studio additionally uses `@pipecat-ai/client-react` and the
 voice-ui-kit for its call plumbing, which is the ordinary consumer's position
-and deliberately so ([studio/README.md](../studio/README.md)).
+and deliberately so ([apps/studio/README.md](../apps/studio/README.md)).
 
 The pipeline half is an ordinary pipecat `FrameProcessor`. It sits between the
 TTS service and `transport.output()`, which is the seat where it can see the
 audio that is about to be spoken, at generation speed. The declared range is
 `pipecat-ai>=1.4,<2`, and CI runs the suite at the floor as well as at the
 resolved version, so "we support 1.4" is a claim a test checks
-([py/README.md § Compatibility](../py/README.md)).
+([packages/avatar-py/README.md § Compatibility](../packages/avatar-py/README.md)).
 
 **No transport change is needed.** The obvious-looking move — enabling video
 output on the transport — is the integration path for *server-side* video
@@ -259,7 +259,7 @@ ordinary condition, not a failure**: on a platform outside the wheel matrix, or
 an sdist install, the processor logs once and runs state-channel only. The
 degradation is bounded and it is exactly one thing — the face still listens,
 thinks, claims the floor and yields it; its mouth does not move while it speaks
-([py/README.md § Mouth shapes](../py/README.md)).
+([packages/avatar-py/README.md § Mouth shapes](../packages/avatar-py/README.md)).
 
 **Costs a line of code**, and each of these is a case the library refuses to
 guess at:
@@ -268,7 +268,7 @@ guess at:
 |---|---|
 | a deliberate nod, receipt, greeting, wave | push an `AvatarControlFrame` carrying an action from anywhere in your pipeline. |
 | an out-of-process LLM whose tool calls never appear as pipecat function-call frames | subclass `AvatarStateMachine` and translate your own frames in `on_frame`; you inherit the call-id dedup and the parallel-call hold. |
-| a richer pose than the nine states — reviewing a screen, searching, typing into a chat | drive the mixer directly through `@voqalize/avatar/internal`, whose state list has exactly one copy, `STATES` in `src/avatar.js`. Not wire vocabulary, on purpose. |
+| a richer pose than the nine states — reviewing a screen, searching, typing into a chat | drive the mixer directly through `@voqalize/avatar/internal`, whose state list has exactly one copy, `STATES` in `packages/avatar/src/avatar.js`. Not wire vocabulary, on purpose. |
 | a backend that is not ours | produce `cues` yourself. Best first: map your TTS's native viseme events; else force-align text against audio; the tables for both are exported from `@voqalize/avatar/internal` ([README.md § TTS to visemes](../README.md)). |
 | a different face, or a different rendering technology entirely | pass a `face`, or publish your own `createAvatar`. |
 
@@ -309,6 +309,6 @@ can all be tested without running a call
 | states and actions as an avatar author receives them | [contract-behavior.md](contract-behavior.md) |
 | the public interface, and how to ship your own avatar | [design-avatar-interface.md](design-avatar-interface.md) |
 | why a library, what each package owns, the repo layout | [design-library-split.md](design-library-split.md) |
-| the pipeline half, its two seams, its wheels | [py/README.md](../py/README.md) |
+| the pipeline half, its two seams, its wheels | [packages/avatar-py/README.md](../packages/avatar-py/README.md) |
 | our SVG renderer's internals — not a seam to implement | [internal-mixer.md](internal-mixer.md), [internal-rig.md](internal-rig.md) |
-| whether it works in a real call | [server/README.md](../server/README.md) |
+| whether it works in a real call | [apps/server/README.md](../apps/server/README.md) |

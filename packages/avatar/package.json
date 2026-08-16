@@ -1,0 +1,88 @@
+{
+  "name": "@voqalize/avatar",
+  "version": "0.3.0",
+  "description": "A JavaScript-programmable 2-D talking head for AI voice calls: server-synced lipsync, state through motion, zero dependencies.",
+  "license": "MIT",
+  "author": "Voqalize",
+  "homepage": "https://github.com/voqalize/avatar#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voqalize/avatar.git",
+    "directory": "packages/avatar"
+  },
+  "bugs": {
+    "url": "https://github.com/voqalize/avatar/issues"
+  },
+  "keywords": [
+    "avatar",
+    "talking-head",
+    "lipsync",
+    "viseme",
+    "rhubarb",
+    "pipecat",
+    "voice-agent",
+    "svg",
+    "animation"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "default": "./dist/internal.js"
+    },
+    "./faces/peep": {
+      "types": "./src/face-peep.d.ts",
+      "default": "./src/face-peep.js"
+    },
+    "./faces/wren": {
+      "types": "./src/face-wren.d.ts",
+      "default": "./src/face-wren.js"
+    },
+    "./faces/myna": {
+      "types": "./src/face-myna.d.ts",
+      "default": "./src/face-myna.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "client",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepare": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@pipecat-ai/client-js": ">=1.4 <2",
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@pipecat-ai/client-js": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  }
+}

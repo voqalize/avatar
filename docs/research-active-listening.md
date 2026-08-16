@@ -1,7 +1,7 @@
 # Active listening — experiment log
 
 The design-research log behind the listening behaviours that shipped — the
-`AVERSION` gaze profiles in `src/gaze.js`, the transcript-free `Boundary` tick,
+`AVERSION` gaze profiles in `packages/avatar/src/gaze.js`, the transcript-free `Boundary` tick,
 and the backchannel decision function a consumer runs on top of it. It was
 written as a spike under `experiments/` and moved here when that tree went; the
 hypotheses below are numbered as they were proposed, and several of them lost.
@@ -547,5 +547,5 @@ question fakes can answer. That is the next thing, and it is a human's call.
 Also corrected upstream of all this: `research-biomechanics.md` §3.4 quoted
 −3°/+15° as a sourced nod amplitude. The Frontiers review does say it, but
 attributes it to Hendrikse et al. (2019), whose full text does not contain the
-claim. Marked unverified. Nothing in `src/` depended on it — `headPitch` is
+claim. Marked unverified. Nothing in `packages/avatar/src/` depended on it — `headPitch` is
 pixels, not degrees.
