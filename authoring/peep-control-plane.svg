@@ -1,0 +1,42 @@
+<svg id="peepControlPlane" viewBox="92 76 576 800" xmlns="http://www.w3.org/2000/svg"
+     preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc"
+     style="background:#fff">
+  <title id="title">Peep — animated control planes only</title>
+  <desc id="desc">Brows, eyes, mouth, teeth and tongue from Peep, with all static character art removed.</desc>
+  <!--
+    Standalone snapshot of the exact paths produced by face-peep-control-plane.js.
+    This representative pose opens the mouth so every normally clipped plane is
+    visible. Empty groups are retained because poseTransforms writes to them.
+  -->
+  <defs>
+    <clipPath id="peepControlPlane-clipMouth">
+      <path id="peepControlPlane-clipMouthP" d="M341.98 486.5C359.09 472.8 400.91 472.8 418.02 486.5C400.91 523.07 359.09 523.07 341.98 486.5Z"/>
+    </clipPath>
+  </defs>
+
+  <g id="peepControlPlane-neck"/>
+  <g id="peepControlPlane-skull"/>
+  <g id="peepControlPlane-body"/>
+
+  <g id="peepControlPlane-features">
+    <path id="peepControlPlane-browL" fill="#1b1b1b" d="M360.58 343.1L350.84 338.75L341.1 334.94L331.43 331.71L321.9 329.13L312.58 327.29L303.47 326.27L297.06 328.46L292.24 330.83L287.9 333.5L284.09 336.43L280.83 339.59L278.17 342.92L283.83 348.58L286.66 347.09L289.84 345.81L293.35 344.75L297.17 343.93L301.29 343.37L304.53 343.23L312.05 342.03L320.47 341.55L329.57 341.79L339.2 342.71L349.2 344.26L359.42 346.4Z"/>
+    <path id="peepControlPlane-browR" fill="#1b1b1b" d="M402.63 343.38L411.89 341.24L420.91 339.73L429.57 338.91L437.73 338.86L445.23 339.61L451.88 341.18L455.58 341.35L459.45 341.89L463 342.68L466.28 343.72L469.33 345.02L472.17 346.58L477.83 340.92L475.33 337.66L472.31 334.52L468.75 331.57L464.62 328.87L459.93 326.47L454.12 324.32L445.3 324.86L436.49 326.42L427.68 328.84L418.87 331.99L410.08 335.78L401.37 340.12Z"/>
+
+    <g id="peepControlPlane-eyes" transform="translate(0 .4)">
+      <path id="peepControlPlane-eyeL" fill="#1b1b1b" d="M311.17 389.19C315.59 372.33 329.42 370.14 338.83 384.81C334.25 400.67 320.42 402.86 311.17 389.19Z"/>
+      <path id="peepControlPlane-eyeR" fill="#1b1b1b" d="M421.14 383.05C430.29 368.22 444.15 370.17 448.86 386.95C439.85 400.78 425.99 398.83 421.14 383.05Z"/>
+    </g>
+
+    <g id="peepControlPlane-mouth">
+      <path id="peepControlPlane-mouthIn" fill="#1b1b1b" d="M341.98 486.5C359.09 472.8 400.91 472.8 418.02 486.5C400.91 523.07 359.09 523.07 341.98 486.5Z"/>
+      <g clip-path="url(#peepControlPlane-clipMouth)">
+        <ellipse id="peepControlPlane-tongue" fill="#8d7f79" cx="380" cy="501.97" rx="22.05" ry="8"/>
+        <path id="peepControlPlane-teeth" fill="#fff" d="M351.1 473.16L408.9 473.16L406.58 485.71Q380 502.61 353.42 485.71Z"/>
+        <path id="peepControlPlane-teethLo" fill="#fff" opacity=".85" d="M357.19 516.52L402.81 516.52L400.99 506.52Q380 499.11 359.01 506.52Z"/>
+      </g>
+      <path id="peepControlPlane-lips" fill="#1b1b1b" fill-rule="evenodd" d="M342.71 487.42L347.61 484.94L353.23 483.06L359.44 481.75L366.09 481L373 480.81L380 481.16L387 480.84L393.9 481.08L400.53 481.86L406.71 483.21L412.3 485.11L417.14 487.6L411.54 493.71L405.68 499.81L399.39 504.27L392.88 507.14L386.37 508.52L380 508.52L373.62 508.56L367.09 507.21L360.55 504.36L354.21 499.92L348.29 493.82L343.04 486ZM340.92 487L345.19 495.94L350.52 503.55L356.8 509.77L363.91 514.54L371.7 517.76L380 519.33L388.31 517.8L396.13 514.61L403.27 509.87L409.59 503.66L414.97 496.05L418.9 485.4L414.21 481.61L408.56 478.38L402.12 475.72L395.11 473.66L387.68 472.18L380 471.29L372.33 472.22L364.91 473.73L357.91 475.84L351.5 478.52L345.88 481.78L341.25 485.58Z"/>
+    </g>
+  </g>
+
+  <g id="peepControlPlane-hair"/>
+</svg>
