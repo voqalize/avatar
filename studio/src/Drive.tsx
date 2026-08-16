@@ -237,9 +237,9 @@ export function Drive({
           </div>
         ))}
 
-        {/* The signature control: the two numbers you just set, drawn against a
-            nominal utterance. "700 ms" means nothing on its own; a third of the
-            bar in front of the speech is the thing being configured. */}
+        {/* The band's lead element: the two numbers you just set, drawn against
+            a nominal utterance. "700 ms" means nothing on its own; a third of
+            the bar in front of the speech is the thing being configured. */}
         <div className="turn" aria-hidden="true">
           {ms(think) > 0 && <span className="seg think" style={{ width: `${(ms(think) / total) * 100}%` }}>think</span>}
           {ms(work) > 0 && <span className="seg work" style={{ width: `${(ms(work) / total) * 100}%` }}>work</span>}
@@ -322,7 +322,7 @@ export function Drive({
         {/* One line rather than a caption per button: seven permanent sentences
             would bury the seven buttons they explain. It carries the wire name,
             because that is the half of the button that is not on the button. */}
-        <Watch live={live} hint={interject.hint} />
+        <Watch live={live} hint={interject.hint} empty="Hover or focus a button to see what to watch for." />
       </section>
 
       <section className="band">
@@ -350,19 +350,26 @@ export function Drive({
         {/* The server's own sentence, not a second copy written here. These are
             only worth pressing if you know what the face is supposed to do
             about it, and the answer lives with the thing being sent. */}
-        <Watch live={live} hint={wrong.hint} />
+        <Watch live={live} hint={wrong.hint} empty="Hover a button to see what the face is supposed to refuse." />
       </section>
     </>
   );
 }
 
-/** The footnote under a band of buttons: the wire name, then the sentence. */
-function Watch({ live, hint }: { live: boolean; hint: Hint | null }) {
+/**
+ * The footnote under a band of buttons: the wire name, then the sentence.
+ *
+ * The empty line is per band, because the two bands are asking for opposite
+ * things. Under the interjections, what to watch for is the move. Under the
+ * misbehaviours it is the *absence* of one — the same sentence in both places
+ * had the second band promising a gesture that is supposed not to arrive.
+ */
+function Watch({ live, hint, empty }: { live: boolean; hint: Hint | null; empty: string }) {
   if (!live) {
     return <p className="watch">Connect first — these act on the call in progress, and answer 409 without one.</p>;
   }
   if (!hint) {
-    return <p className="watch">Hover or focus a button to see what to watch for.</p>;
+    return <p className="watch">{empty}</p>;
   }
   return (
     <p className="watch">

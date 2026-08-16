@@ -70,15 +70,20 @@ export function Stage({
 }) {
   return (
     <div className="player">
-      <Frame client={client} look={look} />
+      <Frame client={client} look={look} live={live} />
       <Doing live={live} transport={transport} />
       <Sizes size={size} onSize={onSize} />
       {/* Only while there is something to caption. A permanently reserved
           two-line gap under an idle avatar reads as a rendering fault. */}
       {live && <Captions />}
+      {/* Hanging up is not what this column invites you to do, so the one state
+          the kit draws as a filled destructive is taken down to an outline.
+          Everything else about the button is the kit's — including which states
+          it is disabled in, which is the half worth not reimplementing. */}
       <ConnectButton
         className="dial"
         size="xl"
+        stateContent={{ ready: { children: "Disconnect", variant: "outline", className: "dial-hangup" } }}
         onConnect={onConnect}
         onDisconnect={onHangUp}
       />
@@ -137,7 +142,7 @@ function Sizes({ size, onSize }: { size: Size; onSize: (size: Size) => void }) {
   );
 }
 
-function Frame({ client, look }: { client: PipecatClient; look: Look }) {
+function Frame({ client, look, live }: { client: PipecatClient; look: Look; live: boolean }) {
   const mount = useRef<HTMLDivElement>(null);
   // Every option is a remount, because the public surface has no setters:
   // `createAvatar` returns `{ destroy }` and that is the whole of it. Studio
@@ -162,20 +167,25 @@ function Frame({ client, look }: { client: PipecatClient; look: Look }) {
       {/* The bot's output level, over the bottom of the drawing. It is fed by
           the transport's track and knows nothing about the avatar, which is
           what makes it worth having: mouth moving with a flat meter, or a loud
-          meter with a still mouth, are both lipsync defects you can see. */}
-      <div className="frame-meter">
-        <VoiceVisualizer
-          participantType="bot"
-          backgroundColor="transparent"
-          barColor="--color-agent"
-          barCount={9}
-          barGap={2}
-          barWidth={3}
-          barMaxHeight={18}
-          barOrigin="center"
-          barLineCap="round"
-        />
-      </div>
+          meter with a still mouth, are both lipsync defects you can see.
+          Only during a call: with no track to measure it drew nine flat dots
+          across the character's collar, which is ink the drawing does not have
+          and the first thing you see on a page that has not been dialled. */}
+      {live && (
+        <div className="frame-meter">
+          <VoiceVisualizer
+            participantType="bot"
+            backgroundColor="transparent"
+            barColor="--color-agent"
+            barCount={9}
+            barGap={2}
+            barWidth={3}
+            barMaxHeight={18}
+            barOrigin="center"
+            barLineCap="round"
+          />
+        </div>
+      )}
     </div>
   );
 }

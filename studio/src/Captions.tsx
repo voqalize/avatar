@@ -6,6 +6,10 @@
  * panel invites you to read the conversation; the thing worth watching here is
  * the *face*, and anything tall enough to scroll pulls your eyes off it.
  *
+ * Two lines is a budget, and when the sentence being spoken needs all of it the
+ * previous one goes rather than the clamp eating the end of the live one — the
+ * words currently on the mouth are the whole reason the captions are here.
+ *
  * The text is the karaoke split — `BotOutputText { spoken, unspoken }` from
  * `usePipecatConversation`, which is the same boundary the mouth is animating
  * from. Rendering the two halves differently makes that boundary visible: the
@@ -33,6 +37,19 @@ import {
 /** How many sentences stay on screen. Two, as asked; the older one fades. */
 const KEPT = 2;
 
+/**
+ * The length at which the sentence being said stops sharing the two lines.
+ *
+ * The clamp is two lines and the height is fixed, so a long live sentence
+ * behind a faded previous one loses its *end* — the words the mouth is shaping
+ * right now, which is the only part anyone is here to check against the face.
+ * Past that length the older sentence is dropped instead: context for half a
+ * second is worth less than the current words being visible. 55 characters is a
+ * shade under one line at this width, so the rule only fires when the pair
+ * genuinely cannot both fit.
+ */
+const CROWDED = 55;
+
 const isBotText = (text: unknown): text is BotOutputText =>
   typeof text === "object" && text !== null && "spoken" in text && "unspoken" in text;
 
@@ -51,7 +68,13 @@ export function Captions() {
   const parts = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role !== "assistant") continue;
-      return messages[i].parts.filter((p) => flat(p).trim().length > 0).slice(-KEPT);
+      const kept = messages[i].parts.filter((p) => flat(p).trim().length > 0).slice(-KEPT);
+      // A long live sentence takes both lines to itself — see CROWDED. Measured
+      // on the whole part, spoken and unspoken together, so the decision does
+      // not change halfway through as the karaoke boundary advances.
+      const live = kept[kept.length - 1];
+      if (kept.length > 1 && flat(live).trim().length > CROWDED) return [live];
+      return kept;
     }
     return [];
   }, [messages]);

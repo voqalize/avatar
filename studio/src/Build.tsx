@@ -210,10 +210,10 @@ export function Build({
           <code>{"{ destroy }"}</code> and there are no setters.
         </p>
 
-        {/* The signature control, and the reason the panel exists: the settings
-            are not preferences, they are arguments, and you can see which ones
-            you have actually spent. The install line is above it because a
-            snippet you cannot run is a screenshot. */}
+        {/* The panel's lead element, and the reason the panel exists: the
+            settings are not preferences, they are arguments, and you can see
+            which ones you have actually spent. The install line is above it
+            because a snippet you cannot run is a screenshot. */}
         <div className="code">
           <div className="code-head">
             <Install cmd={INSTALL} />
@@ -338,7 +338,10 @@ export function Build({
         </p>
       </section>
 
-      <section className="band">
+      {/* Set a little further down the rail than the two above it: this band is
+          `server/`'s, not `createAvatar`'s, and the extra air is the only thing
+          saying so short of a second heading level. */}
+      <section className="band band-voice">
         <header className="band-head">
           <h2>Voice</h2>
         </header>

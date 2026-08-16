@@ -133,7 +133,10 @@ rounded rectangle, which read as a chat bubble, and a chat bubble asks to be
 read back instead of watched. At most two sentences, clamped to two lines, the
 previous one nearly gone; the two-line height is reserved whether or not there
 are words in it, so nothing under the captions moves as a turn starts and ends.
-They come from
+Two lines is a budget, so when the sentence being spoken is long enough to need
+both the previous one is dropped rather than clamped away — losing the end of
+the live sentence would hide the words the mouth is shaping, which is the only
+part of a caption this page is for. They come from
 `usePipecatConversation()` and render the kit's karaoke split — the spoken part
 of the sentence in full ink, the tail ahead of playout dimmed, the boundary
 advancing as it is said. That is a real check on the server, not a decoration:
@@ -169,7 +172,10 @@ there is any, which usually there is not. It used to be a red banner reading
 `undefined`, which is what happens when an error callback's text is the only
 thing you show.
 
-The meter over the frame is the kit's `VoiceVisualizer` on the bot track; the
+The meter over the frame is the kit's `VoiceVisualizer` on the bot track, and it
+is drawn only while a call is up — with no track to measure it is a row of flat
+dots across the character's collar, which is chrome on top of the one thing the
+page is for. The
 mic control under the button is its `UserAudioControl`, which is the device
 picker and your own level in one thing, usable before you dial. Its two buttons
 are the kit's own internals and carry the kit's labels — the only text Studio
