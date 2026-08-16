@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import pytest
 from pipecat.clocks.system_clock import SystemClock
 from pipecat.frames.frames import (
+    AggregatedTextProgressFrame,
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     ErrorFrame,
@@ -40,7 +41,7 @@ from pipecat.processors.frame_processor import (
 from pipecat.utils.asyncio.task_manager import TaskManager, TaskManagerParams
 
 from pipecat.processors.frameworks.rtvi.frames import RTVIServerMessageFrame
-from voqalize_avatar import AvatarProcessor
+from voqalize_avatar import AvatarClaim, AvatarControlFrame, AvatarProcessor
 
 from canned import CannedLines, CannedLLMService, CannedTTSService
 
@@ -101,12 +102,29 @@ class Chain:
     the chain is another thing that could be why a test failed.
     """
 
-    def __init__(self, lines: CannedLines, *, speed: float = 0, avatar: bool = False) -> None:
+    def __init__(
+        self,
+        lines: CannedLines,
+        *,
+        speed: float = 0,
+        avatar: bool = False,
+        think_ms: int = 0,
+        work_ms: int = 0,
+        word_timings: bool = False,
+    ) -> None:
         self.lines = lines
         self.up = Capture()
         self.llm = CannedLLMService(lines=lines)
+        # Off unless a test asks, so every test that predates the pre-speech
+        # beats still measures a turn that starts the instant it is triggered.
+        self.llm.think_ms = think_ms
+        self.llm.work_ms = work_ms
         self.mid = Capture()
-        self.tts = CannedTTSService(lines=lines, speed=speed)
+        # Off unless a test asks, which is the opposite of the service's own
+        # default. The whole-sentence path is the one with no second signal to
+        # fall back on, so it is the one every test that is not about word
+        # timings should be measuring.
+        self.tts = CannedTTSService(lines=lines, speed=speed, word_timings=word_timings)
         self.avatar = AvatarProcessor() if avatar else None
         self.out = Capture()
 
@@ -274,6 +292,52 @@ async def test_turns_advance_through_the_corpus(lines: CannedLines) -> None:
         assert said == [line.id for line in lines.lines[:3]]
 
 
+async def test_the_beats_run_before_the_speech_and_clear(lines: CannedLines) -> None:
+    """`THINKING`, `WORKING`, cleared, and only then the words.
+
+    Order is the whole assertion. A claim is durable, so one that arrives after
+    the sentence it belonged to leaves the face in it; and a turn that never
+    clears drops back into `WORKING` the moment the audio stops. Both look like
+    a renderer bug from the browser and neither is one.
+    """
+    async with Chain(lines, think_ms=40, work_ms=40) as chain:
+        await chain.push(UserStoppedSpeakingFrame())
+        await chain.until(lambda: bool(chain.mid.of(LLMFullResponseEndFrame)))
+
+    claims = [f.message.payload["state"] for f in chain.mid.of(AvatarControlFrame)]
+    assert claims == [AvatarClaim.THINKING, AvatarClaim.WORKING, None]
+
+    # And in front of the speech, not merely present somewhere in the turn.
+    kinds = chain.mid.names()
+    last_beat = len(kinds) - 1 - kinds[::-1].index("AvatarControlFrame")
+    assert kinds.index("LLMTextFrame") > last_beat
+
+
+async def test_a_beat_of_zero_is_skipped_entirely(lines: CannedLines) -> None:
+    """Off is off: no claim, not a claim held for no time.
+
+    A zero-length `WORKING` would still put a message on the wire, and the face
+    would flick through a state the application never meant to be in.
+    """
+    async with Chain(lines, think_ms=40, work_ms=0) as chain:
+        await chain.push(UserStoppedSpeakingFrame())
+        await chain.until(lambda: bool(chain.mid.of(LLMFullResponseEndFrame)))
+
+    claims = [f.message.payload["state"] for f in chain.mid.of(AvatarControlFrame)]
+    assert claims == [AvatarClaim.THINKING, None]
+
+
+async def test_a_turn_still_in_its_beats_will_not_start_a_second(
+    lines: CannedLines,
+) -> None:
+    """The talk-over guard reads `BotStartedSpeakingFrame`, which has not been
+    sent yet while the turn is still thinking. Without a second guard on the
+    turn itself, a pause during the pause starts a whole extra line."""
+    async with Chain(lines, think_ms=400) as chain:
+        assert await chain.llm.say_next() is not None
+        assert await chain.llm.say_next() is None
+
+
 async def test_it_will_not_talk_over_itself(lines: CannedLines) -> None:
     """A pause mid-sentence ends a VAD turn. Without this guard the second line
     queues behind the first and the avatar never stops."""
@@ -371,7 +435,7 @@ async def test_the_sentence_boundary_reaches_the_avatar(lines: CannedLines) -> N
     exactly the case that regressed.
     """
     line = next(l for l in lines.lines if len(l.sentences) > 1)
-    async with Chain(lines, avatar=True) as chain:
+    async with Chain(lines, avatar=True, word_timings=False) as chain:
         await chain.llm.say(line)
         await chain.settle()
         # Generation finishing is not the last emission: the accurate leg's
@@ -406,3 +470,63 @@ def _cues(chain: Chain, *, final: bool | None = None) -> list[dict]:
         for f in chain.out.of(RTVIServerMessageFrame)
         if f.data.get("cmd") == "cues" and (final is None or f.data["final"] is final)
     ]
+
+
+async def test_word_timings_put_the_words_on_the_wire_in_order(lines: CannedLines) -> None:
+    """The karaoke path, which is a different TTS shape and not a decoration.
+
+    A transcript that highlights in time with the voice reads these — pipecat
+    delivers them to the browser as `bot-output` — and the two properties it
+    needs are that every word arrives and that the accumulated text only ever
+    grows. Both are the base class's work, and both are lost the moment a word
+    does not match the text it was synthesised from, which is a mistake this
+    service is free to make on its own.
+
+    **A progress frame accumulates within its sentence, not across the turn**,
+    which is why the segments are separated first. A transcript that concatenates
+    them blindly renders the second sentence over the first.
+    """
+    line = next(l for l in lines.lines if len(l.sentences) > 1)
+    async with Chain(lines, word_timings=True) as chain:
+        await chain.llm.say(line)
+        await chain.settle()
+
+    progress = chain.out.of(AggregatedTextProgressFrame)
+    assert progress, "no word progress at all — this is the whole karaoke path"
+
+    segments: dict[int, list[AggregatedTextProgressFrame]] = {}
+    for frame in progress:
+        segments.setdefault(frame.segment_id, []).append(frame)
+    assert len(segments) == len(line.sentences), "a sentence produced no progress of its own"
+
+    for sentence, frames in zip(line.sentences, segments.values()):
+        grew = [f.accumulated_text for f in frames]
+        assert grew == sorted(grew, key=len), "accumulated text went backwards"
+        assert grew[-1].split() == sentence.text.split(), "the last word never completed"
+        # And the last one says so, which is how a transcript knows to stop
+        # highlighting rather than leaving a word lit for the rest of the call.
+        assert frames[-1].remaining_text == ""
+
+
+async def test_the_sentence_boundary_reaches_the_avatar_on_the_karaoke_path(
+    lines: CannedLines,
+) -> None:
+    """The same fact as its whole-sentence twin above, down the other branch.
+
+    Two spellings of one boundary is exactly how the original defect hid: the
+    reader handled this one and not the other, so it looked handled. Testing
+    only the branch that regressed would leave the same shape of gap facing the
+    other way.
+    """
+    line = next(l for l in lines.lines if len(l.sentences) > 1)
+    async with Chain(lines, avatar=True, word_timings=True) as chain:
+        await chain.llm.say(line)
+        await chain.settle()
+        await chain.until(lambda: any(_cues(chain, final=True)))
+
+    splices = [c["from_ms"] for c in _cues(chain)]
+    assert splices, "the avatar seat emitted no cues at all"
+    assert splices[-2] > 0, "the closing rewrite spliced at 0 — no boundary was counted"
+    assert splices.count(0) < len(splices) / 2, (
+        f"{splices.count(0)} of {len(splices)} chunks spliced at 0"
+    )

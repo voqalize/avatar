@@ -214,11 +214,14 @@ Three things no suite will tell you:
   ~50×/s instead of splicing at the current sentence. The cause was not the
   splice logic: `AvatarProcessor` counted a sentence complete only from
   `AggregatedTextProgressFrame`, which pipecat emits from the *karaoke* path
-  alone. A TTS with no word timestamps — most of them, including `server/`'s —
-  says the same thing with one whole-sentence `TTSTextFrame`, and that went
-  unread, so the splice point never left zero. Fixed; the cost is quadratic in
-  the turn and the mouth looks right either way, which is why only counting the
-  wire found it (`server/test_canned.py`, the avatar seat).
+  alone. A TTS with no word timestamps — most of them — says the same thing with
+  one whole-sentence `TTSTextFrame`, and that went unread, so the splice point
+  never left zero. Fixed; the cost is quadratic in the turn and the mouth looks
+  right either way, which is why only counting the wire found it. `server/`'s
+  canned TTS can now be either shape (`word_timings=`, pipecat's
+  `push_text_frames` inverted) and `server/test_canned.py` seats the avatar
+  behind both — the branch that regressed is the one with no second signal to
+  fall back on, so it is also what every unrelated test there runs against.
 - **New avatars follow the staged process** in
   [authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md) — the
   stakeholder's reference image is the identity spec, then production

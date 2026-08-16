@@ -123,8 +123,20 @@ async def test_say_speaks_the_line_asked_for_not_the_next_one(
     wanted = lines.lines[3]
     assert wanted is not lines.lines[0], "pick a line the round-robin would not"
 
+    session.beats(think_ms=0, work_ms=0)
     await session.say(wanted.id)
     assert spoken(session) == [s.text for s in wanted.sentences]
+
+
+async def test_saying_a_line_by_hand_still_runs_the_beats(session: control.Session) -> None:
+    """Pointing at a line does not make it a different kind of speech. The
+    states an application would be in before it talks are in front of this one
+    too, or the panel that sets them would be showing something the only button
+    that speaks never does."""
+    session.beats(think_ms=1, work_ms=1)
+    await session.say(session.lines.lines[0].id)
+
+    assert [m["state"] for m in sent(session)] == ["THINKING", "WORKING", None]
 
 
 async def test_an_unknown_line_is_an_error_not_a_silence(session: control.Session) -> None:
@@ -194,6 +206,10 @@ def test_the_corpus_endpoint_describes_the_whole_surface(
     assert body["claims"] == [str(c) for c in AvatarClaim]
     assert body["actions"] == [str(a) for a in AvatarAction]
     assert body["misbehaviours"] == control.MISBEHAVIOURS
+    assert body["beats"] == {
+        "think_ms": CannedLLMService.DEFAULT_THINK_MS,
+        "work_ms": CannedLLMService.DEFAULT_WORK_MS,
+    }
 
 
 def test_the_corpus_is_readable_with_no_call_in_progress(client: TestClient) -> None:
@@ -208,6 +224,7 @@ def test_the_corpus_is_readable_with_no_call_in_progress(client: TestClient) -> 
         ("/api/claim", {"state": "THINKING"}),
         ("/api/action", {"action": "ACK_NOD"}),
         ("/api/misbehave", {"kind": "action-storm"}),
+        ("/api/beats", {"think_ms": 500, "work_ms": 0}),
     ],
 )
 def test_driving_a_call_that_is_not_happening_is_a_409(
@@ -243,6 +260,23 @@ def test_the_endpoints_drive_the_live_call(client: TestClient, live: control.Ses
         {"type": "avatar", "cmd": "action", "id": "ACK_NOD"},
         {"type": "avatar", "cmd": "claim", "state": None},
     ]
+
+
+def test_the_beats_endpoint_arms_the_next_turn(client: TestClient, live: control.Session) -> None:
+    body = client.post("/api/beats", json={"think_ms": 250, "work_ms": 900})
+    assert body.json() == {"think_ms": 250, "work_ms": 900}
+    assert (live.llm.think_ms, live.llm.work_ms) == (250, 900)
+
+
+def test_a_beat_cannot_be_negative(client: TestClient, live: control.Session) -> None:
+    """A toggle that is off sends `0`; a slider that has been dragged past its
+    own floor must land on off too, not on a `sleep` that returns instantly
+    while the claim it wraps still goes out."""
+    assert client.post("/api/beats", json={"think_ms": -1, "work_ms": -1}).json() == {
+        "think_ms": 0,
+        "work_ms": 0,
+    }
+    assert (live.llm.think_ms, live.llm.work_ms) == (0, 0)
 
 
 def test_a_new_call_replaces_the_old_one(

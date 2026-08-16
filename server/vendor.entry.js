@@ -7,7 +7,12 @@
  * two are pre-bundled — together, in one file, because the transport imports
  * client-js and two separate bundles would put two copies of it on the page.
  *
- *     npm run demo:vendor
+ *     pnpm run server:vendor
+ *
+ * Rebuild it after a version bump. The bundle is gitignored, so a working tree
+ * that has not run this since the catalog moved is serving a client-js the
+ * repository no longer resolves — and the RTVI protocol version is inside it,
+ * so an old one negotiates down and silently loses newer server messages.
  *
  * Nothing of ours goes through this. `src/` and `client/dist/` are served
  * straight from the working tree and stay live-editable, which is the property

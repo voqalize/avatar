@@ -88,6 +88,18 @@ class Session:
     async def claim(self, state: AvatarClaim | None) -> None:
         await self.send(AvatarMessage.claim(state))
 
+    def beats(self, *, think_ms: int, work_ms: int) -> None:
+        """Set how long the server holds each state before it starts speaking.
+
+        Not a message and not a command — it changes what the *next* turn does,
+        which is the honest shape of it. A caller who wants a state right now
+        sends a claim; these are what an application's own latency looks like
+        from the face's side, and the only way to see them is to have the server
+        take as long as a real one would.
+        """
+        self.llm.think_ms = max(0, think_ms)
+        self.llm.work_ms = max(0, work_ms)
+
     async def action(self, action: AvatarAction) -> None:
         await self.send(AvatarMessage.action(action))
 
@@ -99,13 +111,13 @@ class Session:
 
         async with self._lock:
             if kind == "claim-during-speech":
-                await self.llm.say(self.lines.lines[0])
+                await self.llm.say(self.lines.lines[0], preamble=False)
                 await asyncio.sleep(_BEAT_S)
                 await self.claim(AvatarClaim.THINKING)
 
             elif kind == "stale-claim":
                 await self.claim(AvatarClaim.THINKING)
-                await self.llm.say(self.lines.lines[0])
+                await self.llm.say(self.lines.lines[0], preamble=False)
                 await asyncio.sleep(_BEAT_S)
                 await self.claim(None)
 

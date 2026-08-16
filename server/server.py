@@ -55,7 +55,7 @@ from voqalize_avatar import AvatarAction, AvatarClaim
 
 import control
 from bot import DEFAULT_TTS, LINES, TTS_SERVICES, run_bot
-from canned import CannedLines
+from canned import CannedLines, CannedLLMService
 
 
 class Say(BaseModel):
@@ -73,6 +73,13 @@ class Action(BaseModel):
 
 class Misbehave(BaseModel):
     kind: str
+
+
+class Beats(BaseModel):
+    """How long to hold each state before speaking. `0` skips one."""
+
+    think_ms: int = 0
+    work_ms: int = 0
 
 
 HERE = Path(__file__).resolve().parent
@@ -165,6 +172,12 @@ def build_app(tts_name: str) -> FastAPI:
             "claims": [str(c) for c in AvatarClaim],
             "actions": [str(a) for a in AvatarAction],
             "misbehaviours": control.MISBEHAVIOURS,
+            # What a fresh call will do before it speaks, so a page can show the
+            # real setting on load instead of a guess that disagrees with it.
+            "beats": {
+                "think_ms": CannedLLMService.DEFAULT_THINK_MS,
+                "work_ms": CannedLLMService.DEFAULT_WORK_MS,
+            },
         }
 
     def _live() -> control.Session:
@@ -203,6 +216,17 @@ def build_app(tts_name: str) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"no action {body.action!r}") from None
         await _live().action(action)
         return {"acted": body.action}
+
+    @app.post("/api/beats")
+    async def beats(body: Beats):
+        """Change what the next turn does before it speaks.
+
+        Takes effect on the next turn rather than this instant, which is why it
+        answers with what it set and not with anything about the call: there is
+        nothing to observe until somebody talks.
+        """
+        _live().beats(think_ms=body.think_ms, work_ms=body.work_ms)
+        return {"think_ms": max(0, body.think_ms), "work_ms": max(0, body.work_ms)}
 
     @app.post("/api/misbehave")
     async def misbehave(body: Misbehave):
