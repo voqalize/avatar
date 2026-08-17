@@ -9,7 +9,7 @@
 //              that did not need crossing.
 //
 // There is no command-line front end here. The tool you run by hand is Python
-// (`voqalize-avatar`, py/src/voqalize_avatar/cli.py) and it loads this same
+// (`voqalize-avatar`, packages/avatar-py/src/voqalize_avatar/cli.py) and it loads this same
 // library, so the thing measured on the bench is the thing that runs in the
 // pipeline rather than its close relative.
 //

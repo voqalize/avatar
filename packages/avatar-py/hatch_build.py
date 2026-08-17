@@ -2,8 +2,9 @@
 
 Two artifacts come out of this package and they are not the same shape:
 
-* a **platform wheel**, when `scripts/stage_native.py` has put an `avatarsync`
-  binary and its model tree in `src/voqalize_avatar/_native/`. It is ~44 MB, it
+* a **platform wheel**, when `scripts/stage_native.py` has put a
+  `libavatarsync` shared library and its model tree in
+  `src/voqalize_avatar/_native/`. It is ~44 MB, it
   is tagged for the machines that binary runs on, and `pip install
   voqalize-avatar` on such a machine gives you working lipsync with no further
   steps. This is what CI publishes.
@@ -36,7 +37,15 @@ class NativeBundleHook(BuildHookInterface):
 
         bundle = Path(self.root) / "src" / "voqalize_avatar" / "_native"
         tag_file = bundle / "WHEEL_TAG"
-        if not (bundle / "avatarsync").is_file() or not tag_file.is_file():
+        # Glob rather than a literal name, and the reason is a bug this line
+        # carried for four commits: the payload used to be a subprocess
+        # executable called `avatarsync`, and when it became a shared library
+        # (`libavatarsync.so` / `.dylib`) only the staging script was updated.
+        # The predicate went permanently false, so every build claimed to be
+        # pure while `artifacts` stuffed 44 MB into it — caught by nothing,
+        # because no test and no CI job builds a platform wheel. The extension
+        # is the part that varies by platform, so it is the part not spelled out.
+        if not any(bundle.glob("libavatarsync.*")) or not tag_file.is_file():
             return  # pure wheel; see the module docstring
 
         build_data["pure_python"] = False

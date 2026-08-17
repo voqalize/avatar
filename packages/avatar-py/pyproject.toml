@@ -50,13 +50,20 @@ Issues = "https://github.com/voqalize/avatar/issues"
 Protocol = "https://github.com/voqalize/avatar/blob/main/docs/contract-wire.md"
 
 [build-system]
-requires = ["hatchling"]
+# >=1.27 because `license = "MIT"` + `license-files` below is PEP 639 spelling;
+# an older hatchling rejects it with "Field `project.license` must be a table".
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+    # Not for building — `uv build` gets its own isolated copy. This is so
+    # `tests/test_wheel_hook.py` can import `hatch_build.py`, which is the only
+    # coverage the platform-wheel decision has: CI builds pure wheels only, so
+    # without this the predicate is exercised for the first time by a tag push.
+    "hatchling>=1.27",
 ]
 # The local server, and nothing else, gets to name services. `dependencies`
 # above stays transport- and vendor-free on purpose — these groups are how the
@@ -100,7 +107,18 @@ path = "hatch_build.py"
 [tool.hatch.build.targets.sdist]
 # The sdist is the source, not the payload: 44 MB of compiled binary and
 # acoustic model would be neither reviewable nor rebuildable from it.
-exclude = ["src/voqalize_avatar/_native"]
+# `native/avatarsync/{bin,res}` are build outputs of `build.sh`. CI builds the
+# sdist in a fresh checkout where they do not exist, but a maintainer running
+# `uv build` after a local `build.sh` would otherwise ship a different artifact
+# than CI does — they are ignored by a nested .gitignore, which the sdist
+# builder does not read.
+exclude = [
+    "src/voqalize_avatar/_native",
+    "native/avatarsync/bin",
+    "native/avatarsync/res",
+    "native/avatarsync/.build",
+    "native/avatarsync/.cache",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -12,6 +12,14 @@ apps/studio/dist/
 # (`pnpm run server:vendor`). Nothing of ours is in it — see vendor.entry.js.
 apps/server/vendor/
 __pycache__/
+*.py[cod]
+# A venv anywhere in the tree. `packages/avatar-py/.venv/` is the one uv makes,
+# but a stranger following any README can end up with one at the root or under
+# apps/server/, and an untracked 300 MB directory in `git status` is how a
+# `git add -A` goes wrong.
+.venv/
+.ruff_cache/
+coverage/
 # The piper voice `apps/server/record.py` fetches to re-record the canned
 # corpus. ~60 MB, and needed only to change what the server says — the WAVs it
 # produces ARE committed, so a clone can hear the avatar without fetching a

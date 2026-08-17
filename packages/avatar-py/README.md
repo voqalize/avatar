@@ -78,7 +78,9 @@ at or after it is discarded. The reasoning and the constants are in
 
 That is the installer's view. The tags are *derived from the compiled binary*
 rather than declared, and `.github/workflows/wheels.yml` is the canonical
-statement of what gets built ([RELEASING.md](../RELEASING.md)); if this table
+statement of what gets built
+([RELEASING.md](https://github.com/voqalize/avatar/blob/main/RELEASING.md));
+if this table
 and a published wheel ever disagree, the wheel is right.
 
 Intel macOS is absent for an upstream reason: `pipecat-ai` requires

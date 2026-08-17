@@ -34,16 +34,33 @@ The root `package.json` is the workspace manifest and publishes nothing; its
 version is not read by anything and the guard ignores it.
 
 That is all. The workflow runs the full CI gate first (widget sweep, client
-tests, backend tests at both ends of the pipecat range), then publishes npm and
-PyPI in parallel, then opens a GitHub release with generated notes.
+tests, backend tests at both ends of the pipecat range), then **builds every
+wheel before it publishes anything**, then publishes npm and PyPI, then opens a
+GitHub release with generated notes.
+
+The build-before-publish order is what makes "publishes both or neither" true
+rather than aspirational. Compiling the wheels is the only step that fails for
+reasons outside this repository — a manylinux image, a brew formula, the
+upstream tarball — and npm is the step that cannot be undone, because a
+published version number never comes back. So npm waits behind the wheels.
 
 If one half fails and the other succeeded, fix the cause and re-run: **Actions →
 release → Run workflow**, and pick the *tag* as the ref. The successful half
 will fail with "already published", which is the correct and harmless outcome.
 
-Pre-release tags work too — `v0.3.0-rc.1` matches the trigger, and npm will tag
-it `latest` unless you add `--tag next` to the publish step, so use them
-deliberately.
+Pre-release tags work too, with one wrinkle that is not ours to fix: **the two
+manifests spell a pre-release differently.** For the tag `v0.3.0-rc.1`,
+`packages/avatar/package.json` says `0.3.0-rc.1` (semver) and
+`packages/avatar-py/pyproject.toml` says `0.3.0rc1` (PEP 440, which is what
+PyPI stores whatever you type). Neither registry accepts the other's spelling,
+so this is the one place the lockstep rule is about the same *version* rather
+than the same *string*. The guard knows both spellings and derives the second
+from the tag, so a wrong one fails before anything is published. Only
+`-alpha.N`, `-beta.N` and `-rc.N` are accepted; anything else is rejected at the
+guard rather than at upload.
+
+npm will also tag a pre-release `latest` unless you add `--tag next` to the
+publish step, so use them deliberately.
 
 ## One-time setup
 

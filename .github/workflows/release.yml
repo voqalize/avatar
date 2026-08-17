@@ -18,6 +18,14 @@ on:
     tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
   workflow_dispatch: # re-run a failed half without re-tagging
 
+# One release at a time per tag. `workflow_dispatch` exists precisely to re-run
+# a half that failed, and two of those racing would try to publish the same
+# version twice. Never `cancel-in-progress`: killing a run mid-publish is how
+# you get the split this file is built to prevent.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -37,9 +45,26 @@ jobs:
           # package.json is private and its version means nothing.
           npm_version=$(node -p "require('./packages/avatar/package.json').version")
           py_version=$(grep -m1 '^version = ' packages/avatar-py/pyproject.toml | cut -d'"' -f2)
-          echo "tag=$tag  npm=$npm_version  pypi=$py_version"
-          if [ "$tag" != "$npm_version" ] || [ "$tag" != "$py_version" ]; then
-            echo "::error::tag $tag disagrees with packages/avatar/package.json ($npm_version) or packages/avatar-py/pyproject.toml ($py_version)"
+          # A release version is one string and both manifests carry it. A
+          # PRERELEASE is not: semver says `0.3.0-rc.1`, PEP 440 normalizes the
+          # same thing to `0.3.0rc1`, and neither registry accepts the other's
+          # spelling — so there is no tag that equals both manifests literally.
+          # The tag is the semver one; this derives what pyproject.toml must
+          # say. Only the three forms npm and PyPI agree on the meaning of are
+          # accepted, so an unrecognised suffix fails here rather than at upload.
+          py_expected=$(python3 - "$tag" <<'PY'
+          import re, sys
+          tag = sys.argv[1]
+          m = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)\.(\d+))?", tag)
+          if not m:
+              sys.exit(f"tag {tag} is not v<major>.<minor>.<patch>[-(alpha|beta|rc).N]")
+          base, kind, num = m.groups()
+          print(base + ({"alpha": "a", "beta": "b", "rc": "rc"}[kind] + num if kind else ""))
+          PY
+          )
+          echo "tag=$tag  npm=$npm_version  pypi=$py_version (expected $py_expected)"
+          if [ "$tag" != "$npm_version" ] || [ "$py_expected" != "$py_version" ]; then
+            echo "::error::tag $tag disagrees with packages/avatar/package.json ($npm_version, expected $tag) or packages/avatar-py/pyproject.toml ($py_version, expected $py_expected)"
             exit 1
           fi
           echo "version=$tag" >> "$GITHUB_OUTPUT"
@@ -51,7 +76,13 @@ jobs:
 
   npm:
     name: publish @voqalize/avatar
-    needs: [guard, ci]
+    # Behind `wheels`, not beside it, and that is what makes the promise at the
+    # top of this file true. Building a wheel is the only half that fails for
+    # reasons outside this repo — a manylinux image, a brew formula, the
+    # upstream tarball — and npm is the half that cannot be taken back, since a
+    # published version number is gone for good. So the compiled artifacts must
+    # exist before anything is published; `pypi` then publishes them.
+    needs: [guard, ci, wheels]
     runs-on: ubuntu-latest
     environment: npm
     permissions:

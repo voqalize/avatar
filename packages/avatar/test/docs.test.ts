@@ -180,6 +180,37 @@ const isGenerated = (path: string) =>
  */
 const OUR_DIRS = ["packages", "apps", "docs", ".github"];
 
+/**
+ * Top-level directories this repo USED to have. Anchoring on `OUR_DIRS` alone
+ * has a blind spot the restructure walked straight into: a reference to the old
+ * `py/…` tree starts with none of the four, so it was skipped rather than
+ * failed, and seven of them sat green through the move. A rename is precisely
+ * when this check is worth having, so the names it retired are named here.
+ *
+ * Both resolutions still apply, which is what keeps this quiet: a doc inside
+ * `packages/avatar/` writing `src/avatar.js` resolves package-relative and
+ * passes. Only a repo-relative claim on a tree that is gone fails.
+ */
+const RETIRED_DIRS = [
+  "py", "client", "src", "test", "tools", "server", "studio", "authoring", "experiments",
+];
+
+/**
+ * The two files whose job is to describe the tree we no longer have: the Layout
+ * section that keeps its own reversed argument visible, and the release note
+ * telling a 0.2 consumer what moved. Their old-tree references are the content,
+ * not rot.
+ *
+ * Deliberately whole files rather than pinned line numbers, and deliberately
+ * short: when the 0.3.0 note ages out of RELEASING.md, delete its entry here
+ * too. A third entry appearing is the signal that this escape has become a
+ * habit rather than an exception.
+ */
+const NARRATES_THE_OLD_TREE = new Set([
+  "docs/design-library-split.md",
+  "RELEASING.md",
+]);
+
 /** Repo-relative paths a file claims exist: markdown link targets and backticks. */
 function referencedPaths(text: string): string[] {
   const out: string[] = [];
@@ -188,7 +219,8 @@ function referencedPaths(text: string): string[] {
     // is about the file, not the fragment.
     const path = raw.split("#")[0].replace(/[.,)]+$/, "").replace(/\/?\*\*?$/, "").replace(/\/$/, "");
     if (!path || !path.includes("/")) return;
-    if (!OUR_DIRS.includes(path.split("/")[0])) return;
+    const top = path.split("/")[0];
+    if (!OUR_DIRS.includes(top) && !RETIRED_DIRS.includes(top)) return;
     if (path.includes("*")) return; // a glob is a pattern, not a claim
     out.push(path);
   };
@@ -248,9 +280,11 @@ describe("the docs", () => {
     for (const file of [...docFiles(), ...manifestFiles()]) {
       const text = readFileSync(file, "utf8");
       const seen = new Set<string>();
+      const narrates = NARRATES_THE_OLD_TREE.has(relative(ROOT, file));
       for (const path of referencedPaths(text)) {
         if (seen.has(path)) continue;
         seen.add(path);
+        if (narrates && RETIRED_DIRS.includes(path.split("/")[0])) continue;
         // Root-relative is how the docs write them; a manifest writes them
         // relative to itself (`packages/avatar-py/pyproject.toml` says
         // `src/voqalize_avatar`). Resolve both ways and report the repo-relative

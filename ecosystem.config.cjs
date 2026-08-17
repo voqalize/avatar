@@ -24,8 +24,8 @@ module.exports = {
     {
       name: "avatar-studio",
       cwd: __dirname,
-      script: "npm",
-      args: "--prefix apps/studio run dev",
+      script: "pnpm",
+      args: "run studio:dev",
       interpreter: "none",
       autorestart: true,
       watch: false,

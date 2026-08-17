@@ -79,7 +79,7 @@ trap 'rm -rf "$TMP"' EXIT
 # `--no-deps` because we want the payload, not pipecat and its tree. uv picks the
 # wheel matching this interpreter and platform, which is the whole point: the
 # tag was derived from what the library actually requires
-# (py/scripts/stage_native.py), so an incompatible wheel is never offered.
+# (packages/avatar-py/scripts/stage_native.py), so an incompatible wheel is never offered.
 if ! uv pip install --no-deps --quiet --target "$TMP" "voqalize-avatar==$version" 2>"$TMP/err"; then
 	echo "could not download voqalize-avatar==$version:" >&2
 	sed 's/^/  /' "$TMP/err" >&2

@@ -88,9 +88,22 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # Replaces the catalog pin for this checkout only. `--no-frozen-lockfile`
-      # because the point is to re-resolve away from the lockfile.
-      - run: pnpm add -w -D --no-frozen-lockfile "@pipecat-ai/client-js@1.4.0"
+      # Replaces the catalog pin for this checkout only, and two details here
+      # were wrong in a way nothing could report:
+      #
+      # `--filter`, not `-w`. `-w` edits the workspace ROOT importer, and once
+      # the published manifest moved into `packages/avatar/` that package became
+      # its own importer with its own resolved copy of the peer — which is what
+      # `tsc` finds first. The floor has to be installed where the code being
+      # typechecked will look for it.
+      #
+      # And no `--no-frozen-lockfile`: `pnpm add` does not accept it (it rewrites
+      # the lockfile by definition), so the step exited non-zero on sight.
+      - run: pnpm --filter @voqalize/avatar add -D "@pipecat-ai/client-js@1.4.0"
+      # Print what is actually about to be typechecked. The failure mode this
+      # job had was silence, so it now says which version it got.
+      - run: |
+          node -p "'floor under test: ' + require('./packages/avatar/node_modules/@pipecat-ai/client-js/package.json').version"
       - run: pnpm run typecheck
 
   backend:

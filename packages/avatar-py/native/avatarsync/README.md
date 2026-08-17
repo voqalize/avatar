@@ -2,7 +2,7 @@
 
 The avatar widget is driven by a stream of Rhubarb A–H+X mouth-shape letters
 (the wire format is `docs/internal-mixer.md` § Speech in the avatar repo).
-This directory owns the native code that produces them; `py/src/voqalize_avatar`
+This directory owns the native code that produces them; `packages/avatar-py/src/voqalize_avatar`
 owns the Python that drives it.
 
 ## Provenance and license
@@ -54,7 +54,7 @@ every clone anyone already has — so a new clone still pays for a file no check
 of it contains. That is the accepted price of not rewriting.
 
 **There is no native command-line program here.** The only artifact is the shared
-library. The tool you run by hand is `voqalize-avatar` (`py/src/voqalize_avatar/cli.py`),
+library. The tool you run by hand is `voqalize-avatar` (`packages/avatar-py/src/voqalize_avatar/cli.py`),
 a console script that loads this same library — same legs, same code path a live
 pipeline takes. A second front end built beside the library is a front end that
 can disagree with it, and then every timing number below would be a number about
@@ -145,7 +145,7 @@ If you are not — and most work in this repo is not — fetch it:
 ```
 
 `get.sh` unpacks the library *and* `res/` out of the `voqalize-avatar` wheel
-published for this platform, defaulting to the version in `py/pyproject.toml`.
+published for this platform, defaulting to the version in `packages/avatar-py/pyproject.toml`.
 No compiler, no Boost, no 85 MB tarball, and both halves in one command. It
 deliberately writes no `bin/<platform>/avatarsync.recipe`: a recipe is a claim
 about a local compile, and one invented for a fetched library would make the one
@@ -229,7 +229,7 @@ docker run --rm -v "$PWD/../..:/w" -w /w/native/avatarsync debian:trixie \
 newer glibc will not load on a host with an older one, however little of it the
 library uses. Since the library now ships inside a wheel, that floor is not just
 documentation — it is the wheel's `manylinux_x_y` tag, and
-`py/scripts/stage_native.py` derives the tag by reading these very symbols out
+`packages/avatar-py/scripts/stage_native.py` derives the tag by reading these very symbols out
 of the compiled library. Build somewhere newer and the tag moves with you; pip
 then declines to install it where it would not run, instead of installing it and
 failing at the first sentence.

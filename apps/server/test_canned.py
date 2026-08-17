@@ -188,6 +188,26 @@ class Chain:
                 raise TimeoutError(f"gave up; downstream saw {self.out.names()}")
             await asyncio.sleep(0.01)
 
+    async def completed(self, timeout: float = 15.0) -> None:
+        """Wait for a completion to have travelled the *whole* chain.
+
+        Wait at the seat you are about to read, not at the one that produced the
+        frames. `mid` sits directly behind the LLM and is in direct mode, so it
+        records `LLMFullResponseEndFrame` in the same breath as the push — while
+        everything the turn emitted earlier is still sitting in a queue further
+        down. Anything read at `out` at that moment is a snapshot of a pipeline
+        mid-flight: a tool result the avatar has not dequeued yet is a claim that
+        has not been inferred yet, and the claim list comes back one beat short
+        about half the time.
+
+        The end frame at `out` is the honest barrier, and it is the same argument
+        `__aenter__` makes about `StartFrame`. Both it and every frame the LLM
+        pushed before it are low-priority in `FrameProcessorQueue`, so they are
+        strictly FIFO through each processor: seeing it at the far end is proof
+        the avatar has already processed — and emitted for — all of them.
+        """
+        await self.until(lambda: bool(self.out.of(LLMFullResponseEndFrame)), timeout)
+
     async def settle(self, turns: int = 1, timeout: float = 15.0) -> None:
         """Wait for `turns` completions to finish speaking.
 
@@ -354,7 +374,7 @@ async def test_the_beats_are_inferred_rather_than_announced(lines: CannedLines) 
     """
     async with Chain(lines, avatar=True, think_ms=40, work_ms=40) as chain:
         await chain.push(UserStoppedSpeakingFrame())
-        await chain.until(lambda: bool(chain.mid.of(LLMFullResponseEndFrame)))
+        await chain.completed()
 
         assert _claims(chain) == ["THINKING", "WORKING", "THINKING"]
         # The application authored no avatar traffic at all.
@@ -373,7 +393,7 @@ async def test_a_beat_of_zero_is_skipped_entirely(lines: CannedLines) -> None:
     """
     async with Chain(lines, avatar=True, think_ms=40, work_ms=0) as chain:
         await chain.push(UserStoppedSpeakingFrame())
-        await chain.until(lambda: bool(chain.mid.of(LLMFullResponseEndFrame)))
+        await chain.completed()
 
         assert _claims(chain) == ["THINKING"]
         assert not chain.mid.of(FunctionCallInProgressFrame)

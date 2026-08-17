@@ -8,7 +8,7 @@ actually ships, where the opposite is true.
 
 ## The PCM clips
 
-Three clips spoken by [piper](https://github.com/OHF-Voice/piper1-gpl) (MIT)
+Three clips spoken by [piper](https://github.com/OHF-Voice/piper1-gpl) (GPL-3.0)
 using `en_US-ljspeech-high` (LJSpeech, public domain), so anyone who clones the
 repo can regenerate them:
 
