@@ -34,7 +34,10 @@ pnpm install && pnpm -w run build && pnpm -w run server:vendor
 cd packages/avatar-py && uv run --group server python ../../apps/server/server.py
 ```
 
-Open <http://localhost:7860> and click **Start call**. Grant the microphone when
+Or `pm2 start ecosystem.config.cjs` from the repo root, which serves this at
+`https://avatar-server.local.voqalize.com` alongside studio and the workshop.
+
+Open the URL and click **Start call**. Grant the microphone when
 Chrome asks — the call cannot connect until you do. The bot speaks first.
 
 The right-hand panel is the avatar wire as it arrives: `claim` for state,

@@ -8,9 +8,11 @@ it ships: the published library is `packages/avatar/src/` and `packages/avatar/c
 bench behind all three.
 
 ```sh
-python3 apps/authoring/serve.py 8777      # from the repository root
-open http://localhost:8777/authoring/
+python3 apps/authoring/serve.py   # from the repository root; open the URL it prints
 ```
+
+`pm2 start ecosystem.config.cjs` runs the same thing supervised, at
+`https://authoring.local.voqalize.com`.
 
 That is the whole setup. There is no build step and there is nothing to
 install — the widget in `packages/avatar/src/` is dependency-free ES modules loaded straight

@@ -7,14 +7,15 @@ with the code you would paste written back to you as you change them.
 pnpm install                                  # once, from the repository root
 cd packages/avatar-py && uv run --group server python ../../apps/server/server.py   # in another terminal
 pnpm -w run studio:dev                        # -w: it is a root script
-open http://127.0.0.1:4173/                   # AVATAR_STUDIO_PORT overrides
+open https://avatar.local.voqalize.com/       # nginx fronts studio, /api → apps/server/
 ```
 
 Both halves are needed. Studio is a page, not a bot: without `apps/server/` running
 there is nothing to call, and the Connect button will say so.
 `pm2 start ecosystem.config.cjs` runs both halves supervised, plus the
-`apps/authoring/` workshop on 8777 — three surfaces, one command, no terminal to
-keep open.
+`apps/authoring/` workshop — three surfaces at `avatar.local`, `avatar-server.local`
+and `authoring.local.voqalize.com`, one command, no terminal to keep open. Ports
+are declared in that file and nowhere else.
 
 ## The rule
 

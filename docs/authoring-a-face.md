@@ -535,8 +535,8 @@ Setup, once: `pnpm install` at the repository root (for `pnpm test` and the
 headless tools), then serve.
 
 ```sh
-python3 apps/authoring/serve.py 8777        # never python3 -m http.server
-open http://localhost:8777/authoring/  # index.html describes every page
+python3 apps/authoring/serve.py   # never python3 -m http.server; open the URL it prints
+                                  # index.html describes every page
 ```
 
 **Use `serve.py`.** The stdlib server sends `Last-Modified` and no

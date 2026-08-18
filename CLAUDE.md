@@ -138,6 +138,21 @@ Non-obvious, and recorded nowhere else.
   *down*) are the actual value in this code and are easy to "clean up" by
   accident.
 
+## Running the three surfaces
+
+```sh
+pm2 start ecosystem.config.cjs
+```
+
+Starts `apps/server/` (the pipecat demo call), `apps/studio/` and the authoring
+workshop. Ports are declared in that file and passed on the command line; no
+config here names one. On this machine a local nginx fronts them at
+`avatar.local.voqalize.com` (Studio, with `/api` proxied to the server),
+`avatar-server.local.voqalize.com` and `authoring.local.voqalize.com`.
+
+Each also runs standalone exactly as the READMEs describe — a contributor
+without pm2 or that nginx loses nothing.
+
 ## Verifying
 
 The rig is judged by eye; the packages are judged by test.
@@ -166,8 +181,8 @@ Three things no suite will tell you:
   mouth moves the instant audio starts, and that the accurate leg's arrival is
   not visible as a jump.
 
-- **Serve with `python3 apps/authoring/serve.py 8777`, never `python3 -m
-  http.server`.** The stdlib server sends `Last-Modified` and no `Cache-Control`, so browsers apply
+- **Serve with `apps/authoring/serve.py` (pm2: `avatar-authoring`), never
+  `python3 -m http.server`.** The stdlib server sends `Last-Modified` and no `Cache-Control`, so browsers apply
   heuristic freshness and stop revalidating modules you have edited. That has
   cost three debugging sessions, one of which produced a module error that was
   simply a lie. Do not work around it with `?v=` either — that puts two copies

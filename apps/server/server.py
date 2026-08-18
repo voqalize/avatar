@@ -1,7 +1,7 @@
 """Serves the demo page and answers its WebRTC offer.
 
     cd packages/avatar-py && uv run --group server python ../../apps/server/server.py
-    open http://localhost:7860
+    open the URL it prints  # click Start call; the bot speaks first
 
 Three jobs, and they are separate on purpose:
 

@@ -110,7 +110,7 @@ production pipeline produces. No API key, no account, no model download
 ```sh
 pnpm install && pnpm -w run build && pnpm -w run server:vendor
 cd packages/avatar-py && uv run --group server python ../../apps/server/server.py
-open http://localhost:7860/          # click Start call; the bot speaks first
+# then open the URL it prints — click Start call; the bot speaks first
 ```
 
 **Avatar Studio** is the IDE for `createAvatar`, pointed at that same server. One
@@ -123,7 +123,7 @@ purpose.
 
 ```sh
 pnpm -w run studio:dev               # with apps/server/ running in another terminal
-open http://127.0.0.1:4173/
+open https://avatar.local.voqalize.com/
 ```
 
 Studio imports `@voqalize/avatar` and nothing else from this repo — no `packages/avatar/src/`,

@@ -5,8 +5,7 @@ import { defineConfig } from "vite";
 const here = dirname(fileURLToPath(import.meta.url));
 /** `apps/studio/` → the repo root, two up. */
 const root = resolve(here, "..", "..");
-const port = Number(process.env.AVATAR_STUDIO_PORT ?? 4173);
-/** Where `apps/server/server.py` binds by default. */
+/** Where `apps/server/` is listening; pm2 supplies it. */
 const api = process.env.AVATAR_SERVER_URL ?? "http://localhost:7860";
 
 /**
@@ -24,17 +23,20 @@ const api = process.env.AVATAR_SERVER_URL ?? "http://localhost:7860";
  *
  * The proxy target is also handed to the page as a constant, because the one
  * message that has to name it — "nothing is listening, start it like this" —
- * is otherwise a second copy of this port that can go stale against an
+ * is otherwise a second copy of it that can go stale against an
  * `AVATAR_SERVER_URL` override.
  */
 export default defineConfig({
   define: { "import.meta.env.VITE_AVATAR_SERVER_URL": JSON.stringify(api) },
   server: {
     host: "127.0.0.1",
-    port,
-    strictPort: true,
+    // Vite rejects unknown Host headers; allow the local nginx front.
+    allowedHosts: [".local.voqalize.com"],
     fs: { allow: [root] },
     proxy: { "/api": { target: api, changeOrigin: false } },
   },
-  preview: { host: "127.0.0.1", port, strictPort: true },
+  preview: {
+    host: "127.0.0.1",
+    allowedHosts: [".local.voqalize.com"],
+  },
 });

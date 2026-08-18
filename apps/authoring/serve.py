@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Static server for the workshop pages.
 
-    python3 apps/authoring/serve.py [port]   # default 8777
-    open http://localhost:8777/apps/authoring/
+    python3 apps/authoring/serve.py [port]   # standalone; the port argument wins
+    open the URL it prints
+
+Under `pm2 start ecosystem.config.cjs` it is started with the port that file
+declares and answers at https://authoring.local.voqalize.com/apps/authoring/.
 
 It serves the **repository root**, not this directory, and does so from
 wherever you run it. The pages import `../../packages/avatar/src/*.js` by
