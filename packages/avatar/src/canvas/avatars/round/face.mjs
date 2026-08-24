@@ -112,6 +112,9 @@ const RAMP = 5;
 //      eye: { aperture }           vertical opening only; 1 is the family
 //                                 geometry, below 1 narrows without changing
 //                                 the adult eye-width ratio
+//             { refine }            optional brow and upper-lid finishing;
+//                                 construction-only, never a driver channel
+//      mouth: { philtrum }          optional quiet neutral-mouth plane
 //      blush: number              how much of the cheek rouge survives — 1 is
 //                                 the generator's own, 0 turns it off
 //      sex: 'f' | 'm'             which rest geometry the rig is BUILT at and
@@ -313,6 +316,7 @@ function makePalette(p) {
     lipBow: [255, 238, 231, 0.13],
     seam: [...lip(-4, 0.02, 0.26).slice(0, 3), 0.85],
     commiss: [...lip(-6, 0.03, 0.30).slice(0, 3), 0.30],
+    philtrum: [...off(-17, 0.06, 0.46).slice(0, 3), 0.22],
     mouthIn: hsl(350, 0.35, 0.25),
     teeth: [250, 246, 242, 1],
     toothSep: [...hsl(28, 0.14, 0.38).slice(0, 3), 0.55],
@@ -367,6 +371,7 @@ function fill(persona = {}) {
     // Omit the optional construction block when it was omitted on input, so
     // personas that do not use it keep byte-identical `meta.live.persona`.
     eye: persona.eye ? { aperture: 1, ...persona.eye } : undefined,
+    mouth: persona.mouth ? { ...persona.mouth } : undefined,
     nose: persona.nose ? { ...persona.nose } : undefined,
     skinDetail: persona.skinDetail ? { ...persona.skinDetail } : undefined,
     blush: persona.blush ?? d.blush,
@@ -897,10 +902,11 @@ export function makeKit(persona) {
   // and brow weights. Construction once, `draws(c, …)` once per control vector.
   return {
     p, PALETTE, IRIS, ...reg,
-    mouth: makeMouth({ P, PALETTE, solid: reg.solid, group: HEAD }),
+    mouth: makeMouth({ P, PALETTE, solid: reg.solid, group: HEAD, marks: p.mouth }),
     eye: makeEye({
       P: EYE_P, PALETTE, solid: reg.solid, group: HEAD,
       irisBase: IRIS.base, lashWeight: p.lash.weight, browWeight: p.brow.weight,
+      refine: p.eye?.refine,
     }),
     nose: makeNose({ P, PALETTE, solid: reg.solid, group: HEAD, shape: p.nose }),
     skinDetail: makeSkinDetail({

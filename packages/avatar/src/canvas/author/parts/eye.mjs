@@ -271,6 +271,18 @@ export const EYE_MARKS = {
 
 export const EYE_CATCH = { r: 0.22, at: [-0.42, -0.42], r2: 0.072, at2: [0.37, 0.37] };
 
+// Persona-local finishing, deliberately separate from the driver's channels.
+// These are quiet rest-shape choices: they soften a heavy brow head and keep
+// the upper-lid plane from reading as a sticker at call-tile scale. Every
+// default is the former construction, so a face that does not opt in is byte
+// identical.
+export const EYE_REFINE = {
+  lidFoldDepth: 13,
+  lidFoldAlpha: 1,
+  creaseDepth: 3.4,
+  brow: { head: 1, peak: 1, tail: 1 },
+};
+
 // The `eye:` / `eyeL:` / `eyeR:` blocks of the control vector, at rest. The six
 // named eye states, the four gaze poses and the idle clips are patches on these
 // nine numbers and nothing else.
@@ -357,12 +369,13 @@ const onRun = (pts, t) => {
 // c keys read: eyeSize, eye/eyeL/eyeR.*.
 export function makeEye({
   P, PALETTE, solid, irisBase, lashWeight = 1, browWeight = 1, group = 'head',
-  px = 1, shape = {}, marks = {}, catch: catchOpt = {}, pen = null,
+  px = 1, shape = {}, marks = {}, catch: catchOpt = {}, refine = {}, pen = null,
 }) {
   const HEAD = group;
   const S = { ...EYE_SHAPE, ...shape };
   const M = { ...EYE_MARKS, ...marks };
   const C = { ...EYE_CATCH, ...catchOpt };
+  const R = { ...EYE_REFINE, ...refine, brow: { ...EYE_REFINE.brow, ...(refine.brow || {}) } };
   // A stroke descriptor, or nothing. `rig.js` copies a stroke straight from
   // base to out and never blends it, so a width is a constant of the draw and
   // can never be a pose channel — which is why it is a construction input.
@@ -571,8 +584,8 @@ export function makeEye({
     // value and needs no pose logic of its own.
     if (M.lidFold) {
       push('lidFold' + k, HEAD, band(
-        bulge(up, -13 * px, { skew: 1.1, pin: true }), up, 0.85,
-      ), solid(PALETTE.lidFold));
+        bulge(up, -R.lidFoldDepth * px, { skew: 1.1, pin: true }), up, 0.85,
+      ), solid(PALETTE.lidFold), R.lidFoldAlpha);
     }
 
     // The lower lid LINE — an outlined style's answer to the waterline, and the
@@ -658,7 +671,7 @@ export function makeEye({
     }
 
     if (M.crease === 'band') {
-      const crB = bulge(cr, 3.4 * px, { pin: true });
+      const crB = bulge(cr, R.creaseDepth * px, { pin: true });
       push('crease' + k, HEAD, band(cr, crB, 0.8), solid(PALETTE.crease));
     }
 
@@ -688,14 +701,14 @@ export function makeEye({
     const pinch = e.browInner * B.pinch * px;
     const tI = tilt(bI[0]), tM = tilt(bM[0]), tO = tilt(bO[0]);
     const browPts = [
-      [bI[0] - s * 2 * px - s * pinch, bI[1] + 3 * px - 9 * px * bw - tI - tipI + archI],
-      [bM[0], bM[1] - 0.5 * px - 10.5 * px * bw - tM - archM],
-      [bO[0] + s * 11 * px, bO[1] + 3 * px - tO],
-      [bM[0], bM[1] - 0.5 * px + 10.5 * px * bw - tM - archM],
-      [bI[0] - s * 2 * px - s * pinch, bI[1] + 3 * px + 9 * px * bw - tI - tipI + archI],
+      [bI[0] - s * 2 * px - s * pinch, bI[1] + 3 * px - 9 * px * bw * R.brow.head - tI - tipI + archI],
+      [bM[0], bM[1] - 0.5 * px - 10.5 * px * bw * R.brow.peak - tM - archM],
+      [bO[0] + s * 11 * px * R.brow.tail, bO[1] + 3 * px - tO],
+      [bM[0], bM[1] - 0.5 * px + 10.5 * px * bw * R.brow.peak - tM - archM],
+      [bI[0] - s * 2 * px - s * pinch, bI[1] + 3 * px + 9 * px * bw * R.brow.head - tI - tipI + archI],
       // cap: rounds the inner head of the brow — and carries `browInner`'s
       // rotation, being the point furthest from the pivot.
-      [bI[0] - s * 9 * px - s * pinch, bI[1] + 3 * px - tI - tipC + archI],
+      [bI[0] - s * 9 * px * R.brow.head - s * pinch, bI[1] + 3 * px - tI - tipC + archI],
     ];
     push('brow' + k, HEAD, spline(browPts, 0.9), solid(side < 0 ? PALETTE.brow : PALETTE.browR));
     if (pen && pen.brow) {

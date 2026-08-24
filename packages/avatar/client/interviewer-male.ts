@@ -9,7 +9,6 @@ const IMAGES = {
   'round-m3-hair-back.webp': new URL('../src/canvas/data/img/round-m3-hair-back.webp', import.meta.url),
   'round-m3-top-body.webp': new URL('../src/canvas/data/img/round-m3-top-body.webp', import.meta.url),
   'round-m3-hair-front.webp': new URL('../src/canvas/data/img/round-m3-hair-front.webp', import.meta.url),
-  'round-m3-glasses-front.webp': new URL('../src/canvas/data/img/round-m3-glasses-front.webp', import.meta.url),
 } as const;
 const FACE = () => import('../src/canvas/avatars/round/face.mjs');
 

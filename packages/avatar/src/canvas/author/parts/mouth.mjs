@@ -496,6 +496,7 @@ export const MOUTH_MARKS = {
   toothSh: { depth: 5, a: 0.55, blend: 'multiply' },   // the upper lip's cast shadow
   seam: [-1.5, 3.0],          // the seam ribbon's two offsets off its own run
   commiss: { r: 0.028, dx: 0.030, blend: 'multiply' }, // the corner pockets
+  philtrum: null,             // an optional quiet two-plane neutral-mouth cue
 };
 
 export function makeMouth({ P, PALETTE, solid, group = 'head', marks = {}, pen = null }) {
@@ -505,7 +506,7 @@ export function makeMouth({ P, PALETTE, solid, group = 'head', marks = {}, pen =
   const INK = pen ? solid(pen.paint) : null;
 
   // PALETTE keys read: mouthIn, teeth, toothSep, toothSh, tongue, lipLow,
-  //                    lipHi, lipUp, lipBow, seam, commiss.
+  //                    lipHi, lipUp, lipBow, seam, commiss, philtrum.
   function draws(c, L, env = {}) {
     const out = [];
     const push = drawPusher(out);
@@ -617,6 +618,23 @@ export function makeMouth({ P, PALETTE, solid, group = 'head', marks = {}, pen =
     if (M.bow) {
       const bowTop = F.upperOuter.slice(1, 6);
       push('lipBow', HEAD, band(bowTop, bowTop.map(([x, y]) => [x, y + 4.5]), 1), solid(PALETTE.lipBow));
+    }
+
+    // The philtrum is not a pair of drawn-on lines. It is two very shallow
+    // planes that narrow into the cupid's-bow dip: enough material change to
+    // connect nose and mouth in a neutral listening frame, quiet enough to
+    // disappear into every speech shape. `L.philt` is face-space while the
+    // lower endpoint comes from this frame's live upper lip, so the cue never
+    // hangs across an opened or smiling mouth.
+    if (M.philtrum) {
+      const { a = 0.5, w = 14 } = M.philtrum;
+      const [px, py] = L.philt;
+      const bottom = Math.max(py + 6, F.upperOuter[3][1] - 3);
+      const plane = (side) => polygon([
+        [px + side * w * 0.50, py], [px + side * w * 0.16, py + 2],
+        [px + side * w * 0.22, bottom], [px + side * w * 0.52, bottom - 2],
+      ]);
+      push('philtrum', HEAD, contours(plane(-1), plane(1)), solid(PALETTE.philtrum), a);
     }
 
     // ---- the pen, over both fills -----------------------------------------

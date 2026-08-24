@@ -29,13 +29,21 @@ describe('professional interviewer assets', () => {
     const male = await rig('interviewer-male');
     const female = await rig('interviewer-female');
     expect(male.meta.live?.persona).toMatchObject({
-      sex: 'm', eye: { aperture: 0.92 }, nose: { style: 'mature', shadow: 0.86 },
+      sex: 'm', eye: { aperture: 0.92, refine: { brow: { head: 0.78 } } },
+      mouth: { philtrum: { a: 0.56, w: 14 } }, nose: { style: 'mature', shadow: 0.86 },
       skinDetail: { freckles: expect.any(Array) },
     });
     expect(female.meta.live?.persona).toMatchObject({
-      sex: 'f', eye: { aperture: 0.9 }, blush: 0.3, nose: { style: 'mature', shadow: 0.74 },
+      sex: 'f', eye: { aperture: 0.9, refine: { brow: { head: 0.9 } } },
+      mouth: { philtrum: { a: 0.48, w: 12 } }, blush: 0.3, nose: { style: 'mature', shadow: 0.74 },
       skinDetail: { freckles: expect.any(Array), mole: expect.any(Object) },
     });
+  });
+
+  it('ships the male without glasses', async () => {
+    const male = await rig('interviewer-male');
+    expect(male.images.map(({ file }) => file)).not.toContain('round-m3-glasses-front.webp');
+    await expect(readFile(new URL('data/img/round-m3-glasses-front.webp', canvasRoot))).rejects.toThrow();
   });
 
   it('ships the male identity without unused authored animation libraries', async () => {
