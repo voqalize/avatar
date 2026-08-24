@@ -9,6 +9,8 @@ async function rig(name: string) {
   return JSON.parse(await readFile(url, 'utf8')) as {
     images: Array<{ file: string }>;
     meta: { live?: { persona?: Record<string, unknown> } };
+    poses?: Record<string, unknown>;
+    tracks?: Record<string, unknown>;
   };
 }
 
@@ -34,6 +36,12 @@ describe('professional interviewer assets', () => {
       sex: 'f', eye: { aperture: 0.9 }, blush: 0.3, nose: { style: 'mature', shadow: 0.74 },
       skinDetail: { freckles: expect.any(Array), mole: expect.any(Object) },
     });
+  });
+
+  it('ships the male identity without unused authored animation libraries', async () => {
+    const male = await rig('interviewer-male');
+    expect(male.poses).toEqual({});
+    expect(male.tracks).toEqual({});
   });
 
   it('publishes both createAvatar modules', async () => {
