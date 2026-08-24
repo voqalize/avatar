@@ -26,10 +26,9 @@
 import { useEffect, useRef } from "react";
 import type { PipecatClient } from "@pipecat-ai/client-js";
 import { ConnectButton, UserAudioControl, VoiceVisualizer } from "@pipecat-ai/voice-ui-kit";
-import { createAvatar } from "@voqalize/avatar";
 import { Captions } from "./Captions";
 import { SERVER_URL } from "./call";
-import { faceValue, type Look } from "./look";
+import { createLookAvatar, type Look } from "./look";
 import { usePresence, type Presence } from "./presence";
 
 /**
@@ -148,18 +147,9 @@ function Frame({ client, look, live }: { client: PipecatClient; look: Look; live
   // `createAvatar` returns `{ destroy }` and that is the whole of it. Studio
   // shows what a consumer gets rather than routing around it.
   useEffect(() => {
-    const avatar = createAvatar({
-      mount: mount.current!,
-      client,
-      face: faceValue(look.face),
-      mouthGain: look.mouthGain,
-      gestureGain: look.gestureGain,
-      motionGain: look.motionGain,
-      hand: look.hand,
-      handSide: look.handSide,
-    });
+    const avatar = createLookAvatar(look, mount.current!, client);
     return () => avatar.destroy();
-  }, [client, look.face, look.mouthGain, look.gestureGain, look.motionGain, look.hand, look.handSide]);
+  }, [client, look.avatar, look.mouthGain, look.gestureGain, look.motionGain, look.hand, look.handSide]);
 
   return (
     <div className="frame">

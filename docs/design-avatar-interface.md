@@ -29,6 +29,13 @@ Ours ships `peep`, `wren`, `myna` as `{ face }` — a value imported from
 one costs one drawing. Every other option belongs to whoever wrote the
 implementation; nothing reads them but them.
 
+Ours also ships two complete Canvas2D implementations at
+`@voqalize/avatar/avatars/interviewer-male` and
+`@voqalize/avatar/avatars/interviewer-female`. Each exports the same
+`createAvatar` function and fixes one identity behind it. Their shared renderer,
+pose evaluator, rig data and wardrobe images are private code reuse, not another
+public interface and not a registry.
+
 ## Why there is no renderer interface
 
 The [rig pose model](internal-rig.md) is 30 float pose channels. It reads like the

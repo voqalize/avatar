@@ -1,26 +1,31 @@
 /**
  * Everything `createAvatar` takes besides the mount and the client.
  *
- * The three faces are imported as values, one per module — the same three lines
- * a consumer writes. There is no name→face table in the library and Studio does
- * not reach for `src/faces.js` to get one: that module is tooling, and a
- * picker's need to render a list is not a reason for the package to carry every
- * drawing in every bundle. Three imports here is what it costs to offer three,
- * and it is the honest cost.
+ * Studio imports every identity explicitly, exactly as a consumer would. The
+ * three SVG drawings arrive as face values; the two professional interviewers
+ * arrive as complete `createAvatar` modules. There is no package registry and
+ * no reach into `src/` or `/internal`.
  */
 
-import type { Face, Gain, HandSide } from "@voqalize/avatar";
+import { createAvatar as createSvgAvatar } from "@voqalize/avatar";
+import type { AvatarInstance, Face, Gain, HandSide } from "@voqalize/avatar";
+import type { PipecatClient } from "@pipecat-ai/client-js";
 import { peep } from "@voqalize/avatar/faces/peep";
 import { wren } from "@voqalize/avatar/faces/wren";
 import { myna } from "@voqalize/avatar/faces/myna";
+import { createAvatar as createInterviewerMale } from "@voqalize/avatar/avatars/interviewer-male";
+import { createAvatar as createInterviewerFemale } from "@voqalize/avatar/avatars/interviewer-female";
 
 export const FACES = { peep, wren, myna } as const;
-export type FaceName = keyof typeof FACES;
-export const FACE_NAMES = Object.keys(FACES) as FaceName[];
+export type SvgAvatarName = keyof typeof FACES;
+export type AvatarName = SvgAvatarName | "interviewer-male" | "interviewer-female";
+export const AVATAR_NAMES: readonly AvatarName[] = [
+  "peep", "wren", "myna", "interviewer-male", "interviewer-female",
+];
 
 /** The option surface, as one value, so a change to any of it is one remount. */
 export interface Look {
-  face: FaceName;
+  avatar: AvatarName;
   mouthGain: Gain;
   gestureGain: Gain;
   motionGain: Gain;
@@ -30,7 +35,7 @@ export interface Look {
 
 /** `peep` is `DEFAULT_FACE` and the rig to author against (CLAUDE.md). */
 export const DEFAULT_LOOK: Look = {
-  face: "peep",
+  avatar: "peep",
   mouthGain: 1,
   gestureGain: 1,
   motionGain: 1,
@@ -38,7 +43,31 @@ export const DEFAULT_LOOK: Look = {
   handSide: 1,
 };
 
-export const faceValue = (name: FaceName): Face => FACES[name];
+const isSvgAvatar = (name: AvatarName): name is SvgAvatarName => name in FACES;
+
+export function createLookAvatar(
+  look: Look,
+  mount: HTMLElement,
+  client: PipecatClient,
+): AvatarInstance {
+  const gains = {
+    mount,
+    client,
+    mouthGain: look.mouthGain,
+    gestureGain: look.gestureGain,
+    motionGain: look.motionGain,
+  };
+  if (look.avatar === "interviewer-male") return createInterviewerMale(gains);
+  if (look.avatar === "interviewer-female") return createInterviewerFemale(gains);
+  return createSvgAvatar({
+    ...gains,
+    face: FACES[look.avatar] as Face,
+    hand: look.hand,
+    handSide: look.handSide,
+  });
+}
+
+export const hasConfigurableHand = (name: AvatarName): boolean => isSvgAvatar(name);
 
 /**
  * The three multipliers, named once so the sliders and their labels cannot

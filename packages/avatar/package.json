@@ -59,6 +59,14 @@
       "types": "./src/face-myna.d.ts",
       "default": "./src/face-myna.js"
     },
+    "./avatars/interviewer-male": {
+      "types": "./dist/interviewer-male.d.ts",
+      "default": "./dist/interviewer-male.js"
+    },
+    "./avatars/interviewer-female": {
+      "types": "./dist/interviewer-female.d.ts",
+      "default": "./dist/interviewer-female.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

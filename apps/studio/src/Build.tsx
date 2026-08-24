@@ -17,7 +17,14 @@
 import { useState } from "react";
 import { Button, Slider } from "@pipecat-ai/voice-ui-kit";
 import type { VoiceOption } from "./corpus";
-import { DEFAULT_LOOK, FACE_NAMES, GAINS, type FaceName, type Look } from "./look";
+import {
+  AVATAR_NAMES,
+  DEFAULT_LOOK,
+  GAINS,
+  hasConfigurableHand,
+  type AvatarName,
+  type Look,
+} from "./look";
 
 const pct = (gain: number) => `${Math.round(gain * 100)}%`;
 
@@ -61,7 +68,13 @@ pipeline = Pipeline([..., tts, AvatarProcessor(), transport.output()])`;
  * comes back, which is what makes hearing a mismatch a thing you can come here
  * for.
  */
-export const READS: Record<FaceName, string> = { peep: "male", wren: "female", myna: "female" };
+export const READS: Record<AvatarName, string> = {
+  peep: "male",
+  wren: "female",
+  myna: "female",
+  "interviewer-male": "male",
+  "interviewer-female": "female",
+};
 
 /**
  * The call you would write for this build, with the defaults left out.
@@ -73,16 +86,21 @@ export const READS: Record<FaceName, string> = { peep: "male", wren: "female", m
  */
 function snippet(look: Look): string {
   const opts: string[] = [];
-  if (look.face !== "peep") opts.push(`face: ${look.face}`);
   if (look.mouthGain !== 1) opts.push(`mouthGain: ${round(look.mouthGain)}`);
   if (look.gestureGain !== 1) opts.push(`gestureGain: ${round(look.gestureGain)}`);
   if (look.motionGain !== 1) opts.push(`motionGain: ${round(look.motionGain)}`);
-  if (!look.hand) opts.push("hand: false");
-  else if (look.handSide === -1) opts.push("handSide: -1");
+  if (hasConfigurableHand(look.avatar)) {
+    if (!look.hand) opts.push("hand: false");
+    else if (look.handSide === -1) opts.push("handSide: -1");
+  }
 
-  const imports = [`import { createAvatar } from "@voqalize/avatar";`];
-  if (look.face !== "peep") {
-    imports.push(`import { ${look.face} } from "@voqalize/avatar/faces/${look.face}";`);
+  const isInterviewer = look.avatar.startsWith("interviewer-");
+  const imports = [isInterviewer
+    ? `import { createAvatar } from "@voqalize/avatar/avatars/${look.avatar}";`
+    : `import { createAvatar } from "@voqalize/avatar";`];
+  if (!isInterviewer && look.avatar !== "peep") {
+    opts.unshift(`face: ${look.avatar}`);
+    imports.push(`import { ${look.avatar} } from "@voqalize/avatar/faces/${look.avatar}";`);
   }
   const call = opts.length
     ? `createAvatar({\n  mount,\n  client,\n${opts.map((o) => `  ${o},`).join("\n")}\n});`
@@ -144,7 +162,7 @@ export function BuildSummary({
     <div className="summary">
       <p>
         <b>
-          {look.face} · {voice}
+          {look.avatar} · {voice}
         </b>
         <span>
           mouth {pct(look.mouthGain)} · gestures {pct(look.gestureGain)} · idle {pct(look.motionGain)} ·{" "}
@@ -185,11 +203,11 @@ export function Build({
   // so a difference is never something Studio just did. It is either a voice
   // chosen deliberately against the face, or a face changed mid-call, when the
   // voice is fixed for the duration and the line is the explanation.
-  const pairs = READS[look.face];
+  const pairs = READS[look.avatar];
   const wanted = voices.find((v) => v.name === pairs);
   const mismatch =
     voice && wanted && voice !== pairs
-      ? `${look.face} reads ${pairs} — ${wanted.label} is the matching voice.`
+      ? `${look.avatar} reads ${pairs} — ${wanted.label} is the matching voice.`
       : "";
 
   return (
@@ -226,25 +244,25 @@ export function Build({
 
         <div className="group">
           <span className="group-label">
-            <span>Face</span>
-            <code>face</code>
+            <span>Avatar</span>
+            <code>module</code>
           </span>
           <div className="choices">
-            {FACE_NAMES.map((name) => (
+            {AVATAR_NAMES.map((name) => (
               <Button
                 key={name}
                 size="sm"
-                variant={look.face === name ? "active" : "outline"}
-                aria-pressed={look.face === name}
-                onClick={() => set("face", name)}
+                variant={look.avatar === name ? "active" : "outline"}
+                aria-pressed={look.avatar === name}
+                onClick={() => set("avatar", name)}
               >
                 {name}
               </Button>
             ))}
           </div>
           <p className="why">
-            A value, not a name — import the one you want and the other two never enter your bundle.{" "}
-            <code>peep</code> is the default and the rig the library is authored against.
+            SVG drawings are imported as face values. The professional interviewer identities are
+            complete <code>createAvatar</code> modules with their Canvas2D renderer and wardrobe kept private.
           </p>
         </div>
 
@@ -280,7 +298,7 @@ export function Build({
           </div>
         ))}
 
-        <div className="group">
+        {hasConfigurableHand(look.avatar) && <div className="group">
           <span className="group-label">
             <span>Hand</span>
             <code>hand</code>
@@ -307,7 +325,7 @@ export function Build({
             One drawing waved in from the frame edge. There is no arm behind it — a channel only one
             avatar can render is the shape of the mistake.
           </p>
-        </div>
+        </div>}
       </section>
 
       {/* Nothing to press. It is here because the panel above answers "what do

@@ -3,8 +3,8 @@
  *
  * Studio imports `@voqalize/avatar` and nothing else from this repo. Not
  * `src/avatar.js`, not `client/src/AvatarClient.ts`, not
- * `@voqalize/avatar/internal` — the published entry point, the three published
- * faces, and a real call. That is the point of it: if a thing cannot be done
+ * `@voqalize/avatar/internal` — published entry points and a real call. That is
+ * the point of it: if a thing cannot be done
  * here, a consumer cannot do it either, and the gap is a defect in the package
  * rather than a reason to reach past it.
  *
@@ -30,7 +30,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from "re
 import { PipecatClientAudio, PipecatClientProvider, usePipecatClientTransportState } from "@pipecat-ai/client-react";
 import { useCall, type Call } from "./call";
 import { useCorpus } from "./corpus";
-import { DEFAULT_LOOK, type FaceName, type Look } from "./look";
+import { DEFAULT_LOOK, type AvatarName, type Look } from "./look";
 import { Build, BuildSummary, READS } from "./Build";
 import { Drive } from "./Drive";
 import { DEFAULT_SIZE, Stage, type Size } from "./Stage";
@@ -92,8 +92,8 @@ function Studio({ call }: { call: Call }) {
    * legitimately disagrees until you hang up.
    */
   const pairVoice = useCallback(
-    (face: FaceName) => {
-      const want = READS[face];
+    (avatar: AvatarName) => {
+      const want = READS[avatar];
       if (live || !corpus || corpus.voice === want) return;
       // The server owns the vocabulary; a voice this build has never heard of
       // is not something to POST at it.
@@ -111,12 +111,12 @@ function Studio({ call }: { call: Call }) {
   useEffect(() => {
     if (!corpus || aligned.current) return;
     aligned.current = true;
-    pairVoice(look.face);
-  }, [corpus, look.face, pairVoice]);
+    pairVoice(look.avatar);
+  }, [corpus, look.avatar, pairVoice]);
 
   // A face change is also a voice change; every other option is only itself.
   const chooseLook = (next: Look) => {
-    if (next.face !== look.face) pairVoice(next.face);
+    if (next.avatar !== look.avatar) pairVoice(next.avatar);
     setLook(next);
   };
 

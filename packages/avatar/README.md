@@ -6,8 +6,9 @@ they have been interrupted, when the user is talking versus idle, when a tool
 call has started and stopped.
 
 No video track, no per-minute avatar vendor, no second media path. Three SVG
-faces ship with it — one drawing per entry point, so you pay for the one you
-import — and you can author your own.
+faces and two professional Canvas2D interviewer avatars ship with it — one
+identity per entry point, so you pay for the one you import — and you can
+author your own.
 
 This is the browser half. The pipeline half is
 [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) on PyPI; they are
@@ -123,6 +124,29 @@ createAvatar({ mount, client, face: myna });
 A name would need a table, and a table is a dynamic index no bundler can shake —
 three drawings in every consumer's bundle to render one.
 
+## Professional interviewer avatars
+
+Two complete, code-authored avatars ship as their own `createAvatar` modules:
+
+```js
+import { createAvatar } from '@voqalize/avatar/avatars/interviewer-male';
+// or: @voqalize/avatar/avatars/interviewer-female
+
+const avatar = createAvatar({ mount, client: pipecatClient });
+```
+
+Both depict Indian professionals in their late twenties, without caricature or
+regional costume cues. They are calibrated at call-tile size and preserve all
+six expression targets, continuous visemes, gaze, blink, head motion, and the
+frame-edge gesture hand. The male and female modules are complete identities,
+not face values: import one instead of the default module and do not pass a
+`face` option.
+
+They use the same public contract and the same Pipecat lifecycle/viseme driver
+as the SVG avatars. Their private renderer is Canvas2D; its rig data and bitmap
+wardrobe assets are implementation details and no Canvas or pose API is added
+to the package surface.
+
 ## Shipping your own avatar
 
 A whole different rendering technology is not a face; it is a different
@@ -144,11 +168,12 @@ premature until a second renderer says what it needs.
 
 ## What is in this tarball
 
-`dist/` is the compiled client — `AvatarClient`, `createAvatar` and the React
-binding. `src/` is the widget itself: the mixer, the rig and the three drawings,
-as dependency-free ES modules with no build step, imported by `dist/` through an
-ordinary relative path. `client/` is the TypeScript those `dist/` files were
-compiled from, so the source maps resolve.
+`dist/` is the compiled client — `AvatarClient`, the avatar entry points and the
+React binding. `src/` is the widget itself: the mixer, the SVG rig and drawings,
+plus the private Canvas2D interviewer rigs and their assets, as dependency-free
+ES modules with no build step, imported by `dist/` through ordinary relative
+paths. `client/` is the TypeScript those `dist/` files were compiled from, so
+the source maps resolve.
 
 The contract documents do not ship here. They live in the repository, which is
 where they are kept current:
