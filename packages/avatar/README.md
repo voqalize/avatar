@@ -142,6 +142,10 @@ frame-edge gesture hand. The male and female modules are complete identities,
 not face values: import one instead of the default module and do not pass a
 `face` option.
 
+Their faces use low-contrast, landmark-driven nose planes rather than an
+outlined nose glyph. A few identity-specific freckles or a small mole add depth
+only in low-motion upper-cheek areas; none are used as demographic cues.
+
 They use the same public contract and the same Pipecat lifecycle/viseme driver
 as the SVG avatars. Their private renderer is Canvas2D; its rig data and bitmap
 wardrobe assets are implementation details and no Canvas or pose API is added

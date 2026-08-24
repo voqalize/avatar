@@ -26,8 +26,14 @@ describe('professional interviewer assets', () => {
   it('keeps the measured identity-specific fidelity settings', async () => {
     const male = await rig('interviewer-male');
     const female = await rig('interviewer-female');
-    expect(male.meta.live?.persona).toMatchObject({ sex: 'm', eye: { aperture: 0.92 } });
-    expect(female.meta.live?.persona).toMatchObject({ sex: 'f', eye: { aperture: 0.9 }, blush: 0.3 });
+    expect(male.meta.live?.persona).toMatchObject({
+      sex: 'm', eye: { aperture: 0.92 }, nose: { style: 'mature', shadow: 0.86 },
+      skinDetail: { freckles: expect.any(Array) },
+    });
+    expect(female.meta.live?.persona).toMatchObject({
+      sex: 'f', eye: { aperture: 0.9 }, blush: 0.3, nose: { style: 'mature', shadow: 0.74 },
+      skinDetail: { freckles: expect.any(Array), mole: expect.any(Object) },
+    });
   });
 
   it('publishes both createAvatar modules', async () => {

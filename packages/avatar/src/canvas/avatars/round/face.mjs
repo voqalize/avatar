@@ -25,6 +25,8 @@ import {
 } from '../../author/rig.mjs';
 import { makeMouth, mouthRestChannels } from '../../author/parts/mouth.mjs';
 import { makeEye, eyeChannelRest, eyeSide, BROW_PX, EYE_TABLE } from '../../author/parts/eye.mjs';
+import { makeNose } from '../../author/parts/nose.mjs';
+import { makeSkinDetail } from '../../author/parts/skin-detail.mjs';
 import { makeHand, handRest, handFrameOf } from '../../author/parts/hand.mjs';
 
 // ===========================================================================
@@ -252,6 +254,11 @@ function makePalette(p) {
     neck: skin(3.0),
     neckSh: SHADE(0.15),
     nose: skin(2.9),
+    noseBridge: off(-17, 0.08, 0.34),
+    noseUnder: off(-19, 0.10, 0.25),
+    noseAlar: off(-22, 0.10, 0.18),
+    skinFleck: off(-13, 0.13, 0.53),
+    skinMole: off(-21, 0.15, 0.31),
     hairBack: hair(0),
     hairFront: hair(1),
     // The fringe highlight was an opaque lozenge; at the webcam crop that read as
@@ -360,6 +367,8 @@ function fill(persona = {}) {
     // Omit the optional construction block when it was omitted on input, so
     // personas that do not use it keep byte-identical `meta.live.persona`.
     eye: persona.eye ? { aperture: 1, ...persona.eye } : undefined,
+    nose: persona.nose ? { ...persona.nose } : undefined,
+    skinDetail: persona.skinDetail ? { ...persona.skinDetail } : undefined,
     blush: persona.blush ?? d.blush,
   }, persona);
 }
@@ -893,6 +902,10 @@ export function makeKit(persona) {
       P: EYE_P, PALETTE, solid: reg.solid, group: HEAD,
       irisBase: IRIS.base, lashWeight: p.lash.weight, browWeight: p.brow.weight,
     }),
+    nose: makeNose({ P, PALETTE, solid: reg.solid, group: HEAD, shape: p.nose }),
+    skinDetail: makeSkinDetail({
+      PALETTE, solid: reg.solid, group: HEAD, profile: p.skinDetail,
+    }),
     // The third part takes no persona of its own beyond the skin rungs: a
     // character's hand is the same character's hand, so `PALETTE.face` /
     // `shade` / `crease` are the whole of it, which is also why the paint
@@ -997,6 +1010,10 @@ export function buildDraws(c, K) {
     push('blush' + k, HEAD, spline(circle(bx, by, rx, 11, RY / rx), 1), solid(PALETTE.blush));
   }
 
+  // Identity marks sit above the broad blush, below hair and eyes. Their
+  // profile uses outer upper-cheek anchors, away from every expressive fold.
+  out.push(...K.skinDetail.draws(c, L));
+
   emit(SHAPES_TOP);
 
   // ---- eyes ---------------------------------------------------------------
@@ -1006,10 +1023,8 @@ export function buildDraws(c, K) {
   // arch over them is the part's.
   for (const side of [-1, 1]) out.push(...K.eye.draws(c, L, side));
 
-  // ---- nose: one L-shaped tick on the shadow side --------------------------
-  push('nose', HEAD, spline(
-    ['no1', 'no2', 'no3', 'no4', 'no5', 'no6', 'no7', 'no8'].map((n) => L[n]), 0.9),
-    solid(PALETTE.nose));
+  // ---- nose: persona-selectable planes; legacy tick is exact by default ----
+  out.push(...K.nose.draws(c, L));
 
   // ---- mouth ---------------------------------------------------------------
   // Eleven draws, in paint order, from author/parts/mouth.mjs. It reads `c.jaw`
