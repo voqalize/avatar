@@ -342,10 +342,11 @@ a:hover {
 }
 
 /* 130 px — a third of what this used to be, and the size the rig is calibrated
-   at. The frame is the paper, so it is the shape of the drawing and no wider:
-   576 × 800, the faces' own viewBox, so the figure meets all four edges exactly
-   as it was authored. The width is a variable only so it can be raised for
-   inspection; `--frame` is 130px at rest and the SVG fills whatever it is. */
+   at. The SVG faces are portrait (576 × 800), while the interviewer rigs own a
+   4:3 webcam camera. The host must keep that distinction: putting a 4:3 rig in
+   the portrait shell was 46% blank canvas, not useful headroom. The width is a
+   variable only so it can be raised for inspection; `--frame` is 130px at rest
+   and each renderer fills the camera it was authored for. */
 .frame {
   position: relative;
   align-self: center;
@@ -358,6 +359,10 @@ a:hover {
   box-shadow:
     inset 0 0 0 1px var(--paper-edge),
     0 1px 3px rgb(0 0 0 / 40%);
+}
+
+.frame-landscape {
+  aspect-ratio: 4 / 3;
 }
 
 .frame-mount,
