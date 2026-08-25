@@ -126,11 +126,15 @@ three drawings in every consumer's bundle to render one.
 
 ## Professional interviewer avatars
 
-Two complete, code-authored avatars ship as their own `createAvatar` modules:
+Six complete, code-authored avatars ship as their own `createAvatar` modules:
 
 ```js
 import { createAvatar } from '@voqalize/avatar/avatars/interviewer-male';
 // or: @voqalize/avatar/avatars/interviewer-female
+// or: @voqalize/avatar/avatars/professional-male-a
+//     @voqalize/avatar/avatars/professional-female-a
+//     @voqalize/avatar/avatars/professional-male-b
+//     @voqalize/avatar/avatars/professional-female-b
 
 const avatar = createAvatar({ mount, client: pipecatClient });
 ```

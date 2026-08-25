@@ -74,6 +74,10 @@ export const READS: Record<AvatarName, string> = {
   myna: "female",
   "interviewer-male": "male",
   "interviewer-female": "female",
+  "professional-male-a": "male",
+  "professional-female-a": "female",
+  "professional-male-b": "male",
+  "professional-female-b": "female",
 };
 
 /**

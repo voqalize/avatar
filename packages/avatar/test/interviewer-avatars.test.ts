@@ -2,6 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAvatar as createMale } from '../client/interviewer-male.js';
 import { createAvatar as createFemale } from '../client/interviewer-female.js';
+import { createAvatar as createProfessionalMaleA } from '../client/professional-male-a.js';
+import { createAvatar as createProfessionalFemaleA } from '../client/professional-female-a.js';
+import { createAvatar as createProfessionalMaleB } from '../client/professional-male-b.js';
+import { createAvatar as createProfessionalFemaleB } from '../client/professional-female-b.js';
 
 let rafPolyfilled = false;
 
@@ -46,7 +50,11 @@ function fakeClient() {
 describe.each([
   ['male', createMale],
   ['female', createFemale],
-] as const)('interviewer-%s package entry point', (identity, createAvatar) => {
+  ['male', createProfessionalMaleA],
+  ['female', createProfessionalFemaleA],
+  ['male', createProfessionalMaleB],
+  ['female', createProfessionalFemaleB],
+] as const)('professional %s package entry point', (identity, createAvatar) => {
   it('keeps the public contract and owns one accessible canvas', () => {
     const mount = document.createElement('div');
     document.body.appendChild(mount);

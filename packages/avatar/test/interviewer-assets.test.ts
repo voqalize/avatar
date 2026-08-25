@@ -3,11 +3,20 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const canvasRoot = new URL('../src/canvas/', import.meta.url);
+const CANVAS_AVATARS = [
+  'interviewer-male',
+  'interviewer-female',
+  'professional-male-a',
+  'professional-female-a',
+  'professional-male-b',
+  'professional-female-b',
+] as const;
 
 async function rig(name: string) {
   const url = new URL(`data/${name}.rig.json`, canvasRoot);
   return JSON.parse(await readFile(url, 'utf8')) as {
     images: Array<{ file: string }>;
+    draws: Array<{ slot: string }>;
     meta: {
       artboard: { w: number; h: number };
       align: number[];
@@ -18,8 +27,8 @@ async function rig(name: string) {
   };
 }
 
-describe('professional interviewer assets', () => {
-  it.each(['interviewer-male', 'interviewer-female'])('%s carries the authored 4:3 call camera', async (name) => {
+describe('professional canvas-avatar assets', () => {
+  it.each(CANVAS_AVATARS)('%s carries the authored 4:3 call camera', async (name) => {
     const [data, face, author] = await Promise.all([
       rig(name),
       import('../src/canvas/avatars/round/face.mjs'),
@@ -32,7 +41,7 @@ describe('professional interviewer assets', () => {
     expect(data.meta.align).toEqual(camera.align);
   });
 
-  it.each(['interviewer-male', 'interviewer-female'])('%s is a live rig with every image present', async (name) => {
+  it.each(CANVAS_AVATARS)('%s is a live rig with every image present', async (name) => {
     const data = await rig(name);
     expect(data.meta.live).toBeTruthy();
     expect(data.images.length).toBeGreaterThan(0);
@@ -57,6 +66,37 @@ describe('professional interviewer assets', () => {
     });
   });
 
+  it('keeps all four approved variants fair-toned and individually shaped', async () => {
+    const variants = await Promise.all(CANVAS_AVATARS.slice(2).map((name) => rig(name)));
+    const personas = variants.map(({ meta }) => meta.live?.persona as {
+      skin: [number, number, number];
+      geo: Record<string, number>;
+    });
+
+    expect(personas.every(({ skin }) => skin[2] >= 0.72)).toBe(true);
+    expect(new Set(personas.map(({ geo }) => JSON.stringify(geo))).size).toBe(4);
+  });
+
+  it.each(CANVAS_AVATARS.slice(2))('%s keeps rear hair, wardrobe and fringe in semantic order', async (name) => {
+    const data = await rig(name);
+    const slots = data.draws.map(({ slot }) => slot);
+    const back = slots.indexOf('wardrobe/hair-back');
+    const body = slots.indexOf('wardrobe/top-body');
+    const face = slots.indexOf('face');
+    const shade = slots.indexOf('faceShade');
+    const front = slots.indexOf('wardrobe/hair-front');
+
+    expect(data.images.map(({ file }) => file)).toEqual([
+      `${name}-top-body.webp`,
+      `${name}-hair-back.webp`,
+      `${name}-hair-front.webp`,
+    ]);
+    expect(back).toBeGreaterThanOrEqual(0);
+    expect(back).toBeLessThan(face);
+    expect(body).toBeLessThan(face);
+    expect(front).toBeGreaterThan(shade);
+  });
+
   it('ships the male without glasses', async () => {
     const male = await rig('interviewer-male');
     expect(male.images.map(({ file }) => file)).not.toContain('round-m3-glasses-front.webp');
@@ -74,7 +114,7 @@ describe('professional interviewer assets', () => {
     const manifest = JSON.parse(await readFile(manifestUrl, 'utf8')) as {
       exports: Record<string, { types?: string; default?: string }>;
     };
-    for (const name of ['interviewer-male', 'interviewer-female']) {
+    for (const name of CANVAS_AVATARS) {
       const entry = manifest.exports[`./avatars/${name}`];
       expect(entry?.types).toBe(`./dist/${name}.d.ts`);
       expect(entry?.default).toBe(`./dist/${name}.js`);

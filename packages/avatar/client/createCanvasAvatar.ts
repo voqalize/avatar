@@ -1,4 +1,4 @@
-/** Shared private constructor for the two code-authored interviewer avatars. */
+/** Shared private constructor for the code-authored canvas avatars. */
 
 import type { PipecatClient } from '@pipecat-ai/client-js';
 import { createAvatar as createMixer, STATES } from '../src/avatar.js';
@@ -7,7 +7,7 @@ import { createCanvasRig } from '../src/canvas/create-rig.js';
 import { AvatarClient } from './AvatarClient.js';
 import type { AvatarInstance, AvatarOptions } from './createAvatar.js';
 
-export interface InterviewerAvatarOptions extends AvatarOptions {
+export interface CanvasAvatarOptions extends AvatarOptions {
   /** Viseme amplitude, 0..2. `1` is as authored. */
   readonly mouthGain?: Gain;
   /** Gesture-clip amplitude, 0..2. */
@@ -16,7 +16,10 @@ export interface InterviewerAvatarOptions extends AvatarOptions {
   readonly motionGain?: Gain;
 }
 
-interface InterviewerAvatarConfig {
+/** @deprecated Use `CanvasAvatarOptions`; kept for the original entry points. */
+export type InterviewerAvatarOptions = CanvasAvatarOptions;
+
+interface CanvasAvatarConfig {
   readonly rigUrl: URL;
   readonly images: Readonly<Record<string, URL>>;
   readonly face: () => Promise<unknown>;
@@ -30,8 +33,8 @@ const PRESENCE_FILTERS: Readonly<Record<string, string>> = {
 };
 
 export function createCanvasAvatar(
-  options: InterviewerAvatarOptions,
-  config: InterviewerAvatarConfig,
+  options: CanvasAvatarOptions,
+  config: CanvasAvatarConfig,
 ): AvatarInstance {
   const { mount, client, ...gains } = options;
   if (!mount) throw new TypeError('createAvatar: `mount` is required');

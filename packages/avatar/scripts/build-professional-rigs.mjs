@@ -1,0 +1,226 @@
+/** Build the four reference-approved professional canvas identities. */
+
+import { writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { toRig } from '../src/canvas/author/rig.mjs';
+import {
+  CAMERA,
+  HAND,
+  HAND_FRAME,
+  P,
+  buildDraws,
+  ctrlFor,
+  makeKit,
+} from '../src/canvas/avatars/round/face.mjs';
+
+const HAIR_SLOTS = new Set(['hairBack', 'fringe', 'hairHi']);
+const GARMENT_SLOTS = new Set(['shirt', 'collar']);
+
+const commonIris = {
+  hue: 27,
+  saturation: 0.15,
+  brightness: 0.46,
+  sat: 0.4,
+  light: 0.25,
+  eye: [76, 52, 35],
+};
+
+const identities = [
+  {
+    name: 'professional-male-a',
+    bodyDy: 155,
+    bodyScaleX: 1.02,
+    bodyScaleY: 0.99,
+    hairScale: 0.92,
+    hairBackAlpha: 0,
+    neckShadowAlpha: 0.15,
+    persona: {
+      sex: 'm',
+      geo: { plateTop: 765, headW: 0.03, jawWidth: 0.72, neckWidth: 0.52, eyeSize: -0.13, browH: -0.34, noseW: 0.04 },
+      skin: [31, 0.34, 0.72],
+      iris: commonIris,
+      brow: { weight: 1.25, colour: [20, 0.26, 0.16] },
+      lash: { weight: 0 },
+      eye: { aperture: 0.9, refine: { lidFoldDepth: 11, lidFoldAlpha: 0.78, creaseDepth: 3, brow: { head: 0.82, peak: 0.95, tail: 0.91 } } },
+      mouth: { philtrum: { a: 0.54, w: 13 } },
+      nose: { style: 'mature', bridge: 0.98, base: 0.94, nostril: 0.84, shadow: 0.8 },
+      skinDetail: { opacity: 0.34, freckles: [] },
+      blush: 0,
+    },
+  },
+  {
+    name: 'professional-female-a',
+    bodyDy: 264,
+    bodyScaleX: 1.03,
+    bodyScaleY: 0.99,
+    hairScale: 0.93,
+    hairBackAlpha: 0,
+    headArtScale: 0.95,
+    neckShadowAlpha: 0.1,
+    persona: {
+      sex: 'f',
+      geo: { plateTop: 880, headW: -0.04, jawWidth: 0.08, neckWidth: -0.34, eyeSize: -0.06, eyeSpace: -0.02, browH: -0.12, noseW: -0.02 },
+      skin: [30, 0.34, 0.75],
+      lips: { up: [356, 0.34, 0.55], low: [3, 0.36, 0.64] },
+      iris: commonIris,
+      brow: { weight: 1.04, colour: [20, 0.28, 0.18] },
+      lash: { weight: 0.92 },
+      eye: { aperture: 0.89, refine: { lidFoldDepth: 11.2, lidFoldAlpha: 0.8, creaseDepth: 3, brow: { head: 0.9, peak: 0.98, tail: 0.95 } } },
+      mouth: { philtrum: { a: 0.45, w: 12 } },
+      nose: { style: 'mature', bridge: 0.9, base: 0.9, nostril: 0.76, shadow: 0.72 },
+      skinDetail: { opacity: 0.28, freckles: [] },
+      blush: 0.08,
+    },
+  },
+  {
+    name: 'professional-male-b',
+    bodyDy: 158,
+    bodyScaleX: 1.03,
+    bodyScaleY: 0.99,
+    hairScale: 0.88,
+    persona: {
+      sex: 'm',
+      geo: { plateTop: 890, headW: -0.03, jawWidth: 0.55, neckWidth: 0.8, eyeSize: -0.1, browH: -0.28, noseW: -0.01 },
+      skin: [28, 0.3, 0.74],
+      iris: { ...commonIris, hue: 24, eye: [72, 49, 34] },
+      brow: { weight: 1.2, colour: [18, 0.25, 0.15] },
+      lash: { weight: 0 },
+      eye: { aperture: 0.94, refine: { lidFoldDepth: 10.5, lidFoldAlpha: 0.76, creaseDepth: 2.8, brow: { head: 0.84, peak: 0.94, tail: 0.9 } } },
+      mouth: { philtrum: { a: 0.5, w: 13 } },
+      nose: { style: 'mature', bridge: 0.94, base: 0.91, nostril: 0.82, shadow: 0.76 },
+      skinDetail: { opacity: 0.3, freckles: [] },
+      blush: 0,
+    },
+  },
+  {
+    name: 'professional-female-b',
+    bodyDy: 6,
+    bodyScaleX: 1.03,
+    bodyScaleY: 0.99,
+    persona: {
+      sex: 'f',
+      geo: { plateTop: 757, headW: -0.07, jawWidth: 0.05, neckWidth: 0.04, eyeSize: -0.08, eyeSpace: -0.02, browH: -0.08, noseW: -0.04 },
+      skin: [31, 0.31, 0.77],
+      lips: { up: [358, 0.31, 0.56], low: [4, 0.34, 0.65] },
+      iris: { ...commonIris, hue: 25, eye: [80, 55, 37] },
+      brow: { weight: 1.02, colour: [19, 0.27, 0.18] },
+      lash: { weight: 0.88 },
+      eye: { aperture: 0.9, refine: { lidFoldDepth: 11, lidFoldAlpha: 0.8, creaseDepth: 3, brow: { head: 0.92, peak: 0.98, tail: 0.96 } } },
+      mouth: { philtrum: { a: 0.44, w: 11.5 } },
+      nose: { style: 'mature', bridge: 0.87, base: 0.88, nostril: 0.74, shadow: 0.7 },
+      skinDetail: { opacity: 0.25, freckles: [] },
+      blush: 0.05,
+    },
+  },
+];
+
+function bitmap(slot, src) {
+  return { k: 'bitmap', slot, src, w: 1440, h: 1080, m: null, a: 1 };
+}
+
+function build({
+  name,
+  persona,
+  bodyDy = 0,
+  bodyScale = 1,
+  bodyScaleX = bodyScale,
+  bodyScaleY = bodyScale,
+  hairScale = 1,
+  hairBackAlpha = 1,
+  headArtScale = 1,
+  neckShadowAlpha = null,
+}) {
+  const kit = makeKit(persona);
+  const draws = buildDraws(ctrlFor(persona)(), kit).map((draw) => (
+    HAIR_SLOTS.has(draw.slot) || GARMENT_SLOTS.has(draw.slot) ? { ...draw, a: 0 } : draw
+  ));
+  // One all-front cutout pastes a bob over the ears and a ponytail over the
+  // chest. The rear silhouette belongs behind ears, neck and wardrobe; only
+  // the fringe and deliberate face-framing locks return above the live face.
+  const backAt = draws.findIndex(({ slot }) => slot === 'neckPlate') + 1;
+  draws.splice(backAt, 0, bitmap('wardrobe/hair-back', 1));
+  const bodyAt = draws.findIndex(({ slot }) => slot === 'collar') + 1;
+  draws.splice(bodyAt, 0, bitmap('wardrobe/top-body', 0));
+  const hairAt = draws.findIndex(({ slot }) => slot === 'faceShade') + 1;
+  draws.splice(hairAt, 0, bitmap('wardrobe/hair-front', 2));
+
+  const images = [
+    { id: 0, w: 1440, h: 1080, file: `${name}-top-body.webp` },
+    { id: 1, w: 1440, h: 1080, file: `${name}-hair-back.webp` },
+    { id: 2, w: 1440, h: 1080, file: `${name}-hair-front.webp` },
+  ];
+  const rig = toRig({ artboard: P.artboard, paints: kit.paints, draws, poses: {}, tracks: {}, camera: CAMERA, images });
+  for (const draw of rig.draws) {
+    if (draw.k !== 'bitmap') continue;
+    draw.m = [...rig.meta.align];
+    if (draw.slot === 'wardrobe/hair-back') {
+      // This bob is a complete cutout. A second rear silhouette restores the
+      // discarded lob around the neck and makes the head read forward-heavy.
+      draw.a = hairBackAlpha;
+    }
+    if (draw.slot === 'wardrobe/top-body') {
+      // A high jacket shoulder is read as a held shrug even when every motion
+      // channel is neutral. X and Y stay independent so the torso can retain
+      // broad support while the lapels and shoulder peaks sit below the jaw,
+      // leaving the neck visible and the outer shoulder line falling away.
+      const cx = 720, bottom = 1080;
+      draw.m[0] *= bodyScaleX;
+      draw.m[3] *= bodyScaleY;
+      draw.m[4] += rig.meta.align[0] * (1 - bodyScaleX) * cx;
+      draw.m[5] += rig.meta.align[3] * (1 - bodyScaleY) * bottom + bodyDy;
+    }
+    if (draw.slot.startsWith('wardrobe/hair-') && hairScale !== 1) {
+      // Shrink about the upper skull, not the frame centre: the crown comes
+      // closer to the head while the hairline stays seated at the forehead.
+      const cx = 720, cy = 390;
+      draw.m[0] *= hairScale;
+      draw.m[3] *= hairScale;
+      draw.m[4] += rig.meta.align[0] * (1 - hairScale) * cx;
+      draw.m[5] += rig.meta.align[3] * (1 - hairScale) * cy;
+    }
+  }
+  if (neckShadowAlpha !== null) {
+    // Two strong horizontal bands below the chin read as a tucked head at call
+    // size. Keep the cast shadow for depth, but let the neck remain one column.
+    const shadow = rig.draws.find(({ slot }) => slot === 'neckSh');
+    rig.paints[shadow.paint].c[3] = neckShadowAlpha;
+  }
+  if (headArtScale !== 1) {
+    // Scale the skull artwork about the chin while leaving the neck at full
+    // size. This changes the actual head-to-support ratio; shrinking the whole
+    // head group about the neck base would shorten the neck and recreate the
+    // same forward-heavy read one layer lower.
+    const fixed = new Set(['neckPlate', 'neck', 'neckSh', 'shirt', 'collar', 'wardrobe/top-body']);
+    const handSlots = new Set(draws.filter(({ group }) => group === HAND).map(({ slot }) => slot));
+    const cx = 540, cy = 890;
+    for (const draw of rig.draws) {
+      if (fixed.has(draw.slot) || handSlots.has(draw.slot)) continue;
+      draw.m[0] *= headArtScale;
+      draw.m[1] *= headArtScale;
+      draw.m[2] *= headArtScale;
+      draw.m[3] *= headArtScale;
+      draw.m[4] = headArtScale * draw.m[4] + (1 - headArtScale) * cx;
+      draw.m[5] = headArtScale * draw.m[5] + (1 - headArtScale) * cy;
+    }
+  }
+  rig.meta.iris = {
+    hue: kit.p.iris.hue,
+    saturation: kit.p.iris.saturation,
+    brightness: kit.p.iris.brightness,
+  };
+  rig.meta.live = {
+    face: 'avatars/round/face.mjs',
+    persona,
+    body: ['neckPlate', 'shirt', 'collar', 'wardrobe/top-body'],
+    hand: {
+      frame: HAND_FRAME,
+      slots: draws.filter(({ group }) => group === HAND).map(({ slot }) => slot),
+    },
+  };
+  return rig;
+}
+
+for (const identity of identities) {
+  const url = new URL(`../src/canvas/data/${identity.name}.rig.json`, import.meta.url);
+  await writeFile(fileURLToPath(url), `${JSON.stringify(build(identity))}\n`);
+}

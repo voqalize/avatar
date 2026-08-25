@@ -2,7 +2,7 @@
  * Everything `createAvatar` takes besides the mount and the client.
  *
  * Studio imports every identity explicitly, exactly as a consumer would. The
- * three SVG drawings arrive as face values; the two professional interviewers
+ * three SVG drawings arrive as face values; the professional canvas identities
  * arrive as complete `createAvatar` modules. There is no package registry and
  * no reach into `src/` or `/internal`.
  */
@@ -15,12 +15,21 @@ import { wren } from "@voqalize/avatar/faces/wren";
 import { myna } from "@voqalize/avatar/faces/myna";
 import { createAvatar as createInterviewerMale } from "@voqalize/avatar/avatars/interviewer-male";
 import { createAvatar as createInterviewerFemale } from "@voqalize/avatar/avatars/interviewer-female";
+import { createAvatar as createProfessionalMaleA } from "@voqalize/avatar/avatars/professional-male-a";
+import { createAvatar as createProfessionalFemaleA } from "@voqalize/avatar/avatars/professional-female-a";
+import { createAvatar as createProfessionalMaleB } from "@voqalize/avatar/avatars/professional-male-b";
+import { createAvatar as createProfessionalFemaleB } from "@voqalize/avatar/avatars/professional-female-b";
 
 export const FACES = { peep, wren, myna } as const;
 export type SvgAvatarName = keyof typeof FACES;
-export type AvatarName = SvgAvatarName | "interviewer-male" | "interviewer-female";
+export type AvatarName = SvgAvatarName
+  | "interviewer-male" | "interviewer-female"
+  | "professional-male-a" | "professional-female-a"
+  | "professional-male-b" | "professional-female-b";
 export const AVATAR_NAMES: readonly AvatarName[] = [
   "peep", "wren", "myna", "interviewer-male", "interviewer-female",
+  "professional-male-a", "professional-female-a",
+  "professional-male-b", "professional-female-b",
 ];
 
 /** The option surface, as one value, so a change to any of it is one remount. */
@@ -59,6 +68,10 @@ export function createLookAvatar(
   };
   if (look.avatar === "interviewer-male") return createInterviewerMale(gains);
   if (look.avatar === "interviewer-female") return createInterviewerFemale(gains);
+  if (look.avatar === "professional-male-a") return createProfessionalMaleA(gains);
+  if (look.avatar === "professional-female-a") return createProfessionalFemaleA(gains);
+  if (look.avatar === "professional-male-b") return createProfessionalMaleB(gains);
+  if (look.avatar === "professional-female-b") return createProfessionalFemaleB(gains);
   return createSvgAvatar({
     ...gains,
     face: FACES[look.avatar] as Face,

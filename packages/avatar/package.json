@@ -67,6 +67,22 @@
       "types": "./dist/interviewer-female.d.ts",
       "default": "./dist/interviewer-female.js"
     },
+    "./avatars/professional-male-a": {
+      "types": "./dist/professional-male-a.d.ts",
+      "default": "./dist/professional-male-a.js"
+    },
+    "./avatars/professional-female-a": {
+      "types": "./dist/professional-female-a.d.ts",
+      "default": "./dist/professional-female-a.js"
+    },
+    "./avatars/professional-male-b": {
+      "types": "./dist/professional-male-b.d.ts",
+      "default": "./dist/professional-male-b.js"
+    },
+    "./avatars/professional-female-b": {
+      "types": "./dist/professional-female-b.d.ts",
+      "default": "./dist/professional-female-b.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
