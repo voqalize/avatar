@@ -70,16 +70,6 @@ export function createLookAvatar(
 export const hasConfigurableHand = (name: AvatarName): boolean => isSvgAvatar(name);
 
 /**
- * The interview identities are Canvas2D rigs whose authored camera is 4:3.
- *
- * This is presentation metadata for Studio only: the public avatar API still
- * accepts an ordinary mount. Keeping it beside the explicit module imports
- * prevents the stage from guessing a renderer from a name or reaching into a
- * private rig file.
- */
-export const hasLandscapeCamera = (name: AvatarName): boolean => !isSvgAvatar(name);
-
-/**
  * The three multipliers, named once so the sliders and their labels cannot
  * disagree.
  *

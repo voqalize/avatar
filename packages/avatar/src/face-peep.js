@@ -76,6 +76,7 @@ import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
 import { taper, taperRing, region, polyD, rng } from './line-art.js';
+import { viewBoxForHead } from './camera.js';
 
 export const THEME = {
   ink: '#1b1b1b',
@@ -98,21 +99,10 @@ export const THEME = {
 // fixing that means outlining the hair mass — a geometry change wearing a
 // colour change's clothes. The keys stay; the second palette does not.
 
-// ---------------------------------------------------------------------------
-// Frame.
-//
-// Native art space is 760x950; the viewBox is a portrait window onto it, by the
-// same rule blue-shirt's crop follows: about an eighth of a head of air above
-// the crown, a bit over half a head below the chin, head at ~61% of frame
-// height, mouth near the optical centre.
-//
-// The width is set by a constraint the other avatars do not have. This shirt is
-// WHITE on a near-white ground, so where blue-shirt could let background show
-// past the shoulder and lose nothing, here the shoulder line has to leave the
-// frame or the figure reads as a paper cut-out floating in the middle. 576 is
-// the widest window whose bottom corners are still inside the shirt.
-// ---------------------------------------------------------------------------
-const VB = { x: 92, y: 76, w: 576, h: 800 };
+// The camera follows the visible hair silhouette, not the skull hidden under
+// it. Keeping these as native landmarks means reframing never touches a path.
+const FRAME = { centerX: 380, crownY: 117, chinY: 597 };
+const VB = viewBoxForHead(FRAME);
 
 /**
  * The avatar descriptor: what a host or tool may know about this face without
@@ -131,7 +121,7 @@ export const META = {
 // about a third of the head's width. Most of a peep's head is empty, and
 // spreading the features to fill it — which is what "correct" proportion pushes
 // you toward — is the single fastest way to lose the style.
-const CX = 380;
+const CX = FRAME.centerX;
 const HEAD_TOP = 120;
 const CHIN_Y = 597;
 

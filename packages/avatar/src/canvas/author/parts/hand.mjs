@@ -53,10 +53,10 @@
 //                   frame through a SIDE edge
 //
 // A part cannot derive those. `bottom` is the camera window's, which is
-// metadata an avatar owns (avatars/round/face.mjs, CAMERA), and a rig that is
-// framed differently gets a different hand size for the same drawing. So the
-// avatar hands them in, and this file's geometry is in ART units throughout —
-// one multiply by `reach` on the way out.
+// metadata an avatar owns (avatars/round/face.mjs, CAMERA). The head height is
+// the avatar's own landmark measurement, so a wider camera does not make the
+// hand a different size. The avatar hands both in, and this file's geometry is
+// in ART units throughout — one multiply by `reach` on the way out.
 //
 // ---------------------------------------------------------------------------
 // WHERE THE DRAWING COMES FROM. Not from upstream's point tables, and that is
@@ -212,11 +212,11 @@ import { clamp, drawPusher } from '../rig.mjs';
 
 // --- the front door --------------------------------------------------------
 
-// Design units of the frame per ART unit, at a 576-wide frame. Art units are
+// Design units per ART unit at this character's 664-unit skull. Art units are
 // the reference sheet's pixels over 6.667 (PX_TO_ART), so this number and that
 // one together are the whole of "how big is the hand"; this is the half that
 // stays put when the drawing is re-traced.
-export const REACH_AT_576 = 2.31;
+export const REACH_AT_664_HEAD = 6.455555555555555;
 
 // Rule 4's margin, in the same 576-wide frame units.
 export const SIDE_MARGIN = 8;
@@ -244,14 +244,15 @@ const MARK_K = 1 / 4.80;
  * The four placement numbers, from the avatar's own camera window.
  * @param {{x:number,y:number,w:number,h:number}} win  the VISIBLE rectangle in
  *   design space — what `meta.artboard` + `meta.align` crop to.
+ * @param {number} headHeight crown-to-chin height in the same design space.
  */
-export function handFrameOf(win) {
-  const k = win.w / 576;
+export function handFrameOf(win, headHeight) {
+  const k = headHeight / 664;
   return {
     cx: win.x + win.w / 2,
     bottom: win.y + win.h,
-    reach: REACH_AT_576 * k,
-    outboardLimit: win.w / 2 - SIDE_MARGIN * k,
+    reach: REACH_AT_664_HEAD * k,
+    outboardLimit: win.w / 2 - SIDE_MARGIN * (win.w / 576),
   };
 }
 

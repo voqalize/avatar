@@ -327,9 +327,9 @@ export function solveIrisBase(target, ladder, defaults = DRIVER_DEFAULTS) {
 // frame's — the renderer would then letterbox inside the crop and every number
 // the author computed would be off by that ratio. Three numbers cannot say it.
 //
-// Vertical-first is also how the framing is actually reasoned about: a portrait
-// crop is chosen by "the head fills this fraction of the frame height and the
-// eye line sits this far down", both of which are y.
+// Vertical-first is also how the framing is actually reasoned about: the crop
+// is chosen by how much of frame height belongs above, across and below the
+// head. All three measurements are y.
 // ---------------------------------------------------------------------------
 
 const round6 = (v) => Math.round(v * 1e6) / 1e6;

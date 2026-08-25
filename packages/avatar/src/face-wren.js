@@ -30,6 +30,7 @@ import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
 import { taper, taperRing, region } from './line-art.js';
+import { viewBoxForHead } from './camera.js';
 
 export const THEME = {
   ink: '#1b1b1b',
@@ -40,10 +41,9 @@ export const THEME = {
   tongue: '#8d7f79',
 };
 
-// Frame: same native 760x950 art space as peep — not a requirement, just no
-// reason to differ — with the window shifted up because the hair cloud crowns
-// ~40 units higher than peep's fade.
-const VB = { x: 92, y: 50, w: 576, h: 800 };
+// Wren's hair cloud is her visible crown; the skull begins well below it.
+const FRAME = { centerX: 380, crownY: 102, chinY: 575 };
+const VB = viewBoxForHead(FRAME);
 
 export const META = {
   viewBox: { x: VB.x, y: VB.y, w: VB.w, h: VB.h },
@@ -51,7 +51,7 @@ export const META = {
 };
 
 // --- landmarks --------------------------------------------------------------
-const CX = 380;
+const CX = FRAME.centerX;
 const HEAD_TOP = 148;
 const CHIN_Y = 572;
 

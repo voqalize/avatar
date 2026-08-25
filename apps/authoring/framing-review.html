@@ -1,0 +1,476 @@
+<!doctype html>
+<!--
+  Static camera-framing study. The pixels are neutral renders of the five
+  shipping avatars; the approved frames use only uniform scale + translation.
+  No rig geometry, expression or body pose is changed here.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Avatar — 4:3 framing review</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --night: #11151a;
+    --panel: #191f26;
+    --panel-hi: #202832;
+    --rule: #34404c;
+    --ink: #eef2f3;
+    --dim: #9aa7b2;
+    --quiet: #697681;
+    --air: #62b8d8;
+    --head: #81c59b;
+    --body: #ee9b52;
+    --paper: #f8f7f2;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { background: var(--night); }
+
+  body {
+    margin: 0;
+    color: var(--ink);
+    background:
+      linear-gradient(rgb(255 255 255 / 2%) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 2%) 1px, transparent 1px),
+      var(--night);
+    background-size: 24px 24px;
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button, a { font: inherit; }
+
+  a { color: #a8d8ee; }
+
+  .wrap {
+    width: min(1500px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: 54px 0 80px;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 580px);
+    gap: clamp(30px, 6vw, 88px);
+    align-items: center;
+    margin-bottom: 72px;
+  }
+
+  .eyebrow,
+  .measure,
+  .camera-meta,
+  .section-kicker {
+    font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  .eyebrow { color: var(--air); }
+
+  h1 {
+    max-width: 12ch;
+    margin: 12px 0 20px;
+    font: 720 clamp(42px, 7vw, 88px)/.94 ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif;
+    letter-spacing: -.055em;
+  }
+
+  .lede {
+    max-width: 61ch;
+    margin: 0;
+    color: #c7d0d6;
+    font-size: clamp(16px, 2vw, 20px);
+  }
+
+  .hero-note {
+    max-width: 65ch;
+    margin: 20px 0 0;
+    color: var(--dim);
+  }
+
+  .specimen {
+    position: relative;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border: 1px solid #566675;
+    border-radius: 14px;
+    background: var(--paper);
+    box-shadow: 0 30px 80px rgb(0 0 0 / 38%);
+  }
+
+  .specimen svg { width: 100%; height: 100%; display: block; }
+
+  .specimen-tag {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    z-index: 4;
+    color: #11151a;
+    font: 700 12px/1 ui-monospace, Menlo, monospace;
+  }
+
+  .specimen figcaption {
+    position: absolute;
+    z-index: 4;
+    right: 14px;
+    bottom: 12px;
+    padding: 5px 8px;
+    color: #11151a;
+    background: rgb(248 247 242 / 78%);
+    border-radius: 5px;
+    font: 650 11px/1 ui-monospace, Menlo, monospace;
+  }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    align-items: end;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .section-kicker { color: var(--body); }
+
+  h2 {
+    margin: 5px 0 0;
+    font-size: clamp(25px, 3vw, 38px);
+    line-height: 1.08;
+    letter-spacing: -.025em;
+  }
+
+  .guide-toggle {
+    flex: none;
+    padding: 9px 13px;
+    color: var(--ink);
+    background: var(--panel-hi);
+    border: 1px solid #526171;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+
+  .guide-toggle:hover { border-color: var(--air); }
+  .guide-toggle:focus-visible { outline: 3px solid var(--air); outline-offset: 3px; }
+
+  .avatars { display: grid; gap: 62px; margin-top: 36px; }
+
+  .avatar-review {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 24px;
+    padding-bottom: 62px;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .avatar-copy h3 {
+    margin: 0 0 8px;
+    font-size: 22px;
+    letter-spacing: -.02em;
+  }
+
+  .avatar-copy p { margin: 0; color: var(--dim); font-size: 13px; }
+
+  .delta {
+    display: inline-block;
+    margin-top: 14px;
+    padding: 5px 8px;
+    color: #d9e2e7;
+    background: var(--panel-hi);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    font: 600 11px/1.2 ui-monospace, Menlo, monospace;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    align-items: start;
+  }
+
+  figure { margin: 0; }
+
+  .camera-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    color: var(--quiet);
+    font-size: 12px;
+  }
+
+  .camera-label strong { color: var(--ink); font-weight: 650; }
+  .camera-meta { color: var(--quiet); letter-spacing: .04em; }
+
+  .shot {
+    position: relative;
+    overflow: hidden;
+    background: #0c1014;
+    border: 1px solid #465360;
+    border-radius: 10px;
+    box-shadow: 0 14px 34px rgb(0 0 0 / 28%);
+  }
+
+  .shot img { display: block; width: 100%; height: auto; }
+  .after-shot { aspect-ratio: 4 / 3; }
+
+  .bands {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+
+  .hide-guides .bands { opacity: 0; }
+
+  .band {
+    position: absolute;
+    inset-inline: 0;
+    border-color: currentColor;
+  }
+
+  .band span {
+    position: absolute;
+    left: 8px;
+    top: 5px;
+    padding: 3px 5px;
+    border-radius: 4px;
+    color: #11151a;
+    background: var(--band-color);
+    font: 750 10px/1 ui-monospace, Menlo, monospace;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+  }
+
+  .band-air {
+    --band-color: var(--air);
+    top: 0;
+    height: 6%;
+    color: var(--air);
+    background: color-mix(in srgb, var(--air) 20%, transparent);
+    border-bottom: 1px solid;
+  }
+
+  .band-head {
+    --band-color: var(--head);
+    top: 6%;
+    height: 70%;
+    color: var(--head);
+    border-bottom: 1px solid;
+  }
+
+  .band-body {
+    --band-color: var(--body);
+    top: 76%;
+    height: 24%;
+    color: var(--body);
+    background: color-mix(in srgb, var(--body) 15%, transparent);
+  }
+
+  .band-head span { top: 8px; }
+  .band-body span { top: 8px; }
+
+  .rail {
+    position: absolute;
+    z-index: 3;
+    inset: 0 0 0 auto;
+    width: 24px;
+    border-left: 1px solid rgb(17 21 26 / 45%);
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0 9px,
+      rgb(17 21 26 / 45%) 9px 10px
+    );
+  }
+
+  .caveat {
+    margin: 54px 0 0 204px;
+    max-width: 76ch;
+    padding: 20px 22px;
+    color: #c8d1d7;
+    background: var(--panel);
+    border-left: 3px solid var(--body);
+  }
+
+  .caveat strong { color: var(--ink); }
+
+  @media (max-width: 980px) {
+    .hero { grid-template-columns: 1fr; }
+    .specimen { width: min(100%, 680px); }
+    .avatar-review { grid-template-columns: 1fr; }
+    .avatar-copy { max-width: 62ch; }
+    .caveat { margin-left: 0; }
+  }
+
+  @media (max-width: 680px) {
+    .wrap { width: min(100% - 24px, 1500px); padding-top: 30px; }
+    .pair { grid-template-columns: 1fr; }
+    .section-head { align-items: start; flex-direction: column; }
+    .avatar-review { padding-bottom: 44px; }
+    .avatars { gap: 44px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bands { transition: none; }
+  }
+</style>
+
+<body>
+<main class="wrap">
+  <header class="hero">
+    <div>
+      <div class="eyebrow">Camera decision record</div>
+      <h1>Less bust. More presence.</h1>
+      <p class="lede">
+        One 4:3 camera, tested against every shipping avatar. The approved crop
+        keeps a small amount of upper torso while spending most of the frame on
+        the face that speaks and listens.
+      </p>
+      <p class="hero-note">
+        The bands measure vertical framing: 6% air, 70% crown-to-chin, and 24%
+        below the chin. Hair may cross the chin line; the landmark does not move
+        to accommodate a hairstyle.
+      </p>
+    </div>
+
+    <figure class="specimen" aria-label="Silhouette showing the approved 4 by 3 camera framing">
+      <div class="specimen-tag">4:3 · 1440×1080 logical</div>
+      <svg viewBox="0 0 800 600" role="img" aria-label="Head and shoulders silhouette with 6, 70 and 24 percent bands">
+        <rect width="800" height="600" fill="#f8f7f2"/>
+        <path d="M258 600C267 528 282 501 330 480L344 446H456L470 480C518 501 533 528 542 600Z" fill="#303841"/>
+        <path d="M345 425H455V500C433 518 367 518 345 500Z" fill="#303841"/>
+        <ellipse cx="400" cy="246" rx="147" ry="210" fill="#171b20"/>
+        <path d="M274 206C277 75 330 36 400 36C480 36 527 91 526 216C491 151 452 130 397 136C342 132 304 154 274 206Z" fill="#303841"/>
+        <g font-family="ui-monospace, monospace" font-size="13" font-weight="700">
+          <rect width="800" height="36" fill="#62b8d8" fill-opacity=".22"/>
+          <line x1="0" x2="800" y1="36" y2="36" stroke="#62b8d8" stroke-width="2"/>
+          <text x="14" y="24" fill="#175069">6% HEADROOM</text>
+          <line x1="0" x2="800" y1="456" y2="456" stroke="#81c59b" stroke-width="2"/>
+          <text x="14" y="58" fill="#245f3a">70% CROWN → CHIN</text>
+          <rect y="456" width="800" height="144" fill="#ee9b52" fill-opacity=".16"/>
+          <text x="14" y="480" fill="#7e3f0c">24% NECK + UPPER TORSO</text>
+        </g>
+      </svg>
+      <figcaption>Landmark model, not a new avatar</figcaption>
+    </figure>
+  </header>
+
+  <section aria-labelledby="comparison-title">
+    <div class="section-head">
+      <div>
+        <div class="section-kicker">Five identities · equal host width</div>
+        <h2 id="comparison-title">Former camera versus approved camera</h2>
+      </div>
+      <button class="guide-toggle" type="button" aria-pressed="true">Hide proportion guides</button>
+    </div>
+
+    <div class="avatars">
+      <article class="avatar-review">
+        <div class="avatar-copy">
+          <h3>Peep</h3>
+          <p>The portrait camera becomes wider, so the face shrinks relative to host width while the long shirt crop disappears.</p>
+          <span class="delta">uniform scale 87.5%</span>
+        </div>
+        <div class="pair">
+          <figure>
+            <figcaption class="camera-label"><strong>Before</strong><span class="camera-meta">576×800 · 18:25</span></figcaption>
+            <div class="shot"><img src="framing-review-assets/peep-before.png" alt="Peep in the former portrait framing"></div>
+          </figure>
+          <figure>
+            <figcaption class="camera-label"><strong>After</strong><span class="camera-meta">800×600 mock · 4:3</span></figcaption>
+            <div class="shot after-shot"><img src="framing-review-assets/peep-after.png" alt="Peep reframed in the proposed 4 by 3 camera"><div class="bands" aria-hidden="true"><div class="band band-air"><span>6%</span></div><div class="band band-head"><span>70%</span></div><div class="band band-body"><span>24%</span></div><div class="rail"></div></div></div>
+          </figure>
+        </div>
+      </article>
+
+      <article class="avatar-review">
+        <div class="avatar-copy">
+          <h3>Wren</h3>
+          <p>The curl silhouette keeps its headroom, but the new lateral field is conspicuous because the line-art torso was authored to fill a portrait window.</p>
+          <span class="delta">uniform scale 88.8%</span>
+        </div>
+        <div class="pair">
+          <figure>
+            <figcaption class="camera-label"><strong>Before</strong><span class="camera-meta">576×800 · 18:25</span></figcaption>
+            <div class="shot"><img src="framing-review-assets/wren-before.png" alt="Wren in the former portrait framing"></div>
+          </figure>
+          <figure>
+            <figcaption class="camera-label"><strong>After</strong><span class="camera-meta">800×600 mock · 4:3</span></figcaption>
+            <div class="shot after-shot"><img src="framing-review-assets/wren-after.png" alt="Wren reframed in the proposed 4 by 3 camera"><div class="bands" aria-hidden="true"><div class="band band-air"><span>6%</span></div><div class="band band-head"><span>70%</span></div><div class="band band-body"><span>24%</span></div><div class="rail"></div></div></div>
+          </figure>
+        </div>
+      </article>
+
+      <article class="avatar-review">
+        <div class="avatar-copy">
+          <h3>Myna</h3>
+          <p>Hair still extends through the torso band, but the actual clothing crop ends at the upper chest instead of reading as a half-body illustration.</p>
+          <span class="delta">uniform scale 88.2%</span>
+        </div>
+        <div class="pair">
+          <figure>
+            <figcaption class="camera-label"><strong>Before</strong><span class="camera-meta">576×800 · 18:25</span></figcaption>
+            <div class="shot"><img src="framing-review-assets/myna-before.png" alt="Myna in the former portrait framing"></div>
+          </figure>
+          <figure>
+            <figcaption class="camera-label"><strong>After</strong><span class="camera-meta">800×600 mock · 4:3</span></figcaption>
+            <div class="shot after-shot"><img src="framing-review-assets/myna-after.png" alt="Myna reframed in the proposed 4 by 3 camera"><div class="bands" aria-hidden="true"><div class="band band-air"><span>6%</span></div><div class="band band-head"><span>70%</span></div><div class="band band-body"><span>24%</span></div><div class="rail"></div></div></div>
+          </figure>
+        </div>
+      </article>
+
+      <article class="avatar-review">
+        <div class="avatar-copy">
+          <h3>Interviewer — male</h3>
+          <p>The camera ratio is already correct. The proposed frame is an 11% push-in plus vertical repositioning: less jacket, preserved shoulders, visible headroom.</p>
+          <span class="delta">uniform scale 111.4%</span>
+        </div>
+        <div class="pair">
+          <figure>
+            <figcaption class="camera-label"><strong>Before</strong><span class="camera-meta">800×600 · 4:3</span></figcaption>
+            <div class="shot"><img src="framing-review-assets/interviewer-male-before.png" alt="Male interviewer in the former 4 by 3 framing"></div>
+          </figure>
+          <figure>
+            <figcaption class="camera-label"><strong>After</strong><span class="camera-meta">800×600 mock · 4:3</span></figcaption>
+            <div class="shot after-shot"><img src="framing-review-assets/interviewer-male-after.png" alt="Male interviewer reframed with the proposed proportions"><div class="bands" aria-hidden="true"><div class="band band-air"><span>6%</span></div><div class="band band-head"><span>70%</span></div><div class="band band-body"><span>24%</span></div><div class="rail"></div></div></div>
+          </figure>
+        </div>
+      </article>
+
+      <article class="avatar-review">
+        <div class="avatar-copy">
+          <h3>Interviewer — female</h3>
+          <p>The same push-in removes most of the blazer mass. Her bob crosses the landmark bands, while crown and chin still determine the camera.</p>
+          <span class="delta">uniform scale 112.6%</span>
+        </div>
+        <div class="pair">
+          <figure>
+            <figcaption class="camera-label"><strong>Before</strong><span class="camera-meta">800×600 · 4:3</span></figcaption>
+            <div class="shot"><img src="framing-review-assets/interviewer-female-before.png" alt="Female interviewer in the former 4 by 3 framing"></div>
+          </figure>
+          <figure>
+            <figcaption class="camera-label"><strong>After</strong><span class="camera-meta">800×600 mock · 4:3</span></figcaption>
+            <div class="shot after-shot"><img src="framing-review-assets/interviewer-female-after.png" alt="Female interviewer reframed with the proposed proportions"><div class="bands" aria-hidden="true"><div class="band band-air"><span>6%</span></div><div class="band band-head"><span>70%</span></div><div class="band band-body"><span>24%</span></div><div class="rail"></div></div></div>
+          </figure>
+        </div>
+      </article>
+    </div>
+
+    <p class="caveat">
+      <strong>Decision record:</strong> these are the neutral-pose approval
+      pixels. Production now derives the same crop from each drawing's native
+      landmarks; live torso, nod and frame-edge-hand checks remain the shipping
+      evidence for motion.
+    </p>
+  </section>
+</main>
+
+<script>
+  const button = document.querySelector('.guide-toggle');
+  button.addEventListener('click', () => {
+    const hidden = document.body.classList.toggle('hide-guides');
+    button.setAttribute('aria-pressed', String(!hidden));
+    button.textContent = hidden ? 'Show proportion guides' : 'Hide proportion guides';
+  });
+</script>
+</body>

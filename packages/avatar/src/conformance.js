@@ -68,7 +68,7 @@ export async function conformanceSweep(rigs, { advance = realTime } = {}) {
   // Playing each gesture above checked the usual invariants — its face half runs
   // through the clip layer like any other interjection. checkHandFraming is the
   // one that matters per AVATAR: the hand places itself off META.viewBox, so a
-  // rig with a different window could push ink through the portrait edge or lift
+  // rig with a different window could push ink through the camera edge or lift
   // the wrist into frame, and neither is visible in a resting still.
   for (const r of rigs) {
     if (!r.avatar.meta) continue;

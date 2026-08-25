@@ -28,6 +28,7 @@ import { makeEye, eyeChannelRest, eyeSide, BROW_PX, EYE_TABLE } from '../../auth
 import { makeNose } from '../../author/parts/nose.mjs';
 import { makeSkinDetail } from '../../author/parts/skin-detail.mjs';
 import { makeHand, handRest, handFrameOf } from '../../author/parts/hand.mjs';
+import { viewBoxForHead } from '../../../camera.js';
 
 // ===========================================================================
 // 1. PARAMETERS — the whole character's proportions live here.
@@ -1141,48 +1142,33 @@ export const EYES = Object.fromEntries(Object.entries(EYE_TABLE).map(
 //     which is what makes a re-framing free of fidelity risk.
 // ===========================================================================
 
-// "Top of the skull" is the top of the BOB, not P.headTop: the fringe's peak
-// (FREE.fr4) rides 20 units above the skull it is combed over, and that is the
-// silhouette a viewer measures the head by.
-const CROWN = FREE.fr4[1];                  // 226, against a skull at 246
-const EYE = P.eyeY;                         // P.scale is 1 here: no zoom to undo
-const HEAD_H = P.chinY - CROWN;             // 664 design units, crown to chin
-
-const HEAD_FRAC = 0.55;   // the head fills 55% of the frame height...
-const EYE_FRAC = 0.38;    // ...and the eye line sits 38% down from its top.
-// Those two fix the third: 6.5% of headroom over the skull. They are one
-// number apart from being over-determined, and the number that gave is the
-// classic "head 50%, eyes 40%" pair — it assumes a head that carries its eyes
-// at ~63% of its own height, and this one carries them at 57%, which is the
-// cute convention every avatar here is drawn in. Framing that face by the eye
-// line at 50% head would have opened a 12% gap of empty air over the crown.
-const WIN_H = HEAD_H / HEAD_FRAC;
+// The wardrobe sidecars put the outer hair edge at y=120 and y=135. Their
+// midpoint keeps both identities within 0.7% of the shared headroom while a
+// single live face module continues to serve both. The vector fringe at 226 is
+// hidden inside that silhouette and is not the crown a viewer sees.
+const VISIBLE_CROWN = 127.5;
+const SKULL_H = P.chinY - FREE.fr4[1];
+export const CAMERA_WINDOW = viewBoxForHead({
+  centerX: P.cx,
+  crownY: VISIBLE_CROWN,
+  chinY: P.chinY,
+});
 
 export const CAMERA = {
   frame: { w: 1440, h: 1080 },                      // a 4:3 webcam feed
-  window: { cx: P.cx, y: EYE - EYE_FRAC * WIN_H, h: WIN_H },
+  window: { cx: P.cx, y: CAMERA_WINDOW.y, h: CAMERA_WINDOW.h },
 };
 
 // ...and the same rectangle, spelled out, because the HAND needs it.
 //
 // Everything else in this file is in design space and does not care where the
 // crop is. The hand does: it enters from the frame's BOTTOM EDGE, which is a
-// fact about the camera and not about the character, and it is sized against
-// the frame's WIDTH, which is the only anchor under which a hand stays the
-// same hand when the framing changes. `author/parts/hand.mjs` turns the
-// rectangle into its four numbers.
+// fact about the camera and not about the character, and keeps its size tied
+// to the same native head. `author/parts/hand.mjs` turns those measurements
+// into its four numbers.
 //
-// What comes out, for the record: the window is 1609.70 x 1207.27 design units
-// with its bottom edge at y 1354.51 — 464.51 below the chin — so `reach` is
-// 6.456 design units per art unit and the palm spans 1.33 head-widths before
-// depth scale. That is 1.6x upstream's head-relative hand and within 4% of
-// upstream's frame-relative one; the frame is the anchor that agrees with the
-// eye, because what the viewer measures a hand against is the picture.
-const WIN_W = WIN_H * (CAMERA.frame.w / CAMERA.frame.h);
-export const CAMERA_WINDOW = {
-  x: CAMERA.window.cx - WIN_W / 2, y: CAMERA.window.y, w: WIN_W, h: WIN_H,
-};
-export const HAND_FRAME = handFrameOf(CAMERA_WINDOW);
+// The camera crop may change; the hand-to-head relationship must not.
+export const HAND_FRAME = handFrameOf(CAMERA_WINDOW, SKULL_H);
 
 // ===========================================================================
 // 11. LIVE — what `src/live.js` needs on top of a control vector.
@@ -1240,10 +1226,10 @@ export const HEAD_LIVE = {
 //     filled shape here as it is there. The mean of the two lifts it and the
 //     difference rotates it a degree and a half about the sternum.
 //
-// The travels are peep's, converted rather than re-tuned: peep draws a 576x800
-// viewBox into 334x463 CSS px in `adapter/demo.html`, so one of its units is
-// 0.5788 px, and one design unit of this avatar is 405/(664/0.55) = 0.3355 px
-// -- 1.725 design units per peep unit. The two PIVOTS are anchored on the chin
+// The travels are peep's, converted rather than re-tuned. Both cameras now put
+// crown-to-chin at 70% of frame height, so native head heights are the whole
+// conversion: this face's visible 762.5 units / peep's 480 = 1.5885 design
+// units per peep unit. The two PIVOTS are anchored on the chin
 // rather than on the neck, because peep's are stated against a head (its
 // `leanPivot` is 37 units above its `CHIN_Y`, its `shrugPivot` 203 below) and
 // the two characters have different necks.
@@ -1251,11 +1237,10 @@ export const HEAD_LIVE = {
 // they are what `poseTransforms` does after `torsoT` rather than inside it:
 //
 //   * `yawPx` — peep's `PARALLAX.body` is 0.1 against a head layer at 1.0, so
-//     at `headYaw 1` its trunk slides 0.1 x 28 = 2.8 units. Converted, 4.83
+//     at `headYaw 1` its trunk slides 0.1 x 28 = 2.8 units. Converted, 4.45
 //     design px here. It is NOT 10% of OUR `yawPx`: the travel is what the
-//     viewer measures, and 4.83 px puts the same 1.62 CSS px on screen at 1x
-//     that peep moves. On top of `turnPx`, which the mixer drives from the
-//     same headYaw at 0.45 and a near-3x tau — 12.4 px of it, arriving late.
+//     viewer measures. On top of `turnPx`, which the mixer drives from the
+//     same headYaw at 0.45 and a near-3x tau, arriving late.
 //   * `rollDeg` — peep's `ROLL_TORSO 1.5` against its `ROLL_HEAD 5.5`. The
 //     RATIO converts, not the number: degrees are degrees, but 1.5 deg is
 //     peep's answer to a 5.5-deg head and ours is 9, so the trunk takes
@@ -1268,17 +1253,16 @@ export const HEAD_LIVE = {
 //     taking a second constant. 0.008 is peep's own figure, unconverted
 //     because a fraction has no units. The hem is this shirt's `bot`/`botc`
 //     landmark at y 1700, the same anchor peep uses (its `swellPivot` is the
-//     bottom edge of its own torso path, y 950). Measured at 1x, the visible
-//     torso grows 1.81 CSS px at `breath 1` against peep's 1.76.
+//     bottom edge of its own torso path, y 950).
 export const BODY_LIVE = {
   leanScale: 0.055,             // torsoLean 1 scales the figure by this much...
-  leanTravel: 39.7,             // ...and drops it this far (23 peep units)
-  leanPivot: [P.cx, P.chinY - 64],
-  shrugLift: 51.8,              // both shoulders at 1 lift the torso this far
+  leanTravel: 36.54,            // ...and drops it this far (23 peep units)
+  leanPivot: [P.cx, P.chinY - 58.78],
+  shrugLift: 47.66,              // both shoulders at 1 lift the torso this far
   shrugTiltDeg: 1.6,            // one shoulder at 1 rolls it this many degrees
-  shrugPivot: [P.cx, P.chinY + 350],
-  turnPx: 27.6,                 // torsoTurn 1 slides the torso this far in x
-  yawPx: 4.83,                  // headYaw 1 drags the torso this far as well
+  shrugPivot: [P.cx, P.chinY + 322.47],
+  turnPx: 25.42,                // torsoTurn 1 slides the torso this far in x
+  yawPx: 4.45,                  // headYaw 1 drags the torso this far as well
   rollDeg: 2.45,                // headRoll 1 rolls the torso this much, about
                                 // HEAD_LIVE.pivot — 1.5/5.5 of the head's 9
   breathSwell: 0.008,           // breath 1 swells the torso by this fraction...

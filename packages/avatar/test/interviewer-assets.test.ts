@@ -8,13 +8,30 @@ async function rig(name: string) {
   const url = new URL(`data/${name}.rig.json`, canvasRoot);
   return JSON.parse(await readFile(url, 'utf8')) as {
     images: Array<{ file: string }>;
-    meta: { live?: { persona?: Record<string, unknown> } };
+    meta: {
+      artboard: { w: number; h: number };
+      align: number[];
+      live?: { persona?: Record<string, unknown> };
+    };
     poses?: Record<string, unknown>;
     tracks?: Record<string, unknown>;
   };
 }
 
 describe('professional interviewer assets', () => {
+  it.each(['interviewer-male', 'interviewer-female'])('%s carries the authored 4:3 call camera', async (name) => {
+    const [data, face, author] = await Promise.all([
+      rig(name),
+      import('../src/canvas/avatars/round/face.mjs'),
+      import('../src/canvas/author/rig.mjs'),
+    ]);
+    const camera = author.cameraMeta(face.CAMERA);
+
+    expect(data.meta.artboard.w / data.meta.artboard.h).toBeCloseTo(4 / 3, 12);
+    expect(data.meta.artboard).toEqual(camera.artboard);
+    expect(data.meta.align).toEqual(camera.align);
+  });
+
   it.each(['interviewer-male', 'interviewer-female'])('%s is a live rig with every image present', async (name) => {
     const data = await rig(name);
     expect(data.meta.live).toBeTruthy();

@@ -44,6 +44,7 @@ import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
 import { taper, taperRing, region } from './line-art.js';
+import { viewBoxForHead } from './camera.js';
 
 export const THEME = {
   ink: '#191919',
@@ -56,9 +57,10 @@ export const THEME = {
   tongue: '#8d7f79',
 };
 
-// Same native 760x950 art space as the siblings; window lifted like wren's
-// because the hair crowns high.
-const VB = { x: 92, y: 50, w: 576, h: 800 };
+// The outer wave of hair, rather than HEAD_TOP under it, is the crown a viewer
+// measures. The chin is the lowest point of the resting jaw silhouette.
+const FRAME = { centerX: 380, crownY: 96, chinY: 572 };
+const VB = viewBoxForHead(FRAME);
 
 export const META = {
   viewBox: { x: VB.x, y: VB.y, w: VB.w, h: VB.h },
@@ -66,7 +68,7 @@ export const META = {
 };
 
 // --- landmarks --------------------------------------------------------------
-const CX = 380;
+const CX = FRAME.centerX;
 const HEAD_TOP = 150;
 
 const EYE = { y: 386, dx: 56, rx: 15, ry: 16 };

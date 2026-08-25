@@ -21,8 +21,8 @@ the drawing took days.
 
 ## What you are building
 
-One `<svg>`, portrait, inside a `<div>` the host sizes. In its real setting it
-is a tile in a video call next to a screen share and a webcam, typically around
+One `<svg>`, framed as a 4:3 webcam close-up, inside a `<div>` the host sizes.
+In its real setting it is a tile in a video call next to a screen share and a webcam, typically around
 **130 px wide** — author close up, accept at tile size, and read
 [research-perception.md](research-perception.md) before deciding that a mark is
 too small to matter.
@@ -69,8 +69,8 @@ export const <yourname> = { create: createFace, meta: META };
 - `apply(params)` — write one full parameter vector into the DOM. Called every
   animation frame.
 - `META` — the **avatar descriptor**: what a host or tool may know about the
-  face without opening it. `viewBox` is the framing (hosts derive aspect from
-  it; `createAvatar` exposes it as `api.meta`); `mouthCrop` frames the mouth
+  face without opening it. `viewBox` is the intrinsic 4:3 camera
+  (`createAvatar` exposes it as `api.meta`); `mouthCrop` frames the mouth
   for close inspection (the contact sheet's viseme-detail row). Deliberately
   minimal — a landmark joins META when a second consumer needs it, not before.
 - The **record** — `{ create, meta }`, named after the face. That value *is* how
@@ -110,17 +110,17 @@ point — the plumbing is small and the drawing is not.
 // src/face-sparrow.js
 import { clamp } from './params.js';
 import { f, createFaceShell, faceApi, poseTransforms } from './face-core.js';
+import { viewBoxForHead } from './camera.js';
 
 export const THEME = { ink: '#1b1b1b', paper: '#ffffff' };
 
-const VB = { x: 0, y: 0, w: 576, h: 800 };
+const CX = 288;
+const VB = viewBoxForHead({ centerX: CX, crownY: 124, chinY: 562 });
 
 export const META = {
   viewBox: { x: VB.x, y: VB.y, w: VB.w, h: VB.h },
   mouthCrop: { x: 190, y: 372, w: 196, h: 116 },
 };
-
-const CX = 288;
 
 // Every number poseTransforms needs. All eight body channels come from here.
 const POSE = {
@@ -405,9 +405,8 @@ neck — not more keyframe tuning.
 
 ## Art units
 
-Units are per-rig (peep 760×950 cropped to `92 76 576 800`; wren and myna the
-same window at `92 50`; the retired rigs were 320×400 and a native 1024² cropped to
-`179 42 666 832` — note how little the aspect agreed). **Copying a magnitude
+Units are per-rig (the three line faces happen to use a native 760×950 art
+space; the Canvas face uses a different design space). **Copying a magnitude
 between rigs is silent breakage**: one retired rig's travels were the other's
 numbers with `units: S` (S = 2.67) in its `POSE` spec; peep's torso channels
 were once ported without conversion and the shoulders stopped reading, while
@@ -415,16 +414,45 @@ nothing threw and the conformance sweep passed. The trap inside the
 trap: **translations convert, degrees don't** — a rotation is already
 unit-independent, which is why `shrugTiltDeg` never takes the `units` factor.
 
-`viewBox` is not a rig constant. Hosts derive aspect from `META.viewBox` (or
-`api.meta.viewBox`); the rig pages under `apps/authoring/` do.
+### The camera: 4:3, derived from the drawing
 
-**Two soft constraints on the window, if you are choosing one from scratch.**
-Pick the same 576-wide portrait window the three shipped faces use unless you
-have a reason not to: the frame-edge hand's timelines are authored in absolute
-units against it, and a window narrower than **532 units** fails
-`checkHandFraming` on the greet swing (measured; it is width-only, and height is
-free). And keep the aspect portrait and close to 0.72 — a host letterboxes your
-drawing inside a 16:9 tile, so extra width is margin nobody sees.
+Every shipped avatar uses one composition: **6% headroom, 70% visible head,
+24% below the chin**, in an exact **4:3** camera. This is a remote-call crop,
+not a bust portrait: it spends pixels on lipsync and listening expression while
+leaving enough neck and shoulder for posture to read. A host can choose any
+width and obtain the height from 4:3; it never needs to branch on avatar or
+renderer.
+
+Do not resize or translate the drawing to meet that composition. Mark three
+points in the avatar's own art units and let `camera.js` do the arithmetic:
+
+```js
+import { viewBoxForHead } from './camera.js';
+
+const FRAME = {
+  centerX: 380, // the head's visual axis, not necessarily the artboard midpoint
+  crownY: 117,  // top of the visible hair silhouette at rest
+  chinY: 597,   // bottom of the resting jaw silhouette
+};
+const VB = viewBoxForHead(FRAME);
+```
+
+Use the outer hair silhouette for `crownY`, not the skull or hairline hidden
+under it. Use the resting jaw for `chinY`, ignoring earrings, loose hair and
+clothing below it. `centerX` follows the head, not asymmetric hair or the torso.
+These are camera landmarks, so keep them beside `VB`; feature landmarks remain
+where the feature geometry is authored.
+
+`META.viewBox` and the root SVG both copy `VB`. `META.mouthCrop` stays in native
+art units: a camera change does not change a path, a pose travel, stroke weight,
+or inspection crop. The shared frame-edge hand likewise derives its scale from
+the standardized head height rather than from camera width.
+
+A non-SVG renderer follows the same rule. Derive the visible design-space
+rectangle with `viewBoxForHead`, then encode that rectangle in the renderer's
+intrinsic camera metadata. The Canvas rig does this with `cameraMeta` in
+`packages/avatar/src/canvas/author/rig.mjs`; do not reproduce the crop in CSS or
+host code.
 
 The one thing to fix before anything else is that **the art has to run off the
 frame**, not stop at it. Every torso channel moves the shirt, and a shirt drawn
@@ -483,15 +511,11 @@ or mount with `hand: false`. That limit is the reason the faces we ship live
 here.
 
 Palettes: there is no barrel `THEME` export — each face module owns its
-palette, and `api.theme` returns the mounted avatar's. A host needs it
-whenever it paints anything *around* the widget: every rig is drawn portrait,
-so a 16:9 call tile leaves a margin either side of the drawing, and the host
-chooses that surrounding surface. `apps/server/index.html` and `apps/studio/src/styles.css`
-both do the plain version — a tile in the palette, the drawing letterboxed
-inside it. The elaborate version is a mask feathering the drawing's two vertical
-edges, because peep's white shirt is drawn to run off its own frame and
-otherwise stops in mid-air. Reshaping the art to fit a host's box is the
-wrong fix either way; the widget does not control the box. peep has
+palette, and `api.theme` returns the mounted avatar's. A host needs it whenever
+it paints anything *around* the 4:3 widget, such as the remaining area of a
+16:9 call tile. `apps/server/index.html` and `apps/studio/src/styles.css` do the
+plain version. Reshaping the art to fit a host's box is the wrong fix; the
+widget does not control the box. peep has
 no dark palette **by decision** (inverting two-value line art recolours the
 hair and ages the character; that is geometry wearing a palette's clothes) —
 its theme keys stay overridable, but do not add a `dark` selector.
@@ -509,20 +533,16 @@ under **No arms**: *a channel only one avatar can render is the shape of the
 mistake, whatever the body part.*
 
 **What a face owes it: a `META.viewBox`, and `theme.ink` / `theme.paper`.**
-Nothing else, and no new META field. Placement derives four numbers from the
-window itself — centre `x + w/2`, floor `y + h`, a reach scaled off `w`, and an
-outboard limit of `w/2 − 8` — and every gesture timeline is authored in wrist
-depth *below the floor* rather than absolute `y`, so the same drawing lands
-correctly on windows of different heights. peep's bottom is 876 and wren's and
-myna's is 850; all three place identically. Widths are the axis with a floor
-under it: the swing's outboard travel does not shrink as fast as the limit does,
-so a window under ~532 units wide is rejected (see Art units).
+Nothing else, and no new META field. Placement derives the camera centre and
+floor from the window, sizes the drawing against the head's standardized 70%
+of camera height, and budgets outboard travel against the camera width. Every
+gesture timeline is authored in wrist depth *below the floor* rather than
+absolute `y`, so the same drawing lands correctly in different native units.
 
 Two framing rules are asserted, not assumed. `checkHandFraming(meta)` throws if
 any keyframe would let the wrist rise into the window (the hand must always be
 *cut* by the bottom edge, never end in a floating stump) or let the hand's
-rotated width cross the window's side (a portrait window pillarboxed in a 16:9
-tile slices anything outboard with a hard vertical line that reads as a
+rotated width cross the window's side (a hard vertical slice reads as a
 rendering fault). The conformance sweep runs it for every registered avatar, so
 a new face with an unusual window fails the gate rather than the eye.
 
@@ -685,7 +705,9 @@ A new face module supplies:
    contour-mouth generators carried into wren as copies with re-derived
    constants — if a third line-art face repeats that, extract them into
    parameterized factories the way the stroke engine was extracted.
-4. **`META`** — viewBox and mouthCrop.
+4. **`META` and camera landmarks** — `centerX`, visible `crownY` and resting
+   `chinY` derive the 4:3 `viewBox` through `viewBoxForHead`; `mouthCrop` remains
+   a native-art inspection crop (§ The camera: 4:3, derived from the drawing).
 5. **The exported record and its four edits** — `export const <name> =
    { create, meta }` at the foot of your module, plus the `packages/avatar/src/faces.js` row,
    the `.d.ts` and the `exports` entry (§ Shipping a face).

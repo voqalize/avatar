@@ -7,10 +7,9 @@
  * (CLAUDE.md § In flight — production calibration retires the reference image as
  * the yardstick), so this is the avatar at the size a consumer will actually
  * embed it, not a poster of it. A face that only reads at 400 px is a face that
- * does not work, and showing it big hides that. Each identity retains its own
- * authored camera ratio — the line faces are portrait and the interviewer rigs
- * are 4:3 — so no renderer is letterboxed inside that shipping frame. The size
- * control under the status line can enlarge it for inspection and defaults back
+ * does not work, and showing it big hides that. Every identity owns the same
+ * 4:3 webcam camera, so the host never needs renderer-specific dimensions. The
+ * size control under the status line can enlarge it for inspection and defaults back
  * to nothing — 130 is what opens, always, so the first read of the face is the
  * shipping read.
  *
@@ -31,7 +30,7 @@ import type { PipecatClient } from "@pipecat-ai/client-js";
 import { ConnectButton, UserAudioControl, VoiceVisualizer } from "@pipecat-ai/voice-ui-kit";
 import { Captions } from "./Captions";
 import { SERVER_URL } from "./call";
-import { createLookAvatar, hasLandscapeCamera, type Look } from "./look";
+import { createLookAvatar, type Look } from "./look";
 import { usePresence, type Presence } from "./presence";
 
 /**
@@ -155,7 +154,7 @@ function Frame({ client, look, live }: { client: PipecatClient; look: Look; live
   }, [client, look.avatar, look.mouthGain, look.gestureGain, look.motionGain, look.hand, look.handSide]);
 
   return (
-    <div className={`frame${hasLandscapeCamera(look.avatar) ? " frame-landscape" : ""}`}>
+    <div className="frame">
       <div className="frame-mount" ref={mount} />
       {/* The bot's output level, over the bottom of the drawing. It is fed by
           the transport's track and knows nothing about the avatar, which is

@@ -342,16 +342,14 @@ a:hover {
 }
 
 /* 130 px — a third of what this used to be, and the size the rig is calibrated
-   at. The SVG faces are portrait (576 × 800), while the interviewer rigs own a
-   4:3 webcam camera. The host must keep that distinction: putting a 4:3 rig in
-   the portrait shell was 46% blank canvas, not useful headroom. The width is a
-   variable only so it can be raised for inspection; `--frame` is 130px at rest
-   and each renderer fills the camera it was authored for. */
+   at. Every renderer owns the same 4:3 webcam camera, so the host supplies one
+   width and lets the frame's aspect ratio determine its height. The width is a
+   variable only so it can be raised for inspection; `--frame` is 130px at rest. */
 .frame {
   position: relative;
   align-self: center;
   width: var(--frame);
-  aspect-ratio: 18 / 25;
+  aspect-ratio: 4 / 3;
   transition: width 180ms ease;
   border-radius: 0.75rem;
   overflow: hidden;
@@ -359,10 +357,6 @@ a:hover {
   box-shadow:
     inset 0 0 0 1px var(--paper-edge),
     0 1px 3px rgb(0 0 0 / 40%);
-}
-
-.frame-landscape {
-  aspect-ratio: 4 / 3;
 }
 
 .frame-mount,

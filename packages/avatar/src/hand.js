@@ -39,10 +39,9 @@
  *    the waves sit LOWER and further back instead (`sc`), and the face stays
  *    entirely clear.
  *
- * 4. THE ONLY EDGE THAT CUTS THE HAND IS THE BOTTOM ONE. Every shipped avatar's
- *    viewBox is a portrait window pillarboxed inside a 16:9 tile, so anything
- *    past the window's right edge is sliced by a hard vertical line that reads
- *    as a rendering fault. Outboard travel is budgeted against the hand's own
+ * 4. THE ONLY EDGE THAT CUTS THE HAND IS THE BOTTOM ONE. Anything past the
+ *    camera's side edge is sliced by a hard vertical line that reads as a
+ *    rendering fault. Outboard travel is budgeted against the hand's own
  *    width AND its rotation — a hand 440 units tall swings ~110 units sideways
  *    at 14 degrees, which is what silently blew the budget the first time.
  *    `checkHandFraming()` asserts both rules against the real timelines.
@@ -54,22 +53,23 @@
 
 import { taper, taperRing, region, smooth } from './line-art.js';
 import { f } from './face-core.js';
+import { CALL_CAMERA } from './camera.js';
 
 // --- the frame --------------------------------------------------------------
 // Everything the hand needs to place itself comes out of `META.viewBox`, and
-// that is the whole reason this module needed no new META field. The three
-// shipped avatars draw a 576x800 portrait window; the numbers below are ratios
-// and offsets against that window, not against any one character's anatomy.
+// that is the whole reason this module needed no new META field. The shared
+// camera makes 70% of its height a head, so size follows the person rather
+// than growing merely because the new 4:3 camera is wider.
 //
 // The wrist sits below the frame edge by a clear margin, never at it: a wrist
 // exactly on the line renders as a rounded end kissing the border, which reads
 // as a hand stuck to the frame rather than one coming from off-camera.
 const WRIST_DROP = 24;   // minimum units the wrist stays below the frame bottom
 const HIDE = 574;        // fully off-camera; must clear the tallest shape
-// How far the outermost ink may sit from the frame centre before the portrait
-// window slices it (rule 4): half the window, less a hair of margin.
+// How far the outermost ink may sit from the frame centre before the camera
+// slices it (rule 4): half the window, less a hair of margin.
 const SIDE_MARGIN = 8;
-// Author scale at a 576-unit-wide window. The number this design changed most,
+// Author scale at a 480-unit-tall head. The number this design changed most,
 // and both directions were rendered and judged. Earlier cuts drew the hand at
 // FACE depth: a 19 cm hand against a 23 cm head is 0.83 of it, peep's head is
 // 477 art units, so ~394 — which came out looking like a pale tube rising past
@@ -86,7 +86,7 @@ const SIDE_MARGIN = 8;
 // Optically correct, perceptually wrong. 2.95 puts the palm at ~0.82
 // head-widths — still clearly nearer the lens, still clearly not the subject.
 // Compact avatar tiles need a hand that reads as a gesture, not as the subject.
-const REACH_AT_576 = 2.40;
+const REACH_AT_480_HEAD = 2.40;
 
 /** The four placement numbers, derived. A host never sees these. */
 function frameOf(viewBox) {
@@ -94,7 +94,7 @@ function frameOf(viewBox) {
   return {
     cx: vb.x + vb.w / 2,           // frame centre; also where a resting hand starts
     bottom: vb.y + vb.h,           // the visible bottom edge — the line the hand rises past
-    reach: (REACH_AT_576 * vb.w) / 576,
+    reach: (REACH_AT_480_HEAD * vb.h * CALL_CAMERA.head) / 480,
     outboardLimit: vb.w / 2 - SIDE_MARGIN,
   };
 }
@@ -412,8 +412,8 @@ export const HAND_GESTURES = {
   //
   // The swing is deliberately ASYMMETRIC, -2 out and +16 in. A wave rotating
   // about a wrist below the frame throws the fingertips ~110 units sideways,
-  // and spending that outboard is what put the thumb through the portrait
-  // window the first time. Swinging further toward the person you are waving at
+  // and spending that outboard is what put the thumb through the camera edge
+  // the first time. Swinging further toward the person you are waving at
   // is also, conveniently, what people do.
   GESTURE_GREET: {
     id: 'GESTURE_GREET', label: 'greet', shape: 'PALM', face: 'GESTURE_GREET', dur: 1250, sc: 0.70,
@@ -660,7 +660,7 @@ export function createHand(svg, theme, meta, opts = {}) {
  * budget without anything else noticing.
  *
  *   rule 1  the wrist never rises into the frame;
- *   rule 4  no gesture pushes ink through the portrait window's side edge, at
+ *   rule 4  no gesture pushes ink through the camera window's side edge, at
  *           any point in its rotation. A hand 440 units tall throws its outer
  *           corner ~110 units sideways at 14 degrees, so the budget has to be
  *           spent against `out` AND `rot` together.
