@@ -5,7 +5,7 @@
 The browser resolves one effective visual state. It is not the last wire
 message received. Its precedence is fixed:
 
-1. `SPEAKING` while Pipecat reports bot playout.
+1. `SPEAKING` while Pipecat reports an active bot-output interval.
 2. `LISTENING` while Pipecat reports user speech.
 3. `OFFLINE` / `DEGRADED` when no observed speech pre-empts that presentation.
 4. `MUTED` while Pipecat reports a mute strategy in place.
@@ -16,10 +16,11 @@ message received. Its precedence is fixed:
    an established Pipecat session. A newly mounted avatar begins available,
    never already "stepped aside".
 
-Connection failure is lower than observed speech. A new user turn and real bot
-playout both retire any prior server claim, so it cannot reappear stale after speech.
-The browser never uses microphone VAD to interrupt bot speech: if audio is
-playing, the avatar is speaking and its mouth is viseme-driven.
+Connection failure is lower than observed speech. A new user turn and Pipecat
+bot output both retire any prior server claim, so it cannot reappear stale
+after speech.
+The browser never uses microphone VAD to interrupt bot speech: while Pipecat
+reports bot output, the avatar is speaking and its mouth is viseme-driven.
 
 Rungs 5–7 are ranked here but not compared here. A claim is a single value and
 only one is ever in flight, so the browser reads whichever one arrived; the
@@ -38,8 +39,8 @@ The server sends only three kinds of avatar intent:
 An action is self-completing. It can include face, torso, and hand motion. A
 new effective state applies immediately underneath it, while the action's own
 channels finish their natural landing. `RESPONSE_INTERRUPTED` is special only in timing:
-it is server-confirmed, arms while playout is active, and starts after bot
-playout stops so it cannot override an audible viseme.
+it is server-confirmed, arms while bot output is active, and starts after the
+output interval stops so it cannot override an active viseme track.
 
 This is the binding for an avatar mounted with a live
 `@pipecat-ai/client-js` client. It replaces the old duplicated `user` avatar
@@ -69,7 +70,7 @@ name a failure mode for is a heuristic that will be wrong silently.
 
 | state | the condition | armed by | retired by |
 |---|---|---|---|
-| `SPEAKING` | bot playout is audible | `BotStartedSpeakingFrame` | `BotStoppedSpeakingFrame` |
+| `SPEAKING` | Pipecat's bot-output interval is active | `BotStartedSpeakingFrame` | `BotStoppedSpeakingFrame` |
 | `LISTENING` | the user is speaking | `UserStartedSpeakingFrame` | `UserStoppedSpeakingFrame` |
 | `MUTED` | a mute strategy holds the user's microphone | `UserMuteStartedFrame` | `UserMuteStoppedFrame` |
 | `STRAINING` | the turn produced nothing to answer | an empty final transcript, or `AvatarProcessor`'s grace timer expiring | the next user turn, or any sign of a response |
@@ -87,7 +88,7 @@ downstream-visible equivalent is `LLMFullResponseStartFrame`, pushed
 immediately *before* the model is asked. But arming only there would leave the
 transcription and aggregation latency in front of it uncovered, and that gap is
 a second or more. So the wait opens when the user stops talking and closes when
-words are audible, and `LLMFullResponseStartFrame` merely confirms it mid-flight
+Pipecat begins bot output, and `LLMFullResponseStartFrame` merely confirms it mid-flight
 — which is also the fix for a real defect: that frame used to *clear* the claim,
 so the single longest silence in a call was the one stretch with nothing to
 show.
@@ -226,13 +227,13 @@ so repeated Started/InProgress notifications cannot strand `WORKING`.
 ## Streaming and event order
 
 LLM and audio events overlap in streaming pipelines. `BotStartedSpeaking` can
-arrive while a `THINKING` claim is still present; bot playout wins immediately
-and consumes the claim.
+arrive while a `THINKING` claim is still present; Pipecat bot output wins
+immediately and consumes the claim.
 
 The Pipecat JavaScript client has no standalone interruption event. The server
 observes the actual `InterruptionFrame` and emits `action:RESPONSE_INTERRUPTED` only
-when bot speech is active. The browser treats bot playout stop as the mouth
-safety boundary, then plays that action.
+when bot speech is active. The browser treats the end of Pipecat's bot-output
+interval as the mouth safety boundary, then plays that action.
 
 ## What the backend does and does not send
 
@@ -248,7 +249,8 @@ races and obscured ownership.
 `cues.ctx` is the stock base-TTS `context_id`; it does not make up a fallback.
 Because browser speaking events carry no context, the client FIFO-binds the
 next buffered `ctx` when `BotStartedSpeaking` arrives, anchors the cue clock
-then, and closes it at `BotStoppedSpeaking`. It passes `AvatarControlFrame`
+then, and closes it at `BotStoppedSpeaking`. This is Pipecat output lifecycle,
+not observation of the browser audio device. It passes `AvatarControlFrame`
 claims/actions through for explicit application intent.
 
 **Actions are layered over the effective state** resolved by the Authority

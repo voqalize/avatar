@@ -23,6 +23,12 @@
  * the same viseme shouted and murmured should not look identical.
  */
 
+import {
+  CUE_TRACK_LEAD_MS,
+  MIN_VISIBLE_CUE_MS,
+  SPEECH_TRACK_TAIL_MS,
+} from './speech-timing.js';
+
 export const VISEME_SHAPES = {
   X: { mouthOpen: 0.02, mouthWidth: 0.42, mouthRound: 0.10, mouthPress: 0.15, mouthTuck: 0, teethUpper: 0.00, tongue: 0.0 },
   A: { mouthOpen: 0.00, mouthWidth: 0.40, mouthRound: 0.18, mouthPress: 0.55, mouthTuck: 0, teethUpper: 0.00, tongue: 0.0 },
@@ -63,7 +69,6 @@ export function shapeFor(letter, intensity = 1) {
 // ---------------------------------------------------------------------------
 // Cue track hygiene
 // ---------------------------------------------------------------------------
-const MIN_CUE_MS = 30; // shorter than this and the mouth just flutters
 
 /**
  * Sort, merge consecutive duplicates, and drop sub-perceptual cues. Servers
@@ -76,10 +81,20 @@ export function normalizeCues(cues) {
     const v = VISEME_SHAPES[c.v] ? c.v : SILENT;
     const prev = out[out.length - 1];
     if (prev && prev.v === v) continue; // merge repeats
-    if (prev && c.t - prev.t < MIN_CUE_MS) {
+    if (prev && c.t - prev.t < MIN_VISIBLE_CUE_MS) {
       // Too short to read. Keep whichever is more visually salient: a closure
       // (A/G) carries more lip-reading information than a mid-open vowel.
-      if (v === 'A' || v === 'G') out[out.length - 1] = { ...c, v };
+      if (v === 'A' || v === 'G') {
+        // The short cue can sit between two identical closures (G → F → G).
+        // Its replacement would otherwise create a duplicate visible shape;
+        // preserving the first G is both the stable wire form and the face the
+        // viewer actually saw.
+        if (out.length > 1 && out[out.length - 2].v === v) out.pop();
+        // A winning closure replaces the preceding shape for the entire
+        // sub-perceptual interval. Preserve that cue's timestamp while taking
+        // the closure's intensity, matching the server-side wire normalizer.
+        else out[out.length - 1] = { ...c, t: prev.t, v };
+      }
       continue;
     }
     out.push({ t: c.t, v, i: c.i == null ? 1 : c.i });
@@ -88,17 +103,18 @@ export function normalizeCues(cues) {
 }
 
 /**
- * Schedules a cue track against an audio clock.
+ * Schedules a cue track against an utterance clock.
  *
- * The clock must come from the audio itself (`audioEl.currentTime * 1000` or
- * `AudioContext.currentTime`), never from wall time — wall time drifts against
- * playback and you will spend the rest of your life chasing it.
+ * An audio-owned clock (`audioEl.currentTime * 1000` or
+ * `AudioContext.currentTime`) is the strongest source when the caller owns
+ * playback. The Pipecat adapter cannot see browser device playout; it supplies
+ * elapsed time from `botStartedSpeaking`, Pipecat's output-lifecycle epoch.
  *
- * LEAD_MS biases the mouth slightly ahead of the sound. Perceptually the
- * tolerance is asymmetric: roughly -45ms (audio first) to +125ms (video first),
- * so leading is the safe side to err on.
+ * There is deliberately no renderer-wide lead. Network/media skew cannot be
+ * corrected by moving every cue, and the predicted backend leg owns its own
+ * explicit prediction cushion.
  */
-export const LEAD_MS = 40;
+export const LEAD_MS = CUE_TRACK_LEAD_MS;
 
 export class VisemeTrack {
   constructor() {
@@ -107,7 +123,7 @@ export class VisemeTrack {
     this.playing = false;
     this._idx = 0;
     this.onEnd = null;
-    this.tailMs = 120; // how long past the last cue before we call it done
+    this.tailMs = SPEECH_TRACK_TAIL_MS;
   }
 
   /** @param {() => number} clock returns elapsed ms of the audio being played */

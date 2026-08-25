@@ -38,7 +38,8 @@ cost; a merge that drifts is unbounded.
 
 The decoder's own last few frames are not settled — a live phone loop backtraces
 from the current frame, and the tail of that backtrace still moves as evidence
-arrives. `HOLD_BACK_MS` is how far behind the fed edge the accurate track stops.
+arrives. `ACCURATE_CUE_HOLD_BACK_MS` is how far behind the fed edge the accurate
+track stops.
 Measured on the corpus, a segment stops moving within 100 ms of the edge 85.2% of
 the time, 200 ms 98.2%, 300 ms 99.6%.
 
@@ -51,28 +52,25 @@ audio that has not been played yet.
 
 ## Why the fast leg leads
 
-Predicted cues go out `FAST_LEAD_MS` early. Not because the estimate is biased —
-it is not, its error scatters evenly either side of the truth — but because the
-*tolerance* for that error is lopsided. A face that moves ahead of its sound is
-forgiven to about -125 ms; a face that lags is objectionable past about +45 ms.
-Centring a symmetric error on zero therefore spends half of it in a window three
-times narrower than the other. Sliding the whole track earlier moves that half
-into the side the eye forgives: against whole-clip recognition, frames inside
-tolerance go 62.3% -> 71.7%, and frames on the late side 30% -> 13%. The total
-error does not shrink at all. It only moves to where it does not read as wrong.
+The browser renders directly against its utterance clock, anchored by Pipecat's
+`botStartedSpeaking` output-lifecycle event; it applies no renderer-wide lead.
+Predicted cues need a **60 ms presentation lead**: their
+duration error scatters either side of the truth, while a late mouth is much
+less forgivable than an early one. The server therefore emits that explicit
+60 ms cushion for the predicted leg only. Accurate cues receive no shift.
 
-Only *predicted* tracks lead. The accurate leg takes its times from recognition
-over real audio, so they are already right and a shift would be an error rather
-than the removal of one.
+The distinction is intentional. A visual lead is not a substitute for
+data-channel/media skew: the lifecycle epoch is the best clock the public
+Pipecat seam exposes, and moving every cue cannot turn it into device playout.
 
 ## The turn timeline
 
 Cue `t` is milliseconds from the turn's **first audio sample**, and the client
-anchors t=0 when bot playout starts. The live decode is fed that same audio from
-that same first sample, so its timeline *is* the turn timeline — there is no
-offset arithmetic on the accurate leg at all, which is most of what this module
-used to be. Offsets remain only on the predicted leg, where a sentence's start
-has to be guessed until its audio has been counted.
+maps t=0 to Pipecat's `botStartedSpeaking` output epoch. The live decode is fed
+that same audio from that same first sample, so its timeline *is* the turn
+timeline — there is no offset arithmetic on the accurate leg at all, which is
+most of what this module used to be. Offsets remain only on the predicted leg,
+where a sentence's start has to be guessed until its audio has been counted.
 
 Every wire byte counts the same whether it carries speech or silence. A service
 that pads its sentences gets that pad recognised rather than declared: it is
@@ -84,7 +82,8 @@ The accurate leg is contingent. It gives up — permanently, for the turn — wh
 
 - the decoder pool refuses (`open_stream` returns None): every decoder is out,
   which is the pool's hard memory ceiling doing its job; or
-- decode stops keeping up: cumulative decode time passes `LATCH_RTF` of the audio
+- decode stops keeping up: cumulative decode time passes the configured accurate
+  realtime-ratio threshold
   it has consumed, measured only once a turn is long enough for the numbers to
   mean anything.
 
@@ -144,6 +143,13 @@ from .avatarsync import (
     shared_engine,
     shift,
 )
+from .timing import (
+    ACCURATE_CUE_HOLD_BACK_MS,
+    ACCURATE_CUE_LATCH_MIN_MS,
+    ACCURATE_CUE_LATCH_RTF,
+    MIN_VISIBLE_CUE_MS,
+    PREDICTED_CUE_LEAD_MS,
+)
 
 # Streaming TTS websockets idle, and some send a tiny keepalive frame to hold the
 # connection. Counting those as audio would shift every later cue by a fraction
@@ -153,25 +159,8 @@ KEEPALIVE_MAX_BYTES = 2
 SAMPLE_RATE = 24000
 BYTES_PER_SAMPLE = 2
 
-# The widget drops cues shorter than this (avatar docs/internal-mixer.md
-# § Speech), except that a closure replaces the cue it collapses into: A and G
-# carry the most lip-reading information of any shape.
-MIN_CUE_MS = 30
 CLOSURES = frozenset("AG")
 SILENT = "X"
-
-# Predicted cues are emitted this much *early*. See "Why the fast leg leads",
-# above: the error is symmetric and the tolerance window is not.
-FAST_LEAD_MS = 60
-
-# How far behind the fed edge the accurate track stops. See "The hold-back".
-HOLD_BACK_MS = 100
-
-# When to stop believing the accurate leg can keep up. Both are needed: the ratio
-# alone would latch on the first frame of every turn, where the denominator is
-# one chunk and the numerator may include building a decoder.
-LATCH_MIN_MS = 1500
-LATCH_RTF = 0.8
 
 EmitCues = Callable[[str, int, list[Cue], bool], Awaitable[None]]
 
@@ -204,9 +193,16 @@ def normalize_cues(cues: Sequence[Cue]) -> list[Cue]:
         letter = cue.v if cue.v in ("A", "B", "C", "D", "E", "F", "G", "H", "X") else SILENT
         if out and out[-1].v == letter:
             continue
-        if out and cue.t - out[-1].t < MIN_CUE_MS:
+        if out and cue.t - out[-1].t < MIN_VISIBLE_CUE_MS:
             if letter in CLOSURES:
-                out[-1] = Cue(t=out[-1].t, v=letter, p=cue.p)
+                # A short closure can replace an intervening shape between two
+                # copies of itself (G → F → G). The mouth never visibly left G,
+                # so remove the swallowed middle cue rather than leaving a
+                # duplicate G for the wire/client to rediscover.
+                if len(out) > 1 and out[-2].v == letter:
+                    out.pop()
+                else:
+                    out[-1] = Cue(t=out[-1].t, v=letter, p=cue.p)
             continue
         out.append(Cue(t=cue.t, v=letter, p=cue.p))
     return out
@@ -239,7 +235,7 @@ def clip_track(cues: Sequence[Cue], from_ms: int) -> list[Cue]:
     return [Cue(t=from_ms, v=held.v, p=held.p), *later]
 
 
-def lead_track(cues: Sequence[Cue], ms: int = FAST_LEAD_MS) -> list[Cue]:
+def lead_track(cues: Sequence[Cue], ms: int = PREDICTED_CUE_LEAD_MS) -> list[Cue]:
     """Slide a predicted track earlier by `ms`, clamped at the turn's first sample.
 
     Clamped rather than truncated, and the distinction matters: a cue pushed
@@ -544,7 +540,7 @@ class VisemeEngine:
         # sentence's projected start — its audio is here and decoded, so a
         # predicted track over it would be a correction in the wrong direction.
         track = clip_track(self._fast_track(sentence, start_ms), turn.published_ms)
-        from_ms = max(0, start_ms - FAST_LEAD_MS, turn.published_ms)
+        from_ms = max(0, start_ms - PREDICTED_CUE_LEAD_MS, turn.published_ms)
         if start_ms + sentence.est_speech_ms <= turn.published_ms or not track:
             return
         await self._emit(turn.ctx, from_ms, normalize_cues(track), False)
@@ -561,7 +557,7 @@ class VisemeEngine:
         # halves of the emission agree on where recognition stops and prediction
         # takes over. `edge_ms` is what has been *fed*; the decoder's own edge
         # trails it by under a millisecond at any rate we accept.
-        edge_ms = max(0, round(turn.fed_ms) - HOLD_BACK_MS)
+        edge_ms = max(0, round(turn.fed_ms) - ACCURATE_CUE_HOLD_BACK_MS)
         # The whole current sentence is rewritten every time, not just the stretch
         # past the last accurate edge. Publishing only forward would freeze each
         # 100 ms window under whatever the decoder believed when that window was
@@ -578,7 +574,7 @@ class VisemeEngine:
         # the wire, and grows with the square of the turn. Per sentence it is
         # bounded by one sentence's cues and linear in the turn.
         splice_ms = round(turn.resolved_wire_ms)
-        cues = await stream.cues(splice_ms, HOLD_BACK_MS)
+        cues = await stream.cues(splice_ms, ACCURATE_CUE_HOLD_BACK_MS)
         turn.decode_ms += (time.monotonic() - began) * 1000
 
         # `cues` empty means recognition has nothing at all past what is already
@@ -595,7 +591,10 @@ class VisemeEngine:
             await self._emit(turn.ctx, splice_ms, normalize_cues(track), False)
             turn.published_ms = edge_ms
 
-        if turn.fed_ms >= LATCH_MIN_MS and turn.decode_ms > turn.fed_ms * LATCH_RTF:
+        if (
+            turn.fed_ms >= ACCURATE_CUE_LATCH_MIN_MS
+            and turn.decode_ms > turn.fed_ms * ACCURATE_CUE_LATCH_RTF
+        ):
             self._latch(
                 turn,
                 f"decode is at {turn.decode_ms / turn.fed_ms:.2f}x realtime over "
@@ -705,7 +704,7 @@ class VisemeEngine:
             *shift(sentence.fast_cues, start_ms),
             Cue(t=start_ms + sentence.est_speech_ms, v=SILENT),
         ]
-        # The closing X leads with everything else. Holding it put would leave
-        # the mouth open `FAST_LEAD_MS` longer at the end of every sentence,
-        # which is the hanging-mouth artefact the X exists to prevent.
-        return lead_track(track)
+        # The closing X gets the same server share of the lead as every other
+        # cue. Holding it put would leave the mouth open for that extra interval
+        # at the end of every sentence, creating a hanging-mouth artefact.
+        return lead_track(track, PREDICTED_CUE_LEAD_MS)

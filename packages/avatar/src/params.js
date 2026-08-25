@@ -14,6 +14,8 @@
  *   mouthCornerL/R + up (smile)
  */
 
+import { JAW_RESPONSE_TAU_S, MOUTH_RESPONSE_TAU_S } from './speech-timing.js';
+
 export const REST = {
   // --- mouth -------------------------------------------------------------
   mouthOpen: 0.02, // vertical aperture, 0..1
@@ -120,7 +122,7 @@ export const GROUPS = {
 export const TAU = (() => {
   const t = {};
   for (const c of CHANNELS) t[c] = 0.09;
-  for (const c of GROUPS.mouth) t[c] = 0.042;
+  for (const c of GROUPS.mouth) t[c] = MOUTH_RESPONSE_TAU_S;
   for (const c of GROUPS.smile) t[c] = 0.13;
   t.lidL = t.lidR = 0.018; // blinks must be crisp
   t.squintL = t.squintR = 0.12;
@@ -128,7 +130,7 @@ export const TAU = (() => {
   for (const c of GROUPS.brows) t[c] = 0.08;
   for (const c of GROUPS.head) t[c] = 0.16; // the head has real mass
   t.breath = 0.25;
-  t.jaw = 0.07; // the jaw lags the lips slightly
+  t.jaw = JAW_RESPONSE_TAU_S; // the jaw lags the lips slightly
   // The torso has more mass than the head and reads wrong when it hasn't.
   t.shoulderL = t.shoulderR = 0.19;
   t.torsoLean = 0.24;

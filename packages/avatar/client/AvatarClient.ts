@@ -7,16 +7,17 @@
  * Base Pipecat TTS gives each serialized TTS context an opaque `context_id`.
  * The server uses it only to group and splice cue chunks. `botStartedSpeaking`
  * has no context payload, so the browser FIFO-claims the next buffered context
- * at that factual playout event and anchors its clock there. `botStoppedSpeaking`
- * closes the active context. No avatar-specific speech marker exists.
+ * at that Pipecat output-lifecycle event and anchors its clock there.
+ * `botStoppedSpeaking` closes the active context. Neither event observes the
+ * browser's audio device, and no avatar-specific speech marker exists.
  *
  * `attach()` subscribes to the avatar server-message channel *and* Pipecat's
  * standard lifecycle events. Server messages carry only what Pipecat cannot:
  * correlated speech/cue timing and deliberate application instructions. The
  * lifecycle events project the factual presence states locally. The server
  * supplies only lower-priority `THINKING` / `WORKING` claims and deliberate,
- * self-completing actions. This keeps the face tied to playout truth even if a
- * server claim is delayed or stale.
+ * self-completing actions. This keeps the face tied to Pipecat's output truth
+ * even if a server claim is delayed or stale.
  *
  * ## Cue splice
  *
@@ -42,7 +43,7 @@
  *     already does for a same-name `setState`).
  *
  * Cues commonly arrive **before** `botStartedSpeaking` — the fast leg starts
- * the moment a sentence is handed to TTS, well before audio playout.
+ * the moment a sentence is handed to TTS, well before bot output begins.
  * Chunks that arrive before the clock is anchored are spliced into the
  * canonical array but not yet handed to the widget; `botStartedSpeaking` hands over
  * whatever has accumulated as the turn's first `speak()` call. So "the first
@@ -66,7 +67,7 @@ interface Turn {
   ctx: string;
   /** The canonical, already-spliced cue track for this turn. */
   cues: AvatarCue[];
-  /** Whether Pipecat playout has anchored a clock and issued `speak()`. */
+  /** Whether Pipecat output has anchored a clock and issued `speak()`. */
   started: boolean;
   clock: (() => number) | null;
 }
@@ -252,10 +253,10 @@ export class AvatarClient {
   private handleAction(id: AvatarActionId): void {
     // An interruption is a server-confirmed explanation of a transition, not
     // authority to steal the mouth while bot audio is still playing. Hold it
-    // until playout has released the speaking state.
+    // until Pipecat output has released the speaking state.
     if (id === "RESPONSE_INTERRUPTED" && this.botSpeaking) {
       this.pendingInterruptedAction = true;
-      // Any prefetched TTS contexts behind an interrupted playout belong to
+      // Any prefetched TTS contexts behind interrupted output belong to
       // audio Pipecat will now discard. Never let one animate a later reply.
       this.discardQueuedContextsOnBotStop = true;
       return;
@@ -284,7 +285,7 @@ export class AvatarClient {
     turn.cues = [...kept, ...msg.cues].sort((a, b) => a.t - b.t);
 
     if (!turn.started) {
-      // No clock yet — buffer. Pipecat playout will claim this FIFO context.
+      // No clock yet — buffer. Pipecat output will claim this FIFO context.
       if (this.botSpeaking && this.turn === null) this.activateNextTurn();
       return;
     }
@@ -383,7 +384,7 @@ export class AvatarClient {
   }
 
   private clearClaimForTurnBoundary(): void {
-    // Claims are lower-priority hints. A fresh user turn or real playout means
+    // Claims are lower-priority hints. A fresh user turn or bot output means
     // any prior thinking/work claim is no longer allowed to reappear later.
     this.serverClaim = null;
   }

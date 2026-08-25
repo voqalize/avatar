@@ -23,6 +23,7 @@ nothing about it: the pad is wire time like any other, and recognition returns
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
@@ -37,10 +38,6 @@ from voqalize_avatar.avatarsync import (
     Cue,
 )
 from voqalize_avatar.visemes import (
-    FAST_LEAD_MS,
-    HOLD_BACK_MS,
-    LATCH_MIN_MS,
-    MIN_CUE_MS,
     VisemeEngine,
     clip_track,
     cues_to_wire,
@@ -48,11 +45,20 @@ from voqalize_avatar.visemes import (
     normalize_cues,
     wire_ms,
 )
+from voqalize_avatar.timing import (
+    ACCURATE_CUE_HOLD_BACK_MS,
+    ACCURATE_CUE_LATCH_MIN_MS,
+    MIN_VISIBLE_CUE_MS,
+    PREDICTED_CUE_LEAD_MS,
+)
 
 from .conftest import load_clip
 
 CTX = "7.1"
 RATE = 24000
+NORMALIZATION_FIXTURE = (
+    Path(__file__).resolve().parents[2] / "avatar" / "test" / "fixtures" / "viseme-normalization.json"
+)
 
 # The fixture service's silence between sentences: real zeroed PCM, spliced on
 # the way it arrives. Nothing declares it to the engine.
@@ -115,7 +121,7 @@ def assert_wire_valid(cues: list[Cue]) -> None:
     times = [cue.t for cue in cues]
     assert times == sorted(times), "cues are not sorted"
     assert len(set(times)) == len(times), "duplicate cue times"
-    assert all(b - a >= MIN_CUE_MS for a, b in pairwise(times)), (
+    assert all(b - a >= MIN_VISIBLE_CUE_MS for a, b in pairwise(times)), (
         "a cue is shorter than the widget's minimum"
     )
     assert all(a.v != b.v for a, b in pairwise(cues)), "repeated shape"
@@ -135,21 +141,17 @@ def assert_wire_clean(cues: list[Cue]) -> None:
 # ── pure functions ───────────────────────────────────────────────────────────
 
 
-def test_normalize_drops_short_cues_but_lets_closures_replace() -> None:
-    # B at +10ms is too short to see and is dropped; A is a closure, and a
-    # closure carries more lip-reading information than whatever it collapses
-    # into, so it replaces rather than disappears.
-    assert normalize_cues([Cue(0, "C"), Cue(10, "B")]) == [Cue(0, "C")]
-    assert normalize_cues([Cue(0, "C"), Cue(10, "A")]) == [Cue(0, "A")]
+def test_normalize_matches_the_cross_runtime_fixture() -> None:
+    """Python owns optional phones; the browser owns local intensity defaults.
 
-
-def test_normalize_sorts_dedupes_and_maps_the_unknown_to_silence() -> None:
-    assert normalize_cues([Cue(100, "B"), Cue(0, "C")]) == [Cue(0, "C"), Cue(100, "B")]
-    assert normalize_cues([Cue(0, "C"), Cue(100, "C"), Cue(200, "B")]) == [
-        Cue(0, "C"),
-        Cue(200, "B"),
-    ]
-    assert normalize_cues([Cue(0, "Z")]) == [Cue(0, "X")]
+    Both must otherwise make the identical visible `(t, v)` decision. The
+    shared fixture is deliberately outside either runtime's test tree so a
+    future normalizer change cannot update just its own expectations.
+    """
+    fixture = json.loads(NORMALIZATION_FIXTURE.read_text())
+    for case in fixture["cases"]:
+        actual = [{"t": cue.t, "v": cue.v} for cue in normalize_cues([Cue(**cue) for cue in case["input"]])]
+        assert actual == case["output"], case["name"]
 
 
 def test_clip_track_carries_the_shape_in_force_rather_than_dropping_it() -> None:
@@ -263,7 +265,7 @@ async def test_the_fast_leg_lays_sentences_end_to_end(aligner: AvatarsyncEngine)
 
     assert [call.from_ms for call in recorder.calls] == [
         0,
-        estimate_duration_ms(first) - FAST_LEAD_MS,
+        estimate_duration_ms(first) - PREDICTED_CUE_LEAD_MS,
     ]
 
 
@@ -288,6 +290,16 @@ async def test_a_dead_runtime_costs_cues_not_the_turn(tmp_path: Path) -> None:
 
 
 # ── the lead ─────────────────────────────────────────────────────────────────
+
+
+def test_fast_lead_is_the_complete_predicted_presentation_contract() -> None:
+    """The renderer uses its supplied utterance clock without a global lead.
+
+    The fast path owns the deliberate prediction cushion; it must not rely on a
+    hidden browser offset, which would conflate audiovisual sync with network
+    delivery timing.
+    """
+    assert PREDICTED_CUE_LEAD_MS == 60
 
 
 def test_lead_keeps_the_shape_in_force_at_zero_not_the_earliest() -> None:
@@ -321,14 +333,14 @@ async def test_predicted_cues_go_out_early(aligner: AvatarsyncEngine) -> None:
 
     assert led == normalize_cues(lead_track([*unled, Cue(est_ms, "X")]))
     # Past the clamp, where nothing has collapsed, it is exactly the same track
-    # FAST_LEAD_MS earlier — the closing X included. Held put, that X would
+    # PREDICTED_CUE_LEAD_MS earlier — the closing X included. Held put, that X would
     # leave the mouth open a lead longer at the end of every sentence.
     assert [cue for cue in led if cue.t >= 200] == [
-        Cue(cue.t - FAST_LEAD_MS, cue.v, cue.p)
+        Cue(cue.t - PREDICTED_CUE_LEAD_MS, cue.v, cue.p)
         for cue in straight
-        if cue.t >= 200 + FAST_LEAD_MS
+        if cue.t >= 200 + PREDICTED_CUE_LEAD_MS
     ]
-    assert led[0].t == 0, "nothing can be shown before playout starts"
+    assert led[0].t == 0, "nothing can be shown before utterance position zero"
 
 
 # ── the accurate leg ─────────────────────────────────────────────────────────
@@ -372,7 +384,7 @@ async def test_the_accurate_edge_stays_behind_the_fed_edge(aligner: AvatarsyncEn
     """The hold-back, observed from outside.
 
     A live phone loop backtraces from the current frame and its tail still moves,
-    so the accurate track stops `HOLD_BACK_MS` short of what has been fed. Past
+    so the accurate track stops `ACCURATE_CUE_HOLD_BACK_MS` short of what has been fed. Past
     that point the emission is predicted, which is why the tracks still run to
     the end of the sentence.
     """
@@ -393,7 +405,7 @@ async def test_the_accurate_edge_stays_behind_the_fed_edge(aligner: AvatarsyncEn
         fed_ms += wire_ms(chunk)
         # The splice point is where the *previous* emission's recognition
         # stopped, so it is at least one hold-back behind the audio counted so far.
-        assert recorder.calls[-1].from_ms <= fed_ms - HOLD_BACK_MS + 1
+        assert recorder.calls[-1].from_ms <= fed_ms - ACCURATE_CUE_HOLD_BACK_MS + 1
 
     await engine.end_turn(CTX)
 
@@ -478,7 +490,7 @@ async def test_a_sentence_boundary_reseats_the_sentences_behind_it(
     # The estimate for this clip is ~19% long, so the second sentence really
     # does move; if the fixture ever changes to one the estimator nails, the
     # re-seat is correctly invisible and this test is vacuous — hence this.
-    true_start = true_ms + FIXTURE_PAD_MS - FAST_LEAD_MS
+    true_start = true_ms + FIXTURE_PAD_MS - PREDICTED_CUE_LEAD_MS
     assert estimated_start != true_start, "fixture no longer exercises the re-seat"
 
     # Nothing is emitted by the boundary itself; it shows up in the next
@@ -511,8 +523,8 @@ async def test_the_sample_rate_comes_off_the_frame(aligner: AvatarsyncEngine) ->
     # hold-back. At the fallback rate it would be half that.
     final = recorder.calls[-1]
     assert final.final is True
-    assert abs(final.from_ms - (ms + FIXTURE_PAD_MS - HOLD_BACK_MS)) <= 20, (
-        f"turn measured {final.from_ms + HOLD_BACK_MS} ms of audio, "
+    assert abs(final.from_ms - (ms + FIXTURE_PAD_MS - ACCURATE_CUE_HOLD_BACK_MS)) <= 20, (
+        f"turn measured {final.from_ms + ACCURATE_CUE_HOLD_BACK_MS} ms of audio, "
         f"which is {ms + FIXTURE_PAD_MS} ms long"
     )
     await engine.end_turn(CTX)
@@ -710,7 +722,7 @@ async def test_a_decoder_that_falls_behind_latches_and_never_comes_back(
     The pool refusing is the loud failure and has its own test. This is the
     quiet one — the decoder answers, correctly, too slowly. Left alone it would
     ship corrections that land after the mouth has already moved past them,
-    burning a worker thread to make the face worse, so `LATCH_RTF` gives up.
+    burning a worker thread to make the face worse, so the latch ratio gives up.
 
     Slowness is injected rather than provoked: making a real decoder miss
     realtime needs a machine under load, which is not a test. What is asserted
@@ -771,9 +783,9 @@ async def test_a_decoder_that_falls_behind_latches_and_never_comes_back(
     assert opened, "the turn never opened a stream"
 
     latched_at = len(recorder.calls)
-    # `LATCH_MIN_MS` of audio has to have gone by before the ratio is allowed to
+    # `ACCURATE_CUE_LATCH_MIN_MS` of audio has to have gone by before the ratio is allowed to
     # mean anything, so the fixture has to be long enough to reach it.
-    assert wire_ms(pcm) > LATCH_MIN_MS, "fixture is too short to reach the latch window"
+    assert wire_ms(pcm) > ACCURATE_CUE_LATCH_MIN_MS, "fixture is too short to reach the latch window"
 
     # Fast again — and it must not matter.
     opened[0].stall_s = 0.0

@@ -26,7 +26,7 @@ a protocol mismatch waiting to be debugged in production
 **Without any customization, most of the avatar works on any pipecat
 application.** Not because we enumerated integrations, but because the
 behaviour is derived from frames and events a pipecat pipeline already emits:
-bot playout, user speech, mute, connection, function calls, LLM response
+bot-output lifecycle, user speech, mute, connection, function calls, LLM response
 boundaries, the TTS text and audio going past. Nothing in the design asks the
 application to describe itself.
 
@@ -69,11 +69,12 @@ Two consequences that surprise people, both deliberate:
   ([design-avatar-interface.md § Consequences](design-avatar-interface.md)). A
   host that wants a status pill holds the same `PipecatClient` and can subscribe
   to it directly, with its own precedence, for its own chrome.
-- **Observed playout is fact; a server message is a candidate.** If bot audio
-  is playing, the avatar is speaking and its mouth is viseme-driven, whatever
-  the server most recently claimed. The client never decides what the agent is
-  *doing* — it has no view of call content and no way to refuse a server
-  command — but it does own what it can see for itself.
+- **Pipecat output is fact; a server message is a candidate.** While Pipecat's
+  bot-output interval is active, the avatar is speaking and its mouth is
+  viseme-driven, whatever the server most recently claimed. That lifecycle is
+  not proof that a browser device has made a sample audible. The client never
+  decides what the agent is *doing* — it has no view of call content and no way
+  to refuse a server command — but it does own the Pipecat facts it receives.
 
 ### 2. States form a hierarchy
 
@@ -82,7 +83,7 @@ does not complete on a timer. Exactly one state is effective at any instant,
 and it is *not* the last message received — it is the winner of a fixed
 precedence ladder.
 
-Roughly, and illustratively only: bot playout outranks user speech, which
+Roughly, and illustratively only: Pipecat bot output outranks user speech, which
 outranks connection posture and mute, which outrank the server's claims
 (`STRAINING`, then `THINKING`, then `WORKING`), which outrank the client's own
 quiet timer falling through to `IDLE`. **The normative ladder — all of its
@@ -245,7 +246,7 @@ a future renderer does not plug into the wrong seam.
 | `OFFLINE`, `DEGRADED` | the client's disconnect and error events. |
 | `IDLE` | the client's quiet timer (12 s), only in an established session. |
 | `THINKING`, `WORKING`, `STRAINING` | `AvatarProcessor` inferring from stock frames — the end of a user turn, LLM response boundaries, function-call frames, and a grace timer for the turn that produced nothing. These are claims because the frames they need do not all reach the browser. |
-| `RESPONSE_INTERRUPTED` | the processor observing a real interruption during bot playout, and sending the action itself. |
+| `RESPONSE_INTERRUPTED` | the processor observing a real interruption during Pipecat bot output, and sending the action itself. |
 | lipsync | `AvatarProcessor`, from the same karaoke frames pipecat already pushes for word-level captions. Two legs, spliced server-side. |
 | idle motion, blink, breath, gaze aversion | the renderer, always. |
 

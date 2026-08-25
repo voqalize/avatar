@@ -88,7 +88,7 @@ describe("AvatarClient dispatch", () => {
 });
 
 describe("AvatarClient Pipecat-bound cue lifecycle", () => {
-  it("buffers cues by base-TTS context, then starts the FIFO context at bot playout", () => {
+  it("buffers cues by base-TTS context, then starts the FIFO context at bot output", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api, { now: () => 1000 });
 
@@ -335,13 +335,13 @@ describe("AvatarClient authority resolver", () => {
     emit(RTVI_EVENTS.error, { data: { fatal: false } });
     emit(RTVI_EVENTS.botStartedSpeaking);
 
-    // Starting playout clears a recoverable failure first; before any session
+    // Starting bot output clears a recoverable failure first; before any session
     // activity the safe baseline is available/listening, not stepped aside.
     // The important precedence invariant is the final SPEAKING projection.
     expect(calls.setState.map((call) => call.name)).toEqual(["DEGRADED", "LISTENING", "SPEAKING"]);
   });
 
-  it("uses bot playout as a mouth safety stop and returns to listening", () => {
+  it("uses the bot-output interval as a mouth safety stop and returns to listening", () => {
     const { calls, emit, adapter } = attached();
 
     emit(RTVI_EVENTS.botStartedSpeaking);

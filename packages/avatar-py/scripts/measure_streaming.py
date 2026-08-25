@@ -28,7 +28,8 @@ sys.path.insert(0, ".")
 sys.path.insert(0, "src")
 
 from voqalize_avatar.avatarsync import AvatarsyncEngine, AvatarsyncPaths, Cue, shared_engine
-from voqalize_avatar.visemes import HOLD_BACK_MS, SAMPLE_RATE, VisemeEngine
+from voqalize_avatar.timing import ACCURATE_CUE_HOLD_BACK_MS
+from voqalize_avatar.visemes import SAMPLE_RATE, VisemeEngine
 
 from tests.conftest import CLIPS, load_clip as _load_clip
 
@@ -129,7 +130,7 @@ async def main() -> None:
     predicted = {n: await warm.text_cues(load_clip(n)[1], load_clip(n)[2]) for n in CLIP_NAMES}
     await warm.stop()
 
-    print(f"hold-back {HOLD_BACK_MS} ms | rss after model load {rss_mb():.0f} MB\n")
+    print(f"hold-back {ACCURATE_CUE_HOLD_BACK_MS} ms | rss after model load {rss_mb():.0f} MB\n")
 
     for chunk_ms in (200, 500):
         print(f"=== {chunk_ms} ms frames "

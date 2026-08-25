@@ -13,6 +13,7 @@
  */
 
 import { clamp } from './params.js';
+import { INTERJECTION_TRACK_TAIL_MS } from './speech-timing.js';
 import { VisemeTrack } from './visemes.js';
 
 const smoothstep = (t) => t * t * (3 - 2 * t);
@@ -84,7 +85,7 @@ export class ClipPlayer {
       const clock = audio
         ? () => audio.currentTime * 1000
         : () => this.t;
-      this.mouth.tailMs = 60;
+      this.mouth.tailMs = INTERJECTION_TRACK_TAIL_MS;
       this.mouth.start(clip.mouthCues, clock);
     } else {
       this.mouth.stop();

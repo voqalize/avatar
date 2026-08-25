@@ -182,13 +182,20 @@ So the server may emit noisy tracks; it should still try to end every
 utterance with an explicit `X` cue (the track only completes on a trailing
 `X`).
 
-**Clock.** Cues are scheduled against the *audio clock*, never wall time.
-Pass `audio` (an `HTMLMediaElement`; the widget uses `currentTime` and will
-call `play()` if paused) or `clock` (a `() => ms` function, for WebAudio or
-server-driven time). Wall time is the fallback only when neither is given.
-The mouth runs **40 ms ahead** of the clock (`LEAD_MS`): perceptual tolerance
-is asymmetric (about −45 ms audio-first to +125 ms video-first), so leading is
-the safe side.
+**Clock.** Cues are scheduled against an utterance clock. Pass `audio` (an
+`HTMLMediaElement`; the widget uses `currentTime` and will call `play()` if
+paused) or `clock` (a `() => ms` function, for WebAudio or another supplied
+epoch). Wall time is the generic widget's fallback only when neither is given.
+The Pipecat adapter instead supplies elapsed time from `BotStartedSpeaking`,
+because `PipecatClient` exposes output lifecycle but no browser device-playout
+position. The mouth runs directly on whichever clock it is given
+(`LEAD_MS = 0`); moving every cue cannot compensate for data-channel/media
+skew.
+
+The Voqalize backend's text-predicted leg has a **60 ms end-to-end** lead: it
+places its wire cues 60 ms early. Accurate audio-derived cues receive no lead;
+the fast leg's prediction cushion is deliberate and explicit rather than a
+side-effect of renderer timing.
 
 **Streaming.** `pushCues(cues)` appends mid-utterance — send cues in chunks as
 TTS produces them; the merged track is re-normalized each push. Tail
@@ -198,6 +205,13 @@ discards queued cues at or after `from_ms`, appends, and re-issues `speak()`
 when anything was discarded. That is how the backend's fast text-predicted cues
 are overwritten by audio-recognized ones mid-turn without the widget ever
 seeing a seam.
+
+**Normalization parity.** The Python wire normalizer and the browser normalizer
+share visible-cue conformance cases in
+`packages/avatar/test/fixtures/viseme-normalization.json`. Both preserve the
+same `(t, v)` sequence; Python additionally retains phones and the browser adds
+local intensity defaults. A normalizer change is incomplete until both tests
+accept that fixture.
 
 `speak()` auto-enters `SPEAKING` (keeping the current gaze) and kills any
 spoken action in flight. `speakEnd` fires when the track completes.

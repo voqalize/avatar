@@ -93,8 +93,8 @@ Three commands, one envelope
 
 **States are durable and they are prioritised.** A state holds until the facts
 change; it does not complete on a timer. **The state pipecat reports always
-wins** — bot playout and user speech are observed facts, and a server `claim` is
-a *candidate* underneath them. **Actions are point-in-time animation
+wins** — bot-output lifecycle and user speech are observed Pipecat facts, and a
+server `claim` is a *candidate* underneath them. **Actions are point-in-time animation
 sequences** that land on top of whatever state is effective at the time; they
 are finite, they complete on their own, and they never establish state.
 

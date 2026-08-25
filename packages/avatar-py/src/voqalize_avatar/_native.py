@@ -28,6 +28,8 @@ import platform
 from ctypes import POINTER, byref, c_char_p, c_double, c_int8, c_int32, c_size_t, c_void_p
 from pathlib import Path
 
+from .timing import ACCURATE_CUE_HOLD_BACK_MS
+
 # The ABI this module was written against. `avs_abi_version()` returning
 # anything else means the library on disk is not the one this file describes,
 # which is a mis-staged wheel or a stale build — a crash later, so fail now.
@@ -356,7 +358,7 @@ class NativeStream:
             raise NativeError(err.value.decode(errors="replace"))
 
     def cues(
-        self, from_ms: int = 0, hold_back_ms: int = 100
+        self, from_ms: int = 0, hold_back_ms: int = ACCURATE_CUE_HOLD_BACK_MS
     ) -> list[tuple[int, str, str | None]]:
         """The timeline from `from_ms`, ending `hold_back_ms` before the edge.
 

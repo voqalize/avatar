@@ -44,10 +44,10 @@ does not snap back when an underlying state changes. They queue behind an
 already active action where physical parts conflict. State changes continue to
 resolve underneath them.
 
-This does not override mouth safety. Observed bot playout owns articulation.
-An action during bot speech contributes compatible head/body/hand channels but
-not a competing mouth shape. `turn.interrupted` waits for bot playout to stop,
-then its held mouth can communicate the cut.
+This does not override mouth safety. Pipecat's bot-output interval owns
+articulation. An action during bot speech contributes compatible
+head/body/hand channels but not a competing mouth shape. `turn.interrupted`
+waits for that interval to stop, then its held mouth can communicate the cut.
 
 The vocabulary is seven, and `BEHAVIOR_ACTIONS` in `packages/avatar/src/behavior.js` is the one
 copy: `ack.receive`, `ack.nod`, `turn.interrupted`, `gesture.greet`,

@@ -1,0 +1,25 @@
+{
+  "description": "Cross-runtime conformance cases for the shared visible cue normalizer. Only t/v are compared: the Python wire keeps an optional phone while the browser adds a local intensity default.",
+  "cases": [
+    {
+      "name": "sorts, maps unknown shapes to silence, and merges duplicates",
+      "input": [{"t": 100, "v": "B"}, {"t": 0, "v": "Z"}, {"t": 30, "v": "B"}, {"t": 50, "v": "B"}, {"t": 70, "v": "A"}],
+      "output": [{"t": 0, "v": "X"}, {"t": 30, "v": "B"}, {"t": 70, "v": "A"}, {"t": 100, "v": "B"}]
+    },
+    {
+      "name": "drops a short non-closure",
+      "input": [{"t": 0, "v": "C"}, {"t": 10, "v": "B"}],
+      "output": [{"t": 0, "v": "C"}]
+    },
+    {
+      "name": "gives a short closure precedence",
+      "input": [{"t": 0, "v": "C"}, {"t": 10, "v": "A"}],
+      "output": [{"t": 0, "v": "A"}]
+    },
+    {
+      "name": "removes a swallowed middle shape between matching closures",
+      "input": [{"t": 0, "v": "G"}, {"t": 70, "v": "F"}, {"t": 90, "v": "G"}],
+      "output": [{"t": 0, "v": "G"}]
+    }
+  ]
+}

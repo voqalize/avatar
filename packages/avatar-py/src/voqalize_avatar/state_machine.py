@@ -308,8 +308,8 @@ class AvatarStateMachine:
             # of turns where the agent held no floor to yield.
             return []
         # It is a self-completing explanation of how speech stopped, not a
-        # durable state. The browser delays its mouth-owning phase until its
-        # observed bot playout has actually stopped.
+        # durable state. The browser delays its mouth-owning phase until the
+        # Pipecat bot-output interval has stopped.
         return [AvatarMessage.action("RESPONSE_INTERRUPTED")]
 
     # ─── Explicit control ───────────────────────────────────────────────

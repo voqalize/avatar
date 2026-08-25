@@ -164,17 +164,17 @@ would delay the audio:
 
 - **fast leg** — predicted from the text the moment it is handed to TTS, before
   any audio exists. ~0.15 ms, on the event loop, and it is what keeps the mouth
-  moving from the first frame of playout.
+  moving from the start of Pipecat bot output.
 - **accurate leg** — real phone recognition over the rendered PCM, decoded
   *while it streams* on a worker thread, and overwriting the prediction as it
   advances.
 
-Three constants carry the design. `FAST_LEAD_MS = 60` emits predicted cues
+Three constants carry the design. `PREDICTED_CUE_LEAD_MS = 60` emits predicted cues
 early, because the eye is forgiving of a mouth that moves ahead of the sound and
-not of one that lags. `HOLD_BACK_MS = 100` is how far behind the fed edge the
+not of one that lags. `ACCURATE_CUE_HOLD_BACK_MS = 100` is how far behind the fed edge the
 accurate track stops — a segment near the edge is still liable to change, and a
 shape rewritten under the playhead is a twitch rather than a correction. And
-`LATCH_RTF = 0.8` gives up: if decode stops keeping up with playout, the turn
+`ACCURATE_CUE_LATCH_RTF = 0.8` gives up: if decode stops keeping up with output, the turn
 falls back to the fast leg permanently rather than shipping corrections that
 arrive after the mouth has already moved on. The rest of the reasoning is in
 [`packages/avatar-py/src/voqalize_avatar/visemes.py`](packages/avatar-py/src/voqalize_avatar/visemes.py), next to
@@ -212,8 +212,9 @@ working, idle — a state holds until the facts change; it does not complete on 
 timer. If the bot is talking, that is the highest-priority state and the mouth
 articulates, full stop.
 
-**Always prioritise the state pipecat reports.** Bot playout and user speech are
-observed facts and they win. A server `claim` is a *candidate* underneath them —
+**Always prioritise the state pipecat reports.** Bot-output lifecycle and user
+speech are observed Pipecat facts and they win. A server `claim` is a
+*candidate* underneath them —
 it is how the application says "I am working on a tool call", not a command to
 look a particular way. Everything else is cherry on top.
 

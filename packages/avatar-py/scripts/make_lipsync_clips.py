@@ -21,9 +21,10 @@ them against the same audio:
 
   text   the fast leg, ~0.2 ms. Timed off `estimate_duration_ms(text)`, not off
          the clip, because that is all it has when it runs — the audio does not
-         exist yet. Led by FAST_LEAD_MS. Its drift against the real duration is
-         the artefact worth looking at, so do not "fix" it by passing the true
-         length in.
+         exist yet. Its explicit `PREDICTED_CUE_LEAD_MS` wire lead is also its
+         complete 60 ms presentation lead; the renderer applies no global lead.
+         Its drift against the real duration is the artefact worth looking at,
+         so do not "fix" it by passing the true length in.
   audio  the accurate leg, ~21 ms/s of audio. Real recognition over the PCM.
   fit    the fast leg given the clip's *true* duration. Not something production
          can ever have — it exists to separate the two ways the fast leg can be

@@ -322,8 +322,8 @@ appropriate," and "often co-occur with completion of a grammatical clause."
 This is a *server-side* rule for us — the client never hears the candidate — but
 it fixes the shape of the contract: the server should emit a backchannel token
 ~700 ms after a low-pitch region, and the client should render it fast enough
-that the perceptual moment isn't missed. Our 40 ms cue-track lead is well within
-budget.
+that the perceptual moment isn't missed. This is action timing, independent of
+the viseme track's zero renderer lead.
 
 ### 3.3 Nod taxonomy: three types, with measurable amplitudes
 

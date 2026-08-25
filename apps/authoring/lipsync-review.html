@@ -19,8 +19,8 @@
            arrived — which for every sentence but a turn's first is before its
            playout begins.
     text   the fast leg. Predicted from the words plus estimate_duration_ms(),
-           in ~0.2 ms, and led by 60 ms. What covers a turn's opening while the
-           audio is still being generated.
+           in ~0.2 ms, with an explicit 60 ms wire/presentation lead. What
+           covers a turn's opening while the audio is still being generated.
     fit    the fast leg handed the clip's true duration. Production can never
            have this. It is here to split the fast leg's two failure modes: if
            `fit` reads and `text` does not, the phone timeline is fine and the
