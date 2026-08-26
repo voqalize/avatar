@@ -113,9 +113,13 @@ const RAMP = 5;
 //      eye: { aperture }           vertical opening only; 1 is the family
 //                                 geometry, below 1 narrows without changing
 //                                 the adult eye-width ratio
+//             { irisScale, finish } optional editorial eye proportions and
+//                                 softer material contrast
 //             { refine }            optional brow and upper-lid finishing;
 //                                 construction-only, never a driver channel
 //      mouth: { philtrum }          optional quiet neutral-mouth plane
+//      form: { socket, sideShadeAlpha } optional static head-attached form;
+//                                 it adds no performance channel
 //      blush: number              how much of the cheek rouge survives — 1 is
 //                                 the generator's own, 0 turns it off
 //      sex: 'f' | 'm'             which rest geometry the rig is BUILT at and
@@ -213,6 +217,7 @@ const L_REF = DEFAULT_PERSONA.skin[2];
 
 function makePalette(p) {
   const [H, S, L] = p.skin;
+  const eyeFinish = p.eye?.finish || {};
 
   // Skin: five planes off one tone. Hue walks 22 degrees redder down the ramp
   // and saturation peaks in the middle of it, both exactly as before; the
@@ -250,7 +255,7 @@ function makePalette(p) {
 
   return {
     face: skin(4),
-    shade: SHADE(0.17),       // the one side plane
+    shade: SHADE(p.form?.sideShadeAlpha ?? 0.17), // the one side plane
     ear: skin(3.5),
     earR: skin(3.0),
     earIn: skin(2.7),
@@ -280,24 +285,24 @@ function makePalette(p) {
     // The two scleras differ by less than they used to: the side shading plane
     // already tints the shadow-side eye, and doubling that up made the pair look
     // asymmetric rather than lit once the camera moved in.
-    sclera: [250, 248, 245, 1],
-    scleraShade: [240, 236, 233, 1],
+    sclera: eyeFinish.sclera || [250, 248, 245, 1],
+    scleraShade: eyeFinish.scleraShade || [240, 236, 233, 1],
     // One shape does both jobs the research asks of the sclera: the upper lid's
     // cast shadow across the top, and the corner darkening — it is the opening's
     // own outline with its lower edge raised most in the middle and not at all
     // at the canthi, so it is deep at the corners and shallow under the lid.
-    eyeShade: [...hsl(348, 0.30, 0.30).slice(0, 3), 0.15],
+    eyeShade: [...hsl(348, 0.30, 0.30).slice(0, 3), eyeFinish.shadeAlpha ?? 0.15],
     // Limbal ring and inner glow are NEUTRAL overlays on top of the iris — a
     // translucent black annulus and a translucent white disc — never colours
     // derived from the iris hue. That is what keeps the 39-rung `hue/*` ladder
     // (which only ever swaps the iris paint) correct at every rung.
-    limbal: [12, 9, 14, 0.30],
-    irisGlow: [255, 255, 255, 0.13],
+    limbal: [12, 9, 14, eyeFinish.limbalAlpha ?? 0.30],
+    irisGlow: [255, 255, 255, eyeFinish.glowAlpha ?? 0.13],
     pupil: [26, 18, 22, 1],
-    catch: [255, 255, 255, 0.95],
-    catch2: [255, 255, 255, 0.25],
+    catch: [255, 255, 255, eyeFinish.catchAlpha ?? 0.95],
+    catch2: [255, 255, 255, eyeFinish.catch2Alpha ?? 0.25],
     // The lower lid's own edge, read as a line rather than a lash.
-    water: [...off(-20, -0.04, 0.28).slice(0, 3), 0.22],
+    water: [...off(-20, -0.04, 0.28).slice(0, 3), eyeFinish.waterAlpha ?? 0.22],
     carun: [...off(-22, 0, 0.70).slice(0, 3), 0.42],
     lash: hsl(wh - 6, ws - 0.02, wl - 0.10),
     crease: [...off(-16, -0.06, 0.55).slice(0, 3), 0.42],
@@ -309,6 +314,10 @@ function makePalette(p) {
     lidFold: [...off(-14, 0.04, 0.62).slice(0, 3), 0.30],
     brow: hsl(wh, ws, wl),
     browR: hsl(wh - 2, ws, wl - 0.05),
+    // A shallow upper-orbital plane connects the brow, lid and nose into one
+    // lit face. It is deliberately static: expression still belongs entirely
+    // to the existing brow/lid channels, while this only supplies head form.
+    socket: [...off(-14, 0.02, 0.46).slice(0, 3), p.form?.socketAlpha ?? 0.10],
 
     // --- the mouth ------------------------------------------------------------
     lipUp: hsl(...p.lips.up),
@@ -373,6 +382,7 @@ function fill(persona = {}) {
     // personas that do not use it keep byte-identical `meta.live.persona`.
     eye: persona.eye ? { aperture: 1, ...persona.eye } : undefined,
     mouth: persona.mouth ? { ...persona.mouth } : undefined,
+    form: persona.form ? { ...persona.form } : undefined,
     nose: persona.nose ? { ...persona.nose } : undefined,
     skinDetail: persona.skinDetail ? { ...persona.skinDetail } : undefined,
     blush: persona.blush ?? d.blush,
@@ -896,6 +906,8 @@ export function makeKit(persona) {
     ...P,
     eyeTopH: P.eyeTopH * (p.eye?.aperture ?? 1),
     eyeBotH: P.eyeBotH * (p.eye?.aperture ?? 1),
+    irisR: P.irisR * (p.eye?.irisScale ?? 1),
+    pupilR: P.pupilR * (p.eye?.pupilScale ?? 1),
   };
   // The two parts are constructed HERE, not in the draw builder: everything
   // they take is a constant of this persona — the proportions, the resolved
@@ -907,6 +919,7 @@ export function makeKit(persona) {
     eye: makeEye({
       P: EYE_P, PALETTE, solid: reg.solid, group: HEAD,
       irisBase: IRIS.base, lashWeight: p.lash.weight, browWeight: p.brow.weight,
+      catch: p.eye?.finish?.catch,
       refine: p.eye?.refine,
     }),
     nose: makeNose({ P, PALETTE, solid: reg.solid, group: HEAD, shape: p.nose }),
@@ -1022,6 +1035,22 @@ export function buildDraws(c, K) {
   out.push(...K.skinDetail.draws(c, L));
 
   emit(SHAPES_TOP);
+
+  // The eye socket is one broad, low-contrast plane, not another expression
+  // line. Painting it under the animated eyes lets the lids, sclera and brows
+  // keep their existing topology while the forehead-to-eye transition reads
+  // as a continuous head instead of separate symbols placed on flat skin.
+  if (K.p.form?.socket) {
+    for (const side of [-1, 1]) {
+      const k = side < 0 ? 'L' : 'R';
+      const bi = L['bwI' + k], bm = L['bwM' + k], bo = L['bwO' + k];
+      const [ex, ey] = L['eyeC' + k];
+      push('socket' + k, HEAD, spline([
+        [bi[0], bi[1] + 8], [bm[0], bm[1] + 10], [bo[0], bo[1] + 12],
+        [bo[0], bo[1] + 25], [ex, ey - 23], [bi[0], bi[1] + 21],
+      ], 0.82), solid(PALETTE.socket));
+    }
+  }
 
   // ---- eyes ---------------------------------------------------------------
   // Eighteen draws a side, in paint order, from author/parts/eye.mjs. The brow

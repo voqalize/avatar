@@ -41,6 +41,15 @@
     torsoTurn: Number(query.get('turn') || 0),
     shoulderL: Number(query.get('shoulderL') || shoulders),
     shoulderR: Number(query.get('shoulderR') || shoulders),
+    mouthOpen: Number(query.get('mouthOpen') ?? REST.mouthOpen),
+    mouthWidth: Number(query.get('mouthWidth') ?? REST.mouthWidth),
+    mouthRound: Number(query.get('mouthRound') ?? REST.mouthRound),
+    mouthPress: Number(query.get('mouthPress') ?? REST.mouthPress),
+    jaw: Number(query.get('jaw') ?? REST.jaw),
+    lidL: Number(query.get('lidL') ?? REST.lidL),
+    lidR: Number(query.get('lidR') ?? REST.lidR),
+    pupilX: Number(query.get('pupilX') ?? REST.pupilX),
+    pupilY: Number(query.get('pupilY') ?? REST.pupilY),
   };
   const specs = [
     ['professional-male-a', 'Option A · Male', 'Midnight tailoring · pale-blue Oxford · clean side sweep'],

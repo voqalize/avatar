@@ -483,7 +483,8 @@ export function mouthMetrics(P, F) {
 //           `aper` the inner lip line round the aperture, alpha-ramped with
 //                  `open` because a stroke width is not a pose channel
 //           `sep`  the tooth separators, drawn as strokes instead of quads
-//   marks { bow, gum, lipHiFade, toothSep, toothSepA, toothSh, seam, commiss }
+//   marks { bow, gum, lipHiFade, lipHiAlpha, bowAlpha, toothSep, toothSepA,
+//           toothSh, seam, seamAlpha, commiss, commissAlpha }
 // ---------------------------------------------------------------------------
 
 /** Which of the mouth's marks exist, and at what strength. */
@@ -491,11 +492,15 @@ export const MOUTH_MARKS = {
   bow: true,                  // the cupid's-bow highlight over the upper lip
   gum: false,                 // a gum arc over the top of the teeth row
   lipHiFade: 0,               // how much `round` fades the lower-lip highlight
+  lipHiAlpha: 1,              // material strength; geometry and timing stay fixed
+  bowAlpha: 1,
   toothSep: [-0.36, 0.05, 0.42],  // separator stations, in units of the row's half-width
   toothSepA: 0.9,             // …and their share of the row's alpha
   toothSh: { depth: 5, a: 0.55, blend: 'multiply' },   // the upper lip's cast shadow
   seam: [-1.5, 3.0],          // the seam ribbon's two offsets off its own run
+  seamAlpha: 1,
   commiss: { r: 0.028, dx: 0.030, blend: 'multiply' }, // the corner pockets
+  commissAlpha: 1,
   philtrum: null,             // an optional quiet two-plane neutral-mouth cue
 };
 
@@ -545,7 +550,7 @@ export function makeMouth({ P, PALETTE, solid, group = 'head', marks = {}, pen =
     // out as the mouth rounds, which is also the physics: a specular lives on a
     // lip pointing AT the light, and a protruded one does not.
     push('lipHi', HEAD, spline(circle(mcx, hiY, hiRx, 7, hiRy / hiRx), 1), solid(PALETTE.lipHi),
-      clamp(1 - M.lipHiFade * F.round, 0, 1));
+      M.lipHiAlpha * clamp(1 - M.lipHiFade * F.round, 0, 1));
 
     // ---- teeth: ONE band, never individual teeth ---------------------------
     // Painted AFTER the lower lip and BEFORE the upper one, which is the whole
@@ -617,7 +622,8 @@ export function makeMouth({ P, PALETTE, solid, group = 'head', marks = {}, pen =
     // line. The dip at the centre is already in `upperOuter`.
     if (M.bow) {
       const bowTop = F.upperOuter.slice(1, 6);
-      push('lipBow', HEAD, band(bowTop, bowTop.map(([x, y]) => [x, y + 4.5]), 1), solid(PALETTE.lipBow));
+      push('lipBow', HEAD, band(bowTop, bowTop.map(([x, y]) => [x, y + 4.5]), 1),
+        solid(PALETTE.lipBow), M.bowAlpha);
     }
 
     // The philtrum is not a pair of drawn-on lines. It is two very shallow
@@ -686,7 +692,7 @@ export function makeMouth({ P, PALETTE, solid, group = 'head', marks = {}, pen =
     const [s0, s1] = MAP.SEAM_FADE;
     const seamW = 1 + MAP.PRESS_SEAM * F.pAbs + MAP.SMILE_SEAM * Math.max(0, (F.cPosL + F.cPosR) / 2);
     push('seam', HEAD, band(seamAt(M.seam[0] * seamW), seamAt(M.seam[1] * seamW), 0.9),
-      solid(PALETTE.seam), clamp((s0 - (F.dUp + F.dLo)) / s1, 0, 1));
+      solid(PALETTE.seam), M.seamAlpha * clamp((s0 - (F.dUp + F.dLo)) / s1, 0, 1));
 
     // Commissures: the shadow pockets the corners of a real mouth pinch into.
     // Without them the mouth stays flat however well the lips are shaded.
@@ -711,7 +717,7 @@ export function makeMouth({ P, PALETTE, solid, group = 'head', marks = {}, pen =
           F.hw * M.commiss.r * (1 + MAP.CM_R * cp - MAP.CM_SHARP * cn),
           5,
           0.9 * (1 - MAP.CM_WIDE * cp + MAP.CM_ASP * cn)))),
-    ), solid(PALETTE.commiss), 1,
+    ), solid(PALETTE.commiss), M.commissAlpha,
     M.commiss.blend ? { blend: M.commiss.blend } : undefined);
 
     return out;
