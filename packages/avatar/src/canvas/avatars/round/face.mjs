@@ -921,6 +921,8 @@ export function makeKit(persona) {
     eye: makeEye({
       P: EYE_P, PALETTE, solid: reg.solid, group: HEAD,
       irisBase: IRIS.base, lashWeight: p.lash.weight, browWeight: p.brow.weight,
+      shape: p.eye?.shape,
+      marks: p.eye?.marks,
       catch: p.eye?.finish?.catch,
       refine: p.eye?.refine,
     }),
