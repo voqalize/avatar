@@ -38,6 +38,7 @@ mistake has already been made once.
 | mixer | layer order, per-channel smoothing, gaze, idle, clips — **the driving API, `/internal`, no semver promise** | `packages/avatar/src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
 | rig | `apply({pose, hand})` / `destroy()`, the 30 pose channels — **internal to the SVG renderer, not a seam to implement** | `packages/avatar/src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
 | SVG faces | the drawings; `createFace` / `META`, exported as a `{create, meta}` value per module — never resolved by name | `packages/avatar/src/face-*.js`, `line-art.js`, `packages/avatar/src/faces.js` (tooling only) | [authoring-a-face.md](docs/authoring-a-face.md) |
+| Canvas2D avatars | the six professional identities, each a complete `createAvatar` module — private renderer, rig JSON and wardrobe webp images kept out of the public surface | `packages/avatar/src/canvas/`, `packages/avatar/client/{arjun,meera,vikram,ishita,kabir,naina}.ts` | [README.md § Professional avatars](README.md#professional-avatars) |
 
 **The state list has exactly one copy: `STATES` in `packages/avatar/src/avatar.js`,** with each
 entry's perceptual reasoning in the comment above it. A prose table of states in

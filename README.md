@@ -9,8 +9,8 @@ your client already receives plus one custom RTVI message carrying lipsync
 metadata and semantic cues.
 
 No video track, no per-minute avatar vendor, no second media path. Three SVG
-faces ship with it — one drawing per entry point, so you pay for the one you
-import — and you can author your own.
+faces and six professional Canvas2D avatars ship with it — one identity per
+entry point, so you pay for the one you import — and you can author your own.
 
 <p>
   <img src="docs/assets/readme-peep-speaking.png" alt="peep, mid-utterance" width="180">
@@ -247,6 +247,36 @@ Authoring a face of your own is a staged process that starts from a reference
 image rather than a text brief:
 [authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md).
 
+## Professional avatars
+
+Six complete, code-authored avatars ship as their own `createAvatar` modules —
+each a full identity, not a face value, with a private Canvas2D renderer:
+
+```js
+import { createAvatar } from '@voqalize/avatar/avatars/arjun';
+// or: @voqalize/avatar/avatars/meera
+//     @voqalize/avatar/avatars/vikram
+//     @voqalize/avatar/avatars/ishita
+//     @voqalize/avatar/avatars/kabir
+//     @voqalize/avatar/avatars/naina
+
+const avatar = createAvatar({ mount, client: pipecatClient });
+```
+
+`arjun`/`meera` are the original interviewer pair; `vikram`/`ishita` and
+`kabir`/`naina` are two further wardrobe/hair directions on the same rig. The
+older entry points (`interviewer-male`, `interviewer-female`,
+`professional-male-a`, `professional-female-a`, `professional-male-b`,
+`professional-female-b`) still work as `@deprecated` aliases for the names
+above — use the new names in new code.
+
+All six depict Indian professionals in their late twenties, without caricature
+or regional costume cues, calibrated at call-tile size, and use the same wire
+contract and Pipecat lifecycle/viseme driver as the SVG faces — their private
+renderer is Canvas2D and its rig data and bitmap assets are implementation
+details, not part of the package surface. Full detail:
+[packages/avatar/README.md § Professional avatars](packages/avatar/README.md#professional-avatars).
+
 ## Shipping your own avatar
 
 A whole different rendering technology is not a face; it is a different
@@ -293,6 +323,7 @@ implements or depends on. The rest are our own internals, and are named so.
 | mixer | layer order, per-channel smoothing, gaze, idle, clips | `packages/avatar/src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
 | rig | `apply({pose, hand})` / `destroy()`, our SVG renderer's internals | `packages/avatar/src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
 | SVG faces | the drawings | `packages/avatar/src/face-*.js` | [authoring-a-face.md](docs/authoring-a-face.md) |
+| Canvas2D avatars | the six professional identities — private renderer, rig data and wardrobe images kept out of the public surface | `packages/avatar/src/canvas/`, `packages/avatar/client/{arjun,meera,vikram,ishita,kabir,naina}.ts` | [README.md § Professional avatars](#professional-avatars) |
 
 The two bold rows are the contracts, and only they carry a semver promise.
 Everything below them is named `internal-*` for the same reason it ships under

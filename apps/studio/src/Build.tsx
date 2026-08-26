@@ -19,6 +19,7 @@ import { Button, Slider } from "@pipecat-ai/voice-ui-kit";
 import type { VoiceOption } from "./corpus";
 import {
   AVATAR_NAMES,
+  CANVAS_AVATAR_NAMES,
   DEFAULT_LOOK,
   GAINS,
   hasConfigurableHand,
@@ -72,12 +73,12 @@ export const READS: Record<AvatarName, string> = {
   peep: "male",
   wren: "female",
   myna: "female",
-  "interviewer-male": "male",
-  "interviewer-female": "female",
-  "professional-male-a": "male",
-  "professional-female-a": "female",
-  "professional-male-b": "male",
-  "professional-female-b": "female",
+  arjun: "male",
+  meera: "female",
+  vikram: "male",
+  ishita: "female",
+  kabir: "male",
+  naina: "female",
 };
 
 /**
@@ -98,11 +99,11 @@ function snippet(look: Look): string {
     else if (look.handSide === -1) opts.push("handSide: -1");
   }
 
-  const isInterviewer = look.avatar.startsWith("interviewer-");
-  const imports = [isInterviewer
+  const isCanvasAvatar = (CANVAS_AVATAR_NAMES as readonly string[]).includes(look.avatar);
+  const imports = [isCanvasAvatar
     ? `import { createAvatar } from "@voqalize/avatar/avatars/${look.avatar}";`
     : `import { createAvatar } from "@voqalize/avatar";`];
-  if (!isInterviewer && look.avatar !== "peep") {
+  if (!isCanvasAvatar && look.avatar !== "peep") {
     opts.unshift(`face: ${look.avatar}`);
     imports.push(`import { ${look.avatar} } from "@voqalize/avatar/faces/${look.avatar}";`);
   }

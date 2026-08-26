@@ -13,24 +13,19 @@ import type { PipecatClient } from "@pipecat-ai/client-js";
 import { peep } from "@voqalize/avatar/faces/peep";
 import { wren } from "@voqalize/avatar/faces/wren";
 import { myna } from "@voqalize/avatar/faces/myna";
-import { createAvatar as createInterviewerMale } from "@voqalize/avatar/avatars/interviewer-male";
-import { createAvatar as createInterviewerFemale } from "@voqalize/avatar/avatars/interviewer-female";
-import { createAvatar as createProfessionalMaleA } from "@voqalize/avatar/avatars/professional-male-a";
-import { createAvatar as createProfessionalFemaleA } from "@voqalize/avatar/avatars/professional-female-a";
-import { createAvatar as createProfessionalMaleB } from "@voqalize/avatar/avatars/professional-male-b";
-import { createAvatar as createProfessionalFemaleB } from "@voqalize/avatar/avatars/professional-female-b";
+import { createAvatar as createArjun } from "@voqalize/avatar/avatars/arjun";
+import { createAvatar as createMeera } from "@voqalize/avatar/avatars/meera";
+import { createAvatar as createVikram } from "@voqalize/avatar/avatars/vikram";
+import { createAvatar as createIshita } from "@voqalize/avatar/avatars/ishita";
+import { createAvatar as createKabir } from "@voqalize/avatar/avatars/kabir";
+import { createAvatar as createNaina } from "@voqalize/avatar/avatars/naina";
 
 export const FACES = { peep, wren, myna } as const;
 export type SvgAvatarName = keyof typeof FACES;
-export type AvatarName = SvgAvatarName
-  | "interviewer-male" | "interviewer-female"
-  | "professional-male-a" | "professional-female-a"
-  | "professional-male-b" | "professional-female-b";
-export const AVATAR_NAMES: readonly AvatarName[] = [
-  "peep", "wren", "myna", "interviewer-male", "interviewer-female",
-  "professional-male-a", "professional-female-a",
-  "professional-male-b", "professional-female-b",
-];
+export const CANVAS_AVATAR_NAMES = ["arjun", "meera", "vikram", "ishita", "kabir", "naina"] as const;
+export type CanvasAvatarName = (typeof CANVAS_AVATAR_NAMES)[number];
+export type AvatarName = SvgAvatarName | CanvasAvatarName;
+export const AVATAR_NAMES: readonly AvatarName[] = ["peep", "wren", "myna", ...CANVAS_AVATAR_NAMES];
 
 /** The option surface, as one value, so a change to any of it is one remount. */
 export interface Look {
@@ -54,6 +49,15 @@ export const DEFAULT_LOOK: Look = {
 
 const isSvgAvatar = (name: AvatarName): name is SvgAvatarName => name in FACES;
 
+const CANVAS_CREATORS: Record<CanvasAvatarName, typeof createArjun> = {
+  arjun: createArjun,
+  meera: createMeera,
+  vikram: createVikram,
+  ishita: createIshita,
+  kabir: createKabir,
+  naina: createNaina,
+};
+
 export function createLookAvatar(
   look: Look,
   mount: HTMLElement,
@@ -66,12 +70,7 @@ export function createLookAvatar(
     gestureGain: look.gestureGain,
     motionGain: look.motionGain,
   };
-  if (look.avatar === "interviewer-male") return createInterviewerMale(gains);
-  if (look.avatar === "interviewer-female") return createInterviewerFemale(gains);
-  if (look.avatar === "professional-male-a") return createProfessionalMaleA(gains);
-  if (look.avatar === "professional-female-a") return createProfessionalFemaleA(gains);
-  if (look.avatar === "professional-male-b") return createProfessionalMaleB(gains);
-  if (look.avatar === "professional-female-b") return createProfessionalFemaleB(gains);
+  if (!isSvgAvatar(look.avatar)) return CANVAS_CREATORS[look.avatar](gains);
   return createSvgAvatar({
     ...gains,
     face: FACES[look.avatar] as Face,

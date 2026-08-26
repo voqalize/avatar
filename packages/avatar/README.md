@@ -6,9 +6,8 @@ they have been interrupted, when the user is talking versus idle, when a tool
 call has started and stopped.
 
 No video track, no per-minute avatar vendor, no second media path. Three SVG
-faces and two professional Canvas2D interviewer avatars ship with it — one
-identity per entry point, so you pay for the one you import — and you can
-author your own.
+faces and six professional Canvas2D avatars ship with it — one identity per
+entry point, so you pay for the one you import — and you can author your own.
 
 This is the browser half. The pipeline half is
 [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) on PyPI; they are
@@ -60,6 +59,12 @@ That is the integration, both halves of it. Neither takes an argument.
 `createAvatar` returns `{ destroy() }` and nothing else — the avatar is an
 embodiment of your `PipecatClient` and reacts to it, so there is no avatar to
 drive and no state to read back.
+
+**Works the same with or without `@pipecat-ai/voice-ui-kit`.** All `createAvatar`
+needs is the `PipecatClient` instance — however you built your call UI, if you
+have that instance you can mount an avatar next to it. voice-ui-kit's
+components (buttons, visualizers, transport controls) are chrome around the
+same client; they neither wrap nor gate it.
 
 ## What you get for free
 
@@ -124,27 +129,34 @@ createAvatar({ mount, client, face: myna });
 A name would need a table, and a table is a dynamic index no bundler can shake —
 three drawings in every consumer's bundle to render one.
 
-## Professional interviewer avatars
+## Professional avatars
 
 Six complete, code-authored avatars ship as their own `createAvatar` modules:
 
 ```js
-import { createAvatar } from '@voqalize/avatar/avatars/interviewer-male';
-// or: @voqalize/avatar/avatars/interviewer-female
-// or: @voqalize/avatar/avatars/professional-male-a
-//     @voqalize/avatar/avatars/professional-female-a
-//     @voqalize/avatar/avatars/professional-male-b
-//     @voqalize/avatar/avatars/professional-female-b
+import { createAvatar } from '@voqalize/avatar/avatars/arjun';
+// or: @voqalize/avatar/avatars/meera
+//     @voqalize/avatar/avatars/vikram
+//     @voqalize/avatar/avatars/ishita
+//     @voqalize/avatar/avatars/kabir
+//     @voqalize/avatar/avatars/naina
 
 const avatar = createAvatar({ mount, client: pipecatClient });
 ```
 
-Both depict Indian professionals in their late twenties, without caricature or
-regional costume cues. They are calibrated at call-tile size and preserve all
-six expression targets, continuous visemes, gaze, blink, head motion, and the
-frame-edge gesture hand. The male and female modules are complete identities,
-not face values: import one instead of the default module and do not pass a
-`face` option.
+`arjun`/`meera` are the original interviewer pair; `vikram`/`ishita` and
+`kabir`/`naina` are two further wardrobe/hair directions on the same rig. The
+entry points `interviewer-male`, `interviewer-female`, `professional-male-a`,
+`professional-female-a`, `professional-male-b` and `professional-female-b`
+still work — they are `@deprecated` aliases for the names above, kept so
+existing imports do not break, and should not be used in new code.
+
+All six depict Indian professionals in their late twenties, without caricature
+or regional costume cues. They are calibrated at call-tile size and preserve
+all six expression targets, continuous visemes, gaze, blink, head motion, and
+the frame-edge gesture hand. Each module is a complete identity, not a face
+value: import one instead of the default module and do not pass a `face`
+option.
 
 Their faces use low-contrast, landmark-driven nose planes rather than an
 outlined nose glyph. A few identity-specific freckles or a small mole add depth

@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createAvatar as createArjun } from '../client/arjun.js';
+import { createAvatar as createMeera } from '../client/meera.js';
+import { createAvatar as createVikram } from '../client/vikram.js';
+import { createAvatar as createIshita } from '../client/ishita.js';
+import { createAvatar as createKabir } from '../client/kabir.js';
+import { createAvatar as createNaina } from '../client/naina.js';
 import { createAvatar as createMale } from '../client/interviewer-male.js';
 import { createAvatar as createFemale } from '../client/interviewer-female.js';
 import { createAvatar as createProfessionalMaleA } from '../client/professional-male-a.js';
@@ -48,12 +54,12 @@ function fakeClient() {
 }
 
 describe.each([
-  ['male', createMale],
-  ['female', createFemale],
-  ['male', createProfessionalMaleA],
-  ['female', createProfessionalFemaleA],
-  ['male', createProfessionalMaleB],
-  ['female', createProfessionalFemaleB],
+  ['male', createArjun],
+  ['female', createMeera],
+  ['male', createVikram],
+  ['female', createIshita],
+  ['male', createKabir],
+  ['female', createNaina],
 ] as const)('professional %s package entry point', (identity, createAvatar) => {
   it('keeps the public contract and owns one accessible canvas', () => {
     const mount = document.createElement('div');
@@ -80,5 +86,18 @@ describe.each([
     const client = fakeClient().client;
     expect(() => createAvatar({ mount, client, mouthGain: 2.01 })).toThrow(/mouthGain/);
     expect(mount.children).toHaveLength(0);
+  });
+});
+
+describe('deprecated entry points are aliases, not copies', () => {
+  it.each([
+    ['interviewer-male', createMale, createArjun],
+    ['interviewer-female', createFemale, createMeera],
+    ['professional-male-a', createProfessionalMaleA, createVikram],
+    ['professional-female-a', createProfessionalFemaleA, createIshita],
+    ['professional-male-b', createProfessionalMaleB, createKabir],
+    ['professional-female-b', createProfessionalFemaleB, createNaina],
+  ] as const)('%s re-exports the renamed module unchanged', (_name, oldFn, newFn) => {
+    expect(oldFn).toBe(newFn);
   });
 });

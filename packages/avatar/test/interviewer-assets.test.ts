@@ -128,4 +128,18 @@ describe('professional canvas-avatar assets', () => {
       await expect(readFile(new URL(`../dist/${name}.js`, import.meta.url))).resolves.not.toHaveLength(0);
     }
   });
+
+  it('publishes the renamed identities alongside the deprecated aliases', async () => {
+    const manifestUrl = new URL('../package.json', import.meta.url);
+    const manifest = JSON.parse(await readFile(manifestUrl, 'utf8')) as {
+      exports: Record<string, { types?: string; default?: string }>;
+    };
+    const RENAMED = ['arjun', 'meera', 'vikram', 'ishita', 'kabir', 'naina'] as const;
+    for (const name of RENAMED) {
+      const entry = manifest.exports[`./avatars/${name}`];
+      expect(entry?.types).toBe(`./dist/${name}.d.ts`);
+      expect(entry?.default).toBe(`./dist/${name}.js`);
+      await expect(readFile(new URL(`../dist/${name}.js`, import.meta.url))).resolves.not.toHaveLength(0);
+    }
+  });
 });

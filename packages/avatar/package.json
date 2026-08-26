@@ -59,6 +59,30 @@
       "types": "./src/face-myna.d.ts",
       "default": "./src/face-myna.js"
     },
+    "./avatars/arjun": {
+      "types": "./dist/arjun.d.ts",
+      "default": "./dist/arjun.js"
+    },
+    "./avatars/meera": {
+      "types": "./dist/meera.d.ts",
+      "default": "./dist/meera.js"
+    },
+    "./avatars/vikram": {
+      "types": "./dist/vikram.d.ts",
+      "default": "./dist/vikram.js"
+    },
+    "./avatars/ishita": {
+      "types": "./dist/ishita.d.ts",
+      "default": "./dist/ishita.js"
+    },
+    "./avatars/kabir": {
+      "types": "./dist/kabir.d.ts",
+      "default": "./dist/kabir.js"
+    },
+    "./avatars/naina": {
+      "types": "./dist/naina.d.ts",
+      "default": "./dist/naina.js"
+    },
     "./avatars/interviewer-male": {
       "types": "./dist/interviewer-male.d.ts",
       "default": "./dist/interviewer-male.js"

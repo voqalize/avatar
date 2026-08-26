@@ -147,12 +147,17 @@ over the implementation's own options, so a caller passing yours still gets
 them checked. At runtime it is duck typing on the top-most layer — an avatar
 *is* the API.
 
-Ours happens to be SVG. Nothing about the contract is: a Rive rig, a WebGL
-head, a CSS-only mascot and a renderer with no mouth at all are all conforming
-avatars. **You add an avatar by publishing a module that exports
-`createAvatar`, and importing yours instead of ours.** No registry, no loader,
-no plug-in system, no asset resolution — a registry would make us own
-resolution, versioning and asset paths for code we have never seen.
+Ours ships two renderers behind that same seam: three hand-authored SVG faces
+(`peep`, `wren`, `myna`, imported as `{ face }` values) and six Canvas2D
+identities (`arjun`, `meera`, `vikram`, `ishita`, `kabir`, `naina`, each a
+complete `createAvatar` module at `@voqalize/avatar/avatars/<name>`) — proof
+the contract is renderer-agnostic rather than SVG with extra steps. Nothing
+about the contract is fixed to either: a Rive rig, a WebGL head, a CSS-only
+mascot and a renderer with no mouth at all are all conforming avatars. **You
+add an avatar by publishing a module that exports `createAvatar`, and
+importing yours instead of ours.** No registry, no loader, no plug-in system,
+no asset resolution — a registry would make us own resolution, versioning and
+asset paths for code we have never seen.
 
 There is deliberately **no renderer interface**, and that is a finding rather
 than an omission. The bundled rig's 30 pose channels read like the renderer
