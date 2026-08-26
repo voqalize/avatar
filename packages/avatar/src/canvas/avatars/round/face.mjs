@@ -118,7 +118,8 @@ const RAMP = 5;
 //             { refine }            optional brow and upper-lid finishing;
 //                                 construction-only, never a driver channel
 //      mouth: { philtrum }          optional quiet neutral-mouth plane
-//      form: { socket, sideShadeAlpha } optional static head-attached form;
+//      form: { socket, socketDepth, sideShadeAlpha, sideShadeWidth } optional
+//                                 static head-attached form;
 //                                 it adds no performance channel
 //      blush: number              how much of the cheek rouge survives — 1 is
 //                                 the generator's own, 0 turns it off
@@ -324,6 +325,7 @@ function makePalette(p) {
     lipLow: hsl(...p.lips.low),
     lipHi: [255, 240, 233, 0.24],
     lipBow: [255, 238, 231, 0.13],
+    lipCast: [...off(-17, 0.08, 0.34).slice(0, 3), 0.14],
     seam: [...lip(-4, 0.02, 0.26).slice(0, 3), 0.85],
     commiss: [...lip(-6, 0.03, 0.30).slice(0, 3), 0.30],
     philtrum: [...off(-17, 0.06, 0.46).slice(0, 3), 0.22],
@@ -1041,13 +1043,16 @@ export function buildDraws(c, K) {
   // keep their existing topology while the forehead-to-eye transition reads
   // as a continuous head instead of separate symbols placed on flat skin.
   if (K.p.form?.socket) {
+    const socketDepth = K.p.form.socketDepth ?? 1;
     for (const side of [-1, 1]) {
       const k = side < 0 ? 'L' : 'R';
       const bi = L['bwI' + k], bm = L['bwM' + k], bo = L['bwO' + k];
       const [ex, ey] = L['eyeC' + k];
       push('socket' + k, HEAD, spline([
-        [bi[0], bi[1] + 8], [bm[0], bm[1] + 10], [bo[0], bo[1] + 12],
-        [bo[0], bo[1] + 25], [ex, ey - 23], [bi[0], bi[1] + 21],
+        [bi[0], bi[1] + 7], [bm[0], bm[1] + 9], [bo[0], bo[1] + 11],
+        [bo[0], bo[1] + 11 + 14 * socketDepth],
+        [ex, ey - 29 + 6 * socketDepth],
+        [bi[0], bi[1] + 9 + 13 * socketDepth],
       ], 0.82), solid(PALETTE.socket));
     }
   }
@@ -1090,7 +1095,8 @@ export function buildDraws(c, K) {
   // Always at least a few px wider than the outer inset, or the two edges
   // cross over and the band ties itself in a knot at the ends.
   const wAt = (t) => tipIn(t) + 4
-    + SHADOW_W * Math.pow(Math.sin(Math.PI * t), 0.75) * (1 - 0.34 * t);
+    + SHADOW_W * (K.p.form?.sideShadeWidth ?? 1)
+      * Math.pow(Math.sin(Math.PI * t), 0.75) * (1 - 0.34 * t);
   push('faceShade', HEAD, band(
     contour.map((q, i) => inward(q, fc, tipIn(i / nb))),
     contour.map((q, i) => inward(q, fc, wAt(i / nb))),

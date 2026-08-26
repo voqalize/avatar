@@ -483,8 +483,9 @@ export function mouthMetrics(P, F) {
 //           `aper` the inner lip line round the aperture, alpha-ramped with
 //                  `open` because a stroke width is not a pose channel
 //           `sep`  the tooth separators, drawn as strokes instead of quads
-//   marks { bow, gum, lipHiFade, lipHiAlpha, bowAlpha, toothSep, toothSepA,
-//           toothSh, seam, seamAlpha, commiss, commissAlpha }
+//   marks { bow, gum, lipHiFade, lipHiAlpha, bowAlpha, lipCastAlpha,
+//           toothSep, toothSepA, toothSh, seam, seamAlpha, commiss,
+//           commissAlpha }
 // ---------------------------------------------------------------------------
 
 /** Which of the mouth's marks exist, and at what strength. */
@@ -494,6 +495,7 @@ export const MOUTH_MARKS = {
   lipHiFade: 0,               // how much `round` fades the lower-lip highlight
   lipHiAlpha: 1,              // material strength; geometry and timing stay fixed
   bowAlpha: 1,
+  lipCastAlpha: 0,            // a soft lower-lip shadow, disabled for legacy rigs
   toothSep: [-0.36, 0.05, 0.42],  // separator stations, in units of the row's half-width
   toothSepA: 0.9,             // …and their share of the row's alpha
   toothSh: { depth: 5, a: 0.55, blend: 'multiply' },   // the upper lip's cast shadow
@@ -511,7 +513,7 @@ export function makeMouth({ P, PALETTE, solid, group = 'head', marks = {}, pen =
   const INK = pen ? solid(pen.paint) : null;
 
   // PALETTE keys read: mouthIn, teeth, toothSep, toothSh, tongue, lipLow,
-  //                    lipHi, lipUp, lipBow, seam, commiss, philtrum.
+  //                    lipHi, lipUp, lipBow, lipCast, seam, commiss, philtrum.
   function draws(c, L, env = {}) {
     const out = [];
     const push = drawPusher(out);
@@ -529,6 +531,18 @@ export function makeMouth({ P, PALETTE, solid, group = 'head', marks = {}, pen =
     // ---- the tongue, behind the teeth and behind the lower lip -------------
     push('tongue', HEAD, spline(circle(mcx, F.tgTop + F.tgRy, F.tgRx, 8, F.tgRy / F.tgRx), 1),
       solid(PALETTE.tongue), clamp((F.tongue - MAP.TONGUE_A0) * MAP.TONGUE_AK, 0, 1));
+
+    // A broad, quiet cast shadow makes the lower lip belong to the muzzle
+    // rather than float as a coloured symbol. It follows the live lower-lip
+    // curve, so speech keeps the same topology, closure and timing.
+    if (M.lipCastAlpha > 0) {
+      const castTop = F.lowerOuter.slice(1, 6).map(([x, y]) => [x, y + 3]);
+      push('lipCast', HEAD, band(
+        castTop,
+        bulge(castTop, 8, { floor: 2, power: 0.8, pin: true }),
+        0.86,
+      ), solid(PALETTE.lipCast), M.lipCastAlpha);
+    }
 
     // ---- the lower lip -----------------------------------------------------
     // Fuller than the upper, and it rides on the aperture's lower arc, so it
