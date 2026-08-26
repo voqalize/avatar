@@ -55,14 +55,21 @@ describe('professional canvas-avatar assets', () => {
     const male = await rig('interviewer-male');
     const female = await rig('interviewer-female');
     expect(male.meta.live?.persona).toMatchObject({
-      sex: 'm', eye: { aperture: 0.92, refine: { brow: { head: 0.78 } } },
-      mouth: { philtrum: { a: 0.56, w: 14 } }, nose: { style: 'mature', shadow: 0.86 },
-      skinDetail: { freckles: expect.any(Array) },
+      sex: 'm',
+      geo: { headW: 0.07, jawWidth: 0.64, neckWidth: 0.6, eyeSize: -0.14 },
+      eye: { aperture: 0.89, refine: { brow: { head: 0.82 } } },
+      mouth: { philtrum: { a: 0.46, w: 13 } },
+      nose: { style: 'mature', shadow: 0.75 },
+      skinDetail: { freckles: [] },
     });
     expect(female.meta.live?.persona).toMatchObject({
-      sex: 'f', eye: { aperture: 0.9, refine: { brow: { head: 0.9 } } },
-      mouth: { philtrum: { a: 0.48, w: 12 } }, blush: 0.3, nose: { style: 'mature', shadow: 0.74 },
-      skinDetail: { freckles: expect.any(Array), mole: expect.any(Object) },
+      sex: 'f',
+      geo: { headW: -0.04, jawWidth: 0.1, neckWidth: -0.3, eyeSize: -0.08 },
+      eye: { aperture: 0.88, refine: { brow: { head: 0.91 } } },
+      mouth: { philtrum: { a: 0.42, w: 12 } },
+      blush: 0.08,
+      nose: { style: 'mature', shadow: 0.68 },
+      skinDetail: { freckles: [], mole: { r: 3 } },
     });
   });
 
