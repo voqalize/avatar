@@ -463,9 +463,28 @@ async def test_concurrent_sessions_emit_what_one_session_at_a_time_did(
 
     for ctx in contexts:
         mine, baseline = interleaved[ctx], serial[ctx]
-        assert [(t, final) for t, _, final in mine] == [
-            (t, final) for t, _, final in baseline
-        ], f"session {ctx} spliced differently under load"
+        # Splice *points* are allowed to drift, splice *count and order* are
+        # not: with DEFAULT_WORKERS=1, four "concurrent" sessions actually
+        # queue onto one executor thread, so a decode that overlapped another
+        # session's under real parallelism now waits behind it — the accurate
+        # leg arrives later in wall-clock time and the predicted-cue window it
+        # closes moves with it. That is the single worker doing its job, not a
+        # cross-wire; a cross-wire changes *which* cues arrive, which the
+        # agreement score below still catches. SPLICE_TOLERANCE_MS is
+        # generous because CI's shared runner is slower and noisier than a
+        # laptop, and this test compares against a same-run serial baseline
+        # rather than a fixed constant precisely so it isn't tuned to one
+        # machine.
+        SPLICE_TOLERANCE_MS = 300
+        assert len(mine) == len(baseline), (
+            f"session {ctx} emitted {len(mine)} splices under load, {len(baseline)} serially"
+        )
+        for (t, _, final), (baseline_t, _, baseline_final) in zip(mine, baseline, strict=True):
+            assert final == baseline_final, f"session {ctx} spliced differently under load"
+            assert abs(t - baseline_t) <= SPLICE_TOLERANCE_MS, (
+                f"session {ctx} spliced at {t} ms under load vs {baseline_t} ms serially "
+                f"(tolerance {SPLICE_TOLERANCE_MS} ms)"
+            )
 
         for (start, cues, _), (_, expected, _) in zip(mine, baseline, strict=True):
             span = max(
