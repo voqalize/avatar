@@ -3,11 +3,11 @@
  *
  * The third line-art character, authored against a user-supplied reference
  * asset (a raster illustration): a young contemporary Indian woman — wavy
- * shoulder-length dark hair with paper highlight slashes, thin geometric
- * glasses, orange hoop earrings, a white crew tee under an open orange
- * overshirt. Hand-authored geometry with the reference on screen; nothing is
- * traced. Same idiom as peep and wren — no strokes anywhere, every mark a
- * filled taper — and the same 30-channel contract underneath.
+ * shoulder-length dark hair with paper highlight slashes, orange hoop
+ * earrings, a white crew tee under an open overshirt. Hand-authored geometry
+ * with the reference on screen; nothing is traced. Same idiom as peep and
+ * wren — no strokes anywhere, every mark a filled taper — and the same
+ * 30-channel contract underneath.
  *
  * What is deliberately different from the siblings, and why:
  * - THE HAIR IS A HORSESHOE, NOT A CLOUD. One closed loop: wavy outer
@@ -20,10 +20,9 @@
  *   head-layer underlay (same loop at head parallax) backfills the ±3-unit
  *   slide between the two layers under yaw — same insurance as peep's, doing
  *   one extra job here.
- * - THE ACCENT IS A GARMENT, not trim (peep) or frames (wren): the overshirt
- *   is two accent-filled panels over a paper tee. Background leaks behind an
- *   orange shirt are loud, which is why the tee runs edge-to-edge under both
- *   panels and everything overshoots the frame.
+ * - THE OVERSHIRT IS TWO PAPER PANELS over a paper tee, distinguished only by
+ *   ink outline — no fill colour on the garment. The tee still runs
+ *   edge-to-edge under both panels and everything overshoots the frame.
  * - THE MOUTH HAS LIPS. The proven aperture-contour model, but the ring's
  *   width profile carries a cupid's-bow dip at the top centre and a fuller
  *   lower lip. (An under-lip shadow mark existed through v7; it was deleted —
@@ -49,8 +48,8 @@ import { viewBoxForHead } from './camera.js';
 export const THEME = {
   ink: '#191919',
   paper: '#ffffff',
-  // The overshirt orange — one key, hoops use it too. ~9% duskier than the
-  // asset's sample: at tile size the sampled value out-shouted the face.
+  // The hoop earrings' orange. ~9% duskier than the asset's sample: at tile
+  // size the sampled value out-shouted the face.
   accent: '#dc8432',
   mouthIn: '#191919',
   teeth: '#ffffff',
@@ -75,27 +74,17 @@ const EYE = { y: 386, dx: 56, rx: 15, ry: 16 };
 const MOUTH = { cx: CX, cy: 492 };
 const MOUTH_APERTURE = 36;
 
-// Lenses: measured off the reference's fully visible left lens, converted by
-// face-height fraction (lens height ≈ 0.22 of hairline→chin; w:h ≈ 1.3;
-// corner radius ≈ 0.38 of lens height — a soft rect verging on superellipse).
-// Centred ON the eye line: the reference pupil sits at lens mid-height, and
-// its "just under the brows" top gap is 0.21 of lens height, which lands the
-// same way here. Lens centres sit 4 units outboard of the eyes so the bridge
-// keeps the reference's narrow 18-unit gap without moving the pupils.
-const LENS = { dx: 60, hw: 51, hh: 40, r: 30 };
-
-// Brows: bold, long and clearly arched, with real air between them and the
-// frames — the reference's brows are its strongest single mark. The rest
-// shape is a gentle taper-arc: v7's outer third dropped 17 units in 15 and
-// over a resting smile the kink composited into a smirk that curdled across
-// a long session. The kink is still available — as a browAngle POSE.
+// Brows: bold, long and clearly arched, with real air between them — the
+// reference's brows are its strongest single mark. The rest shape is a
+// gentle taper-arc: v7's outer third dropped 17 units in 15 and over a
+// resting smile the kink composited into a smirk that curdled across a long
+// session. The kink is still available — as a browAngle POSE.
 const BROW_L = [[CX - 22, 340], [CX - 40, 327], [CX - 60, 320], [CX - 76, 319],
                 [CX - 88, 322], [CX - 97, 327], [CX - 103, 332]];
 // Near-mirrored: the right arch rides 1 unit higher (personality, small
 // enough to survive the mirror-flip levelness check, which is judged on the
-// glasses and eye lines). Anything bigger read as a baked-in head tilt —
-// the mixer's headRoll adds on top of the art and nothing can subtract a
-// drawn lean.
+// eye lines). Anything bigger read as a baked-in head tilt — the mixer's
+// headRoll adds on top of the art and nothing can subtract a drawn lean.
 const BROW_R = [[CX + 22, 340], [CX + 40, 326], [CX + 60, 319], [CX + 76, 318],
                 [CX + 88, 321], [CX + 97, 327], [CX + 103, 332]];
 
@@ -228,44 +217,8 @@ function circlePts(cx, cy, r) {
 const HOOP_L = taperRing(circlePts(236, 488, 12), [4.5, 5, 4.5]);
 const HOOP_R = taperRing(circlePts(524, 488, 12), [4.5, 5, 4.5]);
 
-// ---------------------------------------------------------------------------
-// Static art: glasses — thin geometric rounded rectangles in ink.
-//
-// Wider than tall, corners genuinely rounded, thin ring. Temples run outward
-// and vanish under the hair's inner edge. Drawn after the eyes so the frame
-// passes over the bean at gaze extremes rather than under it.
-// ---------------------------------------------------------------------------
-function roundRectPts(cx, cy, hw, hh, r) {
-  const k = r * K;
-  const L = cx - hw, R = cx + hw, T = cy - hh, B = cy + hh;
-  return [
-    [R, cy],
-    [R, cy + (hh - r) / 2], [R, B - r - k * 0.2], [R, B - r],
-    [R, B - r + k], [R - r + k, B], [R - r, B],
-    [R - r - (hw - r) / 2, B], [L + r + (hw - r) / 2, B], [L + r, B],
-    [L + r - k, B], [L, B - r + k], [L, B - r],
-    [L, B - r - k * 0.2], [L, cy + (hh - r) / 2], [L, cy],
-    [L, cy - (hh - r) / 2], [L, T + r + k * 0.2], [L, T + r],
-    [L, T + r - k], [L + r - k, T], [L + r, T],
-    [L + r + (hw - r) / 2, T], [R - r - (hw - r) / 2, T], [R - r, T],
-    [R - r + k, T], [R, T + r - k], [R, T + r],
-    [R, T + r + k * 0.2], [R, cy - (hh - r) / 2], [R, cy],
-  ];
-}
-const LENS_L = roundRectPts(CX - LENS.dx, EYE.y, LENS.hw, LENS.hh, LENS.r);
-const LENS_R = roundRectPts(CX + LENS.dx, EYE.y, LENS.hw, LENS.hh, LENS.r);
-const RING_W = [3, 3.4, 3, 3.4, 3];
-// Bridge at the upper third and temples off the top outer corners, sweeping
-// up toward the ears — both as drawn in the reference.
-const BRIDGE = [[CX - 9, 371], [CX - 3, 366], [CX + 3, 366], [CX + 9, 371]];
-// Attach on the top-outer corner arc (the rounded corner pulls the rim in to
-// ~x±108 at this height), sweeping up to vanish under the hair's inner edge.
-const TEMPLE_L = [[CX - 108, 364], [CX - 124, 357], [CX - 141, 352], [CX - 158, 350]];
-const TEMPLE_R = [[CX + 108, 364], [CX + 124, 357], [CX + 141, 352], [CX + 158, 350]];
-
-/** The nose: a tiny soft hook, tip only — the glasses own the bridge. It sits
- *  lower than v6 (the reference's nose mark tops out at ~55% of eye→mouth,
- *  not 39%), which is also what gives the taller lenses their clearance. */
+/** The nose: a tiny soft hook, tip only. It sits lower than v6 (the
+ *  reference's nose mark tops out at ~55% of eye→mouth, not 39%). */
 const NOSE_D = taper(
   [[CX + 3, 439], [CX - 2, 448], [CX - 6, 456], [CX - 4, 462],
    [CX + 1, 465], [CX + 7, 463], [CX + 10, 458]],
@@ -273,12 +226,13 @@ const NOSE_D = taper(
 );
 
 // ---------------------------------------------------------------------------
-// Static art: torso — white crew tee under an open orange overshirt.
+// Static art: torso — a white crew tee under an open overshirt, both paper,
+// distinguished only by ink outline.
 //
-// Three fills in order: the tee (paper, edge-to-edge under everything), then
-// the two overshirt panels (accent) whose inner edges make the open V. Both
-// panels keep the house two-run shoulder: outer arm edge, hard acromion turn,
-// near-horizontal trapezius shelf. Everything overshoots the frame.
+// The tee is edge-to-edge under everything; the two overshirt panels sit on
+// top, their inner edges making the open V. Both panels keep the house
+// two-run shoulder: outer arm edge, hard acromion turn, near-horizontal
+// trapezius shelf. Everything overshoots the frame.
 // ---------------------------------------------------------------------------
 const TEE = [
   [288, 960],
@@ -546,12 +500,9 @@ function lashPath(cx, cy, lid, dir) {
 // - Raises land at 20 (v7: 16) — the minimal-face lesson says small deltas
 //   vanish, and at a 130 px tile the emotion poses collapsed below this.
 // - Descent is capped at 8.5 and weighted toward the inner half (corrugator
-//   pull). The cap is the frame-clearance envelope: the arch points that sit
-//   over the lens's top bar (y≈319–322 at rest) must keep ≥3.5 units of air
-//   above the bar's ink at browRaise −1, or the brow merges with the frame
-//   and brows-down — concentration — silently dies. The inner weighting also
-//   keeps the outer tail off the frame's corner arc. What travel can't carry,
-//   thickness does: a knitted brow bulks up 30% at full descent.
+//   pull), so brows-down reads as concentration rather than a merged smear.
+//   What travel can't carry, thickness does: a knitted brow bulks up 30% at
+//   full descent.
 function browPath(pts, raise, angle, inner) {
   const n = pts.length - 1;
   const up = Math.max(0, raise);
@@ -595,20 +546,20 @@ function markup(id, t) {
   <g id="${id}-body">
     ${paper(region(TEE))}
     ${ink(taper(TEE_NECK, [3, 5.5, 3]))}
-    <path d="${region(PANEL_L)}" fill="${t.accent}"/>
-    <path d="${region(PANEL_R)}" fill="${t.accent}"/>
+    <path d="${region(PANEL_L)}" fill="${t.paper}"/>
+    <path d="${region(PANEL_R)}" fill="${t.paper}"/>
     ${ink(taper(PANEL_L_OUT, PANEL_W))}
     ${ink(taper(PANEL_R_OUT, PANEL_W))}
     ${ink(taper(PANEL_L_IN, [6, 7, 5]))}
     ${ink(taper(PANEL_R_IN, [6, 7, 5]))}
-    <path d="${region(COLLAR_L)}" fill="${t.accent}"/>
-    <path d="${region(COLLAR_R)}" fill="${t.accent}"/>
+    <path d="${region(COLLAR_L)}" fill="${t.paper}"/>
+    <path d="${region(COLLAR_R)}" fill="${t.paper}"/>
     ${ink(taperRing(COLLAR_L, [3, 4.5, 3], 6))}
     ${ink(taperRing(COLLAR_R, [3, 4.5, 3], 6))}
     ${CREASES.map((c) => ink(taper(c.p, c.w))).join('\n    ')}
   </g>
 
-  <!-- features: brows, eyes+lashes, nose, glasses, mouth -->
+  <!-- features: brows, eyes+lashes, nose, mouth -->
   <g id="${id}-features">
     <path id="${id}-browL" fill="${t.ink}"/>
     <path id="${id}-browR" fill="${t.ink}"/>
@@ -619,11 +570,6 @@ function markup(id, t) {
       <path id="${id}-lashR" fill="${t.ink}"/>
     </g>
     <path d="${NOSE_D}" fill="${t.ink}"/>
-    ${ink(taperRing(LENS_L, RING_W, 6))}
-    ${ink(taperRing(LENS_R, RING_W, 6))}
-    ${ink(taper(BRIDGE, [3, 4, 3]))}
-    ${ink(taper(TEMPLE_L, [3, 3.5, 4]))}
-    ${ink(taper(TEMPLE_R, [3, 3.5, 4]))}
     <g id="${id}-mouth">
       <path id="${id}-mouthIn" fill="${t.mouthIn}"/>
       <g clip-path="url(#${id}-clipMouth)">
@@ -675,10 +621,6 @@ export function createFace(mount, theme = {}) {
   function apply(p) {
     poseTransforms(p, set, el, POSE);
 
-    // Re-derived for the big lenses: outboard the bean edge at full travel is
-    // still ~24 units clear of the rim (56+14+15 vs the 109-unit interior
-    // edge), inboard ~16; vertically the 38-unit half-interior leaves ~15.
-    // Past these the pupil starts reading pressed against the frame.
     set(el.eyes, 'transform', `translate(${f(p.pupilX * 14)} ${f(p.pupilY * 10)})`);
 
     const lidFollow = Math.max(0, p.pupilY) * 0.22;
