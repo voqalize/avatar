@@ -56,21 +56,47 @@ export const THEME = {
   tongue: '#8d7f79',
 };
 
+// --- reshape ------------------------------------------------------------
+// Same move as peep, for the same reason: built next to the Canvas2D
+// professional identities, this head read tall and narrow — 285 units wide in
+// a 907-unit 4:3 frame — where the canvas avatars were calibrated at call-tile
+// size from the start. One static, non-animated transform on the head cluster
+// only (skull, hair, features — never neck or body), pivoted at CHIN_Y so the
+// chin's own silhouette point does not move and the jaw-to-collar join needs
+// no rework. Every landmark constant below still describes the original art
+// space. See face-peep.js for the full derivation, including why "broader"
+// here means a tighter 4:3 crop rather than a wider aspect.
+const CX = 380;
+const CHIN_Y = 572;
+const RESHAPE_SX = 1.10;
+const RESHAPE_SY = 0.88;
+const RESHAPE = `translate(${CX} ${CHIN_Y}) scale(${RESHAPE_SX} ${RESHAPE_SY}) translate(${-CX} ${-CHIN_Y})`;
+
 // The outer wave of hair, rather than HEAD_TOP under it, is the crown a viewer
 // measures. The chin is the lowest point of the resting jaw silhouette.
-const FRAME = { centerX: 380, crownY: 96, chinY: 572 };
+// crownY is the reshaped crown: CHIN_Y + (96 − CHIN_Y) × RESHAPE_SY, worked out
+// by hand because the camera reads landmarks, not the transform above it.
+const FRAME = { centerX: CX, crownY: 153, chinY: CHIN_Y };
 const VB = viewBoxForHead(FRAME);
 
 export const META = {
   viewBox: { x: VB.x, y: VB.y, w: VB.w, h: VB.h },
-  mouthCrop: { x: 298, y: 436, w: 164, h: 100 },
+  // The original crop (298, 436, 164, 100) with its corners carried through
+  // RESHAPE — a camera change does not move a path, but the reshape is
+  // geometry rather than camera, so the inspection crop has to follow it.
+  mouthCrop: { x: 290, y: 452, w: 180, h: 88 },
 };
 
 // --- landmarks --------------------------------------------------------------
-const CX = FRAME.centerX;
+// These are the NATIVE art space and RESHAPE never enters them: it is a
+// wrapper on the rendered group, so `apply()` and every number below still
+// mean what they meant before it existed.
 const HEAD_TOP = 150;
 
-const EYE = { y: 386, dx: 56, rx: 15, ry: 16 };
+// rx widened from 15 — the bean was very nearly round, and cutting an almond
+// aperture from it without an absurd lid line needed the same headroom peep's
+// eye needed. See the eyes section.
+const EYE = { y: 386, dx: 56, rx: 17, ry: 16 };
 const MOUTH = { cx: CX, cy: 492 };
 const MOUTH_APERTURE = 36;
 
@@ -110,7 +136,11 @@ const HEAD = [
 ];
 // Lighter than wren's ring by ~20% — the reference line is confident but not
 // woodcut. Heavy low on the jaw, nothing at the crown (under hair).
-const HEAD_W = [3, 6, 9.5, 12, 13, 11.5, 9, 6, 4, 3];
+//
+// Scaled to ~0.65 of the original profile ([3, 6, 9.5, 12, 13, 11.5, 9, 6, 4,
+// 3]) when RESHAPE landed: the same taper shape, but a line rather than a rope
+// once the head is drawn broader and the frame tighter around it.
+const HEAD_W = [2, 4, 6, 8, 8.5, 7.5, 6, 4, 2.5, 2];
 
 // Neck: the shared truncated-cone construction, slim; fused into the head
 // layer and overshot past every neckline for the standard parallax reasons.
@@ -433,8 +463,12 @@ function teethPath(m, amt, lower) {
   );
 }
 
-// Eyes: the bean model, near-round — the reference's pupils are big and dark
-// and do most of the face's expressive work with the lashes.
+// Eyes: the lid-line-plus-iris model, ported from face-peep.js. It reads
+// better against the "big and dark pupils" brief than the old whole-bean
+// translation did, not worse — the reference's pupils get a real iris that
+// carries the gaze while the lash and lid line hold still. See face-peep.js
+// for the two wrong passes (paper-on-ink, then a too-small pupil that read as
+// a startled target) that are not recoverable from the numbers alone.
 
 /** Top-lid height for a given lid value — shared by bean and lash so they can
  *  never disagree. The mapping is a 0.6-power, not linear: the mixer's rest
@@ -448,25 +482,69 @@ function lidTopY(cy, lid) {
   return lerp(cy - EYE.ry * 1.05, cy - EYE.ry * 0.42, Math.pow(clamp(lid), 0.6));
 }
 
-function eyePath(cx, cy, lid, squint, tiltDeg) {
-  const L = clamp(lid);
-  const topY = lidTopY(cy, lid);
-  // Squint gain .95 (was .7): the smile-squint is most of what separates warm
-  // from neutral at tile size.
-  const botY = lerp(cy + EYE.ry * 1.05, cy - EYE.ry * 0.05, L) - clamp(squint) * EYE.ry * 0.95;
-  const rx = EYE.rx;
+// A cubic whose two controls share a y reaches only 3/4 of the way to it.
+// Everything below works in DRAWN extents and divides that back out, so an
+// inset of n units is n units on screen — see face-peep.js for why the inset
+// below cannot be proportional instead.
+const BULGE = 0.75;
+
+/** Two cubics between (cx±rx, cyMid), bulging to yTop and yBot; tilt about cy. */
+function lensPath(cx, cy, g, tiltDeg) {
+  if (!g) return '';
   const a = (tiltDeg * Math.PI) / 180;
   const ca = Math.cos(a), sa = Math.sin(a);
   const R = (x, y) => {
     const dx = x - cx, dy = y - cy;
     return `${f(cx + dx * ca - dy * sa)} ${f(cy + dx * sa + dy * ca)}`;
   };
+  const ctlTop = g.cyMid + (g.yTop - g.cyMid) / BULGE;
+  const ctlBot = g.cyMid + (g.yBot - g.cyMid) / BULGE;
   return (
-    `M${R(cx - rx, cy)}` +
-    `C${R(cx - rx * 0.5, topY)} ${R(cx + rx * 0.5, topY)} ${R(cx + rx, cy)}` +
-    `C${R(cx + rx * 0.5, botY)} ${R(cx - rx * 0.5, botY)} ${R(cx - rx, cy)}Z`
+    `M${R(cx - g.rx, g.cyMid)}` +
+    `C${R(cx - g.rx * 0.5, ctlTop)} ${R(cx + g.rx * 0.5, ctlTop)} ${R(cx + g.rx, g.cyMid)}` +
+    `C${R(cx + g.rx * 0.5, ctlBot)} ${R(cx - g.rx * 0.5, ctlBot)} ${R(cx - g.rx, g.cyMid)}Z`
   );
 }
+
+/** The lid silhouette, in drawn extents. Same power-curve lid mapping and
+ *  squint gain (.95: the smile-squint is most of what separates warm from
+ *  neutral at tile size) as before the eye was opened out. */
+function eyeGeom(cy, lid, squint) {
+  const L = clamp(lid);
+  const ctlTop = lidTopY(cy, lid);
+  const ctlBot = lerp(cy + EYE.ry * 1.05, cy - EYE.ry * 0.05, L) - clamp(squint) * EYE.ry * 0.95;
+  return {
+    cyMid: cy,
+    rx: EYE.rx,
+    yTop: cy + BULGE * (ctlTop - cy),
+    yBot: cy + BULGE * (ctlBot - cy),
+  };
+}
+
+// The lid line, as constant distances — a proportional inset inverts the
+// moment a closing lid carries the bean's lower edge above the eye centre and
+// leaks paper out through a shut eye.
+const LASH_X = 3.0;
+const LASH_TOP = 5.5;
+const LASH_BOT = 4.5;
+
+/** The paper almond inside the lid line, or null once the lid has shut on it. */
+function apertureGeom(g) {
+  const yTop = g.yTop + LASH_TOP;
+  const yBot = g.yBot - LASH_BOT;
+  const rx = g.rx - LASH_X;
+  if (yBot - yTop < 0.5 || rx < 0.5) return null;
+  return { cyMid: (yTop + yBot) / 2, rx, yTop, yBot };
+}
+
+// Sized to fill the resting aperture's height rather than float inside it —
+// this is what "big and dark pupils" means now that the eye has a real iris
+// instead of a translating bean.
+const IRIS_R = 8.0;
+
+// Travel, native units: one corner's worth of paper. At either extreme one
+// sliver closes and the other doubles, which is the whole gaze signal.
+const IRIS_TRAVEL = { x: 4.5, y: 2.2 };
 
 /**
  * The upper lash line: lies ON the bean's top edge and ends in a small
@@ -528,18 +606,29 @@ function markup(id, t) {
   return `
 <svg id="${id}" viewBox="${VB.x} ${VB.y} ${VB.w} ${VB.h}" xmlns="http://www.w3.org/2000/svg"
      preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%">
-  <defs><clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath></defs>
+  <defs>
+    <clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath>
+    <clipPath id="${id}-clipEyeL"><path id="${id}-clipEyeLP" d=""/></clipPath>
+    <clipPath id="${id}-clipEyeR"><path id="${id}-clipEyeRP" d=""/></clipPath>
+  </defs>
 
   <!-- head and neck; hair underlay at head parallax is the anti-sliver
-       insurance AND the backfill behind the hair-layer ears (see header). -->
+       insurance AND the backfill behind the hair-layer ears (see header).
+
+       RESHAPE wraps the art INSIDE the parallax group, never the group itself:
+       poseTransforms writes the group's own transform every frame and would
+       overwrite it. Same for features and hair below. The neck stays outside
+       it — the reshape is pivoted on the chin so that join still lands. -->
   <g id="${id}-head">
     <path d="${NECK_FILL}" fill="${t.paper}"/>
     ${ink(taper(NECK_L, [3, 7, 5]))}
     ${ink(taper(NECK_R, [3, 7, 5]))}
-    <path d="${HEAD_FILL}" fill="${t.paper}"/>
-    ${ink(HEAD_RING)}
-    ${ink(taper(JAW_UNDER, [2, 5, 2]))}
-    <path d="${HAIR_D}" fill="${t.ink}"/>
+    <g transform="${RESHAPE}">
+      <path d="${HEAD_FILL}" fill="${t.paper}"/>
+      ${ink(HEAD_RING)}
+      ${ink(taper(JAW_UNDER, [2, 5, 2]))}
+      <path d="${HAIR_D}" fill="${t.ink}"/>
+    </g>
   </g>
 
   <!-- tee, then the two overshirt panels and their tailoring -->
@@ -561,11 +650,16 @@ function markup(id, t) {
 
   <!-- features: brows, eyes+lashes, nose, mouth -->
   <g id="${id}-features">
+    <g transform="${RESHAPE}">
     <path id="${id}-browL" fill="${t.ink}"/>
     <path id="${id}-browR" fill="${t.ink}"/>
     <g id="${id}-eyes">
       <path id="${id}-eyeL" fill="${t.ink}"/>
       <path id="${id}-eyeR" fill="${t.ink}"/>
+      <path id="${id}-apertureL" fill="${t.paper}"/>
+      <path id="${id}-apertureR" fill="${t.paper}"/>
+      <g clip-path="url(#${id}-clipEyeL)"><circle id="${id}-irisL" fill="${t.ink}"/></g>
+      <g clip-path="url(#${id}-clipEyeR)"><circle id="${id}-irisR" fill="${t.ink}"/></g>
       <path id="${id}-lashL" fill="${t.ink}"/>
       <path id="${id}-lashR" fill="${t.ink}"/>
     </g>
@@ -579,10 +673,12 @@ function markup(id, t) {
       </g>
       <path id="${id}-lips" fill="${t.ink}"/>
     </g>
+    </g>
   </g>
 
   <!-- hair: the mass, its highlights, then ears and hoops on top -->
   <g id="${id}-hair">
+    <g transform="${RESHAPE}">
     <path d="${HAIR_D}" fill="${t.ink}"/>
     ${SHINE.map((s) => paper(taper(s.p, s.w, 6))).join('\n    ')}
     <path d="${region(EAR_L)}" fill="${t.paper}"/>
@@ -593,6 +689,7 @@ function markup(id, t) {
     ${ink(taper(EAR_R_IN, [2, 4, 2]))}
     <path d="${HOOP_L}" fill="${t.accent}"/>
     <path d="${HOOP_R}" fill="${t.accent}"/>
+    </g>
   </g>
 </svg>`;
 }
@@ -611,7 +708,10 @@ export function createFace(mount, theme = {}) {
   const el = {
     head: $('head'), body: $('body'), features: $('features'), hair: $('hair'),
     browL: $('browL'), browR: $('browR'),
-    eyes: $('eyes'), eyeL: $('eyeL'), eyeR: $('eyeR'),
+    eyeL: $('eyeL'), eyeR: $('eyeR'),
+    clipEyeL: $('clipEyeLP'), clipEyeR: $('clipEyeRP'),
+    apertureL: $('apertureL'), apertureR: $('apertureR'),
+    irisL: $('irisL'), irisR: $('irisR'),
     lashL: $('lashL'), lashR: $('lashR'),
     mouthIn: $('mouthIn'), lips: $('lips'),
     clipMouth: $('clipMouthP'),
@@ -621,15 +721,35 @@ export function createFace(mount, theme = {}) {
   function apply(p) {
     poseTransforms(p, set, el, POSE);
 
-    set(el.eyes, 'transform', `translate(${f(p.pupilX * 14)} ${f(p.pupilY * 10)})`);
-
+    // The lid line holds still and the iris carries the gaze — see the eyes
+    // section. The lid follows vertical gaze downward only: looking up
+    // genuinely does widen the aperture, so there is nothing to add there.
     const lidFollow = Math.max(0, p.pupilY) * 0.22;
     const lidL = p.lidL + lidFollow;
     const lidR = p.lidR + lidFollow;
     // Both beans exactly on EYE.y: a ±1 stagger here read as head tilt at
     // rest, and rest must be level (see BROW_R).
-    set(el.eyeL, 'd', eyePath(CX - EYE.dx, EYE.y, lidL, p.squintL, -3));
-    set(el.eyeR, 'd', eyePath(CX + EYE.dx, EYE.y, lidR, p.squintR, 3));
+    const eye = (cx, cy, lid, squint, tilt, aperture, iris, clip) => {
+      const g = eyeGeom(cy, lid, squint);
+      const ap = apertureGeom(g);
+      const apD = lensPath(cx, cy, ap, tilt);
+      set(el[aperture], 'd', apD);
+      // The iris is clipped to the APERTURE, not to the lid line, so it is
+      // cropped by the same edge the paper is — a shut lid, which has no
+      // aperture at all, takes the iris with it and needs no opacity logic.
+      set(el[clip], 'd', apD);
+      set(el[iris], 'cx', f(cx + p.pupilX * IRIS_TRAVEL.x));
+      // Anchored to the aperture's midline rather than the eye's, so a
+      // half-closed eye keeps the iris centred in the slit instead of showing
+      // a band of paper above it.
+      set(el[iris], 'cy', f((ap ? ap.cyMid : cy) + p.pupilY * IRIS_TRAVEL.y));
+      set(el[iris], 'r', f(IRIS_R));
+      return lensPath(cx, cy, g, tilt);
+    };
+    set(el.eyeL, 'd', eye(CX - EYE.dx, EYE.y, lidL, p.squintL, -3,
+                          'apertureL', 'irisL', 'clipEyeL'));
+    set(el.eyeR, 'd', eye(CX + EYE.dx, EYE.y, lidR, p.squintR, 3,
+                          'apertureR', 'irisR', 'clipEyeR'));
     set(el.lashL, 'd', lashPath(CX - EYE.dx, EYE.y, lidL, -1));
     set(el.lashR, 'd', lashPath(CX + EYE.dx, EYE.y, lidR, 1));
 
