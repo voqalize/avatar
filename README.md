@@ -431,7 +431,8 @@ unchanged, and travels with that directory.
 | [Open Peeps](https://www.openpeeps.com/) | the drawing *idiom* `peep` is authored in — no artwork is copied | CC0 |
 | Rhubarb Lip Sync 1.14.0 | `packages/avatar-py/native/avatarsync/` (fetched at build time, not vendored) | MIT; see `UPSTREAM-LICENSE.md` |
 | [piper](https://github.com/OHF-Voice/piper1-gpl) voices `en_US-ljspeech-high`, `en_US-libritts_r-medium` | spoke every clip in `apps/authoring/*-audio/` (wav) and `packages/avatar-py/tests/fixtures/` (pcm) | LJSpeech public domain; LibriTTS-R CC BY 4.0 — the one row here that asks for attribution |
+| OpenAI image models | the wardrobe/hair webp images for the six Canvas2D avatars, `packages/avatar/src/canvas/data/img/` | generated output, not a third-party asset under its own license; Voqalize holds the copyright per OpenAI's usage terms |
 
-The three avatars are original drawings. All demo audio is synthesised from
+The three SVG avatars are original drawings. All demo audio is synthesised from
 text written for this repo; `apps/server/audio/` is Voqalize's own `omnivoice`
 voices, which is why that corpus is not in the table above.
