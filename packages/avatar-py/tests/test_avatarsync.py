@@ -168,7 +168,7 @@ async def test_a_decode_does_not_block_the_event_loop(aligner: AvatarsyncEngine)
 
 
 @pytest.mark.skipif(os.cpu_count() is None or os.cpu_count() < 2, reason="needs 2 cores")
-async def test_decodes_run_in_parallel(aligner: AvatarsyncEngine) -> None:
+async def test_decodes_run_in_parallel(aligner_paths: AvatarsyncPaths) -> None:
     """Two decodes at once cost about what one costs.
 
     The other half of the GIL claim: not just that the loop keeps running, but
@@ -179,25 +179,35 @@ async def test_decodes_run_in_parallel(aligner: AvatarsyncEngine) -> None:
     This is also the test that fails if `warmup_decoders` stops tracking the
     worker count: with one warm decoder the pool builds the second one on this
     first concurrent pair, and the pair costs ~1.95x instead.
+
+    Built with `workers=2` explicitly rather than the `aligner` fixture: this
+    is a property of the executor, not of `DEFAULT_WORKERS` — which is 1 in
+    production — so the test asks for the concurrency it needs instead of
+    riding a default that could change under it.
     """
-    pcm, _, _ = load_clip("thank-you-for-your-time-today")
-    clip = pcm * 4
+    engine = AvatarsyncEngine(aligner_paths, workers=2)
+    await engine.start()
+    try:
+        pcm, _, _ = load_clip("thank-you-for-your-time-today")
+        clip = pcm * 4
 
-    started = time.perf_counter()
-    await aligner.audio_cues(clip)
-    serial = time.perf_counter() - started
+        started = time.perf_counter()
+        await engine.audio_cues(clip)
+        serial = time.perf_counter() - started
 
-    started = time.perf_counter()
-    both = await asyncio.gather(aligner.audio_cues(clip), aligner.audio_cues(clip))
-    concurrent = time.perf_counter() - started
+        started = time.perf_counter()
+        both = await asyncio.gather(engine.audio_cues(clip), engine.audio_cues(clip))
+        concurrent = time.perf_counter() - started
 
-    assert all(both)
-    # Perfect overlap is 1.0x serial; no overlap at all is 2.0x. 1.4x leaves
-    # generous room for a busy box and still fails a decode that serialised.
-    assert concurrent < serial * 1.4, (
-        f"two decodes took {concurrent:.3f}s against {serial:.3f}s for one — "
-        "they serialised"
-    )
+        assert all(both)
+        # Perfect overlap is 1.0x serial; no overlap at all is 2.0x. 1.4x leaves
+        # generous room for a busy box and still fails a decode that serialised.
+        assert concurrent < serial * 1.4, (
+            f"two decodes took {concurrent:.3f}s against {serial:.3f}s for one — "
+            "they serialised"
+        )
+    finally:
+        await engine.stop()
 
 
 async def test_stop_is_final(aligner_paths: AvatarsyncPaths) -> None:

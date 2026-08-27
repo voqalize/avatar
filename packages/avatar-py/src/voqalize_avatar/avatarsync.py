@@ -39,9 +39,10 @@ the other direction.
 So decodes run on a small dedicated executor. The arithmetic is the one that
 sized the old pool: a sentence costs ~25 ms of audio-leg work, a session emits
 roughly one sentence every two seconds while the agent is talking, so ~30
-sessions/node is ~0.4 s of decode per second of wall clock. Two workers leave
-room to double. Memory, not CPU, is the binding constraint, and two decoders is
-~116 MB flat in the number of sessions.
+sessions/node is ~0.4 s of decode per second of wall clock — one worker already
+has headroom. Memory, not CPU, is the binding constraint, and each decoder is
+~58 MB flat in the number of sessions; raise this only with the memory budget
+to back it.
 
 **Deliberately not done, and why.** The acoustic model *is* immutable after
 `gauden_dist_precompute` mutates `g->var` once at init (the only other writer,
@@ -72,9 +73,9 @@ from ._native import NativeEngine, NativeError, NativeStream, library_name
 VISEME_LETTERS = frozenset("ABCDEFGHX")
 SILENT = "X"
 
-# Concurrent decodes per worker process. Two — see the module docstring; this is
+# Concurrent decodes per worker process. One — see the module docstring; this is
 # a memory bound wearing a thread count's clothes.
-DEFAULT_WORKERS = 2
+DEFAULT_WORKERS = 1
 
 
 @dataclass(frozen=True, slots=True)
