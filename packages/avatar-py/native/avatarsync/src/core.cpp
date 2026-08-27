@@ -717,12 +717,13 @@ Engine::Engine(const Config& config) : impl_(std::make_unique<Impl>()) {
 	// broadband noise because the recognizer runs WebRTC VAD first and silence
 	// would be skipped — no utterance, no decoder, no warm pool.
 	//
-	// The decoders are warmed *simultaneously*, and that is the whole reason this
-	// is a count. The pool hands out an idle decoder when it has one, so N
-	// sequential warm-ups build exactly one; the second concurrent sentence of
-	// the process then pays ~140 ms of ps_init while a call is in progress —
-	// measured, and the only visible cost left in the accurate leg. The latch
-	// below makes the warm-ups contend on purpose so the pool builds all N here.
+	// The decoders are warmed *simultaneously* (after the first, see below), and
+	// that is the whole reason this is a count. The pool hands out an idle
+	// decoder when it has one, so N sequential warm-ups build exactly one; the
+	// second concurrent sentence of the process then pays ~140 ms of ps_init
+	// while a call is in progress — measured, and the only visible cost left in
+	// the accurate leg. The latch below makes the warm-ups contend on purpose so
+	// the pool builds all N here.
 	const int decoders = config.warmupDecoders;
 	if (decoders > 0) {
 		const auto w0 = std::chrono::steady_clock::now();
@@ -738,32 +739,52 @@ Engine::Engine(const Config& config) : impl_(std::make_unique<Impl>()) {
 			samples.push_back(static_cast<int16_t>(0.3f * noise * env * 32767.0f));
 		}
 
-		std::mutex latch;
-		std::condition_variable ready;
-		int arrived = 0;
-		bool released = false;
-		const auto warm = [&] {
-			{
-				std::unique_lock<std::mutex> lock(latch);
-				if (++arrived == decoders) {
-					released = true;
-					ready.notify_all();
-				} else {
-					ready.wait(lock, [&] { return released; });
-				}
-			}
-			try {
-				audioCues(samples.data(), samples.size(), sampleRate);
-			} catch (...) {
-				// A failed warm-up costs latency on the first request, nothing more.
-			}
-		};
+		// Decoder zero, alone, before any concurrency starts. Rhubarb's own
+		// first-use paths are not safe to enter from two threads at once —
+		// redirectPocketSphinxOutput() in pocketSphinxTools.cpp guards a static
+		// bool with a bare `if`, not a lock or a magic static, so two threads
+		// racing through it on the process's first ever decode is a data race on
+		// PocketSphinx's global error-callback state. Measured as a reliable
+		// segfault in avs_open on a multi-core Linux CI runner with
+		// warmupDecoders=2, never on the single-core-in-practice case that had
+		// been exercised before. Not thrown away: it lands in the pool exactly
+		// like the rest, so the concurrent warm-up below still ends with all N
+		// idle — decoder zero is simply the one of the N that gets reused rather
+		// than freshly built.
+		try {
+			audioCues(samples.data(), samples.size(), sampleRate);
+		} catch (...) {
+			// A failed warm-up costs latency on the first request, nothing more.
+		}
 
-		vector<std::thread> others;
-		others.reserve(static_cast<size_t>(decoders - 1));
-		for (int i = 1; i < decoders; ++i) others.emplace_back(warm);
-		warm();
-		for (auto& thread : others) thread.join();
+		if (decoders > 1) {
+			std::mutex latch;
+			std::condition_variable ready;
+			int arrived = 0;
+			bool released = false;
+			const auto warm = [&] {
+				{
+					std::unique_lock<std::mutex> lock(latch);
+					if (++arrived == decoders) {
+						released = true;
+						ready.notify_all();
+					} else {
+						ready.wait(lock, [&] { return released; });
+					}
+				}
+				try {
+					audioCues(samples.data(), samples.size(), sampleRate);
+				} catch (...) {
+					// A failed warm-up costs latency on the first request, nothing more.
+				}
+			};
+
+			vector<std::thread> others;
+			others.reserve(static_cast<size_t>(decoders - 1));
+			for (int i = 1; i < decoders; ++i) others.emplace_back(warm);
+			warm();
+			for (auto& thread : others) thread.join();
+		}
 		warmupMs_ = sinceMs(w0);
 	}
 }
