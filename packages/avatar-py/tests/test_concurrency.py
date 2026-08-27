@@ -450,13 +450,18 @@ async def test_concurrent_sessions_emit_what_one_session_at_a_time_did(
     of the decoder and carry its dither wobble, so they are compared as
     animations.
 
-    Four sessions, because that is the pool's ceiling: a live decode holds its
-    decoder for the whole turn, so a fifth concurrent session is *refused* and
-    finishes on predicted cues. That is the ceiling working, and it has its own
-    test — comparing a run where two sessions were refused against a serial run
-    where none were would only measure the refusal.
+    Two sessions, not the pool's four-decoder ceiling: `DEFAULT_WORKERS` is 1,
+    so the executor thread — not the decoder pool — is what "concurrent" means
+    here. Push more sessions through one thread than it can actually keep off
+    the realtime floor and every one of them trips `ACCURATE_CUE_LATCH_RTF`
+    (`visemes.py`) and permanently falls back to predicted cues — a real and
+    correct behaviour, but a different property than the one this test checks,
+    and it would swamp the splice comparison below with latch fallbacks rather
+    than genuine interleaving. Two sessions is enough to prove the splicing
+    survives real overlap without asking one worker thread for four-way
+    parallelism it was never sized to give.
     """
-    contexts = [f"s{i}" for i in range(4)]
+    contexts = [f"s{i}" for i in range(2)]
 
     serial = await _emissions(aligner_paths, contexts, concurrent=False)
     interleaved = await _emissions(aligner_paths, contexts, concurrent=True)
