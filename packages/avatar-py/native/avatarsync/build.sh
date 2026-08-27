@@ -177,7 +177,16 @@ fi
 # version, so a library built on the newest macOS silently refuses to load on
 # anything older — including the machine of the next person to clone this repo.
 case "$PLATFORM" in
-	linux-*)  EXTRA_LINK="-static-libstdc++ -static-libgcc"; EXTRA_OSX=""; LIBEXT=so ;;
+	# --exclude-libs=ALL keeps the statically-linked libstdc++/libgcc symbols out
+	# of this .so's dynamic symbol table. Without it they're exported same as any
+	# other symbol, and when the process that dlopen's us (CPython, here) has
+	# already pulled in the system libstdc++.so.6 for its own reasons, the
+	# dynamic linker interposes across the two: this .so's locale/iostream calls
+	# can resolve into globals from the *other* copy, whose facet vtables are
+	# laid out for a different libstdc++ build. That is a segfault on first use,
+	# not a link error — the address it lands on looks arbitrary from the
+	# outside, because it is a real vtable slot, just the wrong copy's.
+	linux-*)  EXTRA_LINK="-static-libstdc++ -static-libgcc -Wl,--exclude-libs=ALL"; EXTRA_OSX=""; LIBEXT=so ;;
 	darwin-*) EXTRA_LINK=""; EXTRA_OSX="-DCMAKE_OSX_DEPLOYMENT_TARGET=11.0"; LIBEXT=dylib ;;
 	*)        echo "unsupported platform: $PLATFORM" >&2; exit 1 ;;
 esac
