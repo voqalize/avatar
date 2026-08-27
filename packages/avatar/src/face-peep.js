@@ -37,29 +37,44 @@
  *
  * The second construction fact
  * ----------------------------
- * THE FACE IS SIX MARKS: two brows, two eyes, a nose, a mouth. No sclera, no
- * iris, no lashes, no nostrils, no lower-lip line, no ear interior beyond one
- * comma, no shading anywhere. An earlier pass had roughly five times that many
- * marks and it read as a corporate mascot rather than a peep. Every mark added
- * below this line has to earn its place against that.
+ * THE FACE IS SIX MARKS: two brows, two eyes, a nose, a mouth. No lashes, no
+ * nostrils, no lower-lip line, no ear interior beyond one comma, no shading
+ * anywhere. An earlier pass had roughly five times that many marks and it read
+ * as a corporate mascot rather than a peep. Every mark added below this line
+ * has to earn its place against that.
+ *
+ * The eye takes three paths to draw (lid line, aperture, iris) and is still one
+ * mark: the rule counts what you see, not what renders it.
+ *
+ * Two changes on 2026-08-27
+ * -------------------------
+ * Both came from building the Canvas2D professional identities and then
+ * looking at this one next to them. They were prototyped as a separate face and
+ * folded back in once they held up, so `git log` for that day is the review.
+ *
+ * 1. THE HEAD WAS DRAWN TALL AND NARROW — a 316-unit-wide head inside a
+ *    908-unit-wide 4:3 frame, filling barely a third of the tile, where the
+ *    canvas avatars were calibrated at call-tile size from the start and read
+ *    fuller. Rather than redraw every path, the whole head cluster (skull,
+ *    ears, hair, features) is wrapped in one static anisotropic `scale()`,
+ *    pivoted at the chin so the jaw stays where the neck expects it. Every
+ *    landmark constant below still describes the original art space; RESHAPE is
+ *    the only new geometry. The head outline was thinned to match — a line that
+ *    reads at the old size is a rope at the new one.
+ * 2. THE EYE WAS A SOLID INK BEAN and gaze read only as the whole bean
+ *    translating. It is now that bean opened out: the bean is the lid line, a
+ *    paper almond sits inside it, and an ink iris inside that carries the gaze
+ *    while the lid line holds still. See the eyes section — it took two wrong
+ *    passes and a wider EYE.rx, and the reasons are recorded there because they
+ *    are not recoverable from the numbers.
  *
  * What the style costs the rig, honestly
  * --------------------------------------
- * 1. GAZE IS WEAKER THAN ON THE OTHER TWO AVATARS. There is no sclera, so
- *    `pupilX/pupilY` cannot move an iris against a white field — the whole eye
- *    bean translates instead. That is the correct reading of the style and it
- *    is what real peeps do, but it carries less information per unit of travel.
- *    Mitigated by giving the bean more travel than blue-shirt gives its iris
- *    (11 units on a 25-wide eye, against blue-shirt's 19 on a 74-wide one —
- *    as a share of frame width that is still less, and it took the DISTRACTED
- *    state reading as eye contact to learn 7 was not enough) and by leaning on
- *    gaze.js's head-follow, which is avatar-agnostic and does most of the work
- *    anyway.
- * 2. THE JAW DOES NOT DROP. The chin is part of the head's ink outline, and
+ * 1. THE JAW DOES NOT DROP. The chin is part of the head's ink outline, and
  *    translating a piece of that outline breaks the silhouette. Peeps do not
  *    have moving jaws either. The cost is real — see MOUTH_APERTURE for how the
  *    aperture is sized to stay off the chin without one.
- * 3. ONE SHOULDER CANNOT RISE WITHOUT THE OTHER. The torso is a single filled
+ * 2. ONE SHOULDER CANNOT RISE WITHOUT THE OTHER. The torso is a single filled
  *    path, as it is on blue-shirt, so an asymmetric shrug is a small rotation
  *    about the sternum. Same compromise, same reason.
  *
@@ -99,9 +114,30 @@ export const THEME = {
 // fixing that means outlining the hair mass — a geometry change wearing a
 // colour change's clothes. The keys stay; the second palette does not.
 
+// --- reshape ----------------------------------------------------------------
+// One static, non-animated transform, applied to the head cluster only (skull,
+// ears, hair, features — never neck or body). Pivoted at CHIN_Y so the chin's
+// own silhouette point does not move: everything above it is pulled toward that
+// point, everything at or below it is left exactly as drawn, so the jaw-to-
+// collar join needs no rework.
+//
+// SX widens, SY shortens. Because the camera (viewBoxForHead) derives frame
+// width from frame height at a fixed 4:3, shortening the head's vertical span
+// shrinks the WHOLE frame around it — that is what "broader" means here: not a
+// wider aspect (every shipped avatar shares one 4:3 camera, on purpose; see
+// docs/authoring-a-face.md § The camera), but a head that fills more of a
+// tighter crop, further widened on top of that by SX.
+const CX = 380;
+const CHIN_Y = 597;
+const RESHAPE_SX = 1.10;
+const RESHAPE_SY = 0.88;
+const RESHAPE = `translate(${CX} ${CHIN_Y}) scale(${RESHAPE_SX} ${RESHAPE_SY}) translate(${-CX} ${-CHIN_Y})`;
+
 // The camera follows the visible hair silhouette, not the skull hidden under
 // it. Keeping these as native landmarks means reframing never touches a path.
-const FRAME = { centerX: 380, crownY: 117, chinY: 597 };
+// crownY is the reshaped crown: CHIN_Y + (117 − CHIN_Y) × RESHAPE_SY, worked
+// out by hand because the camera reads landmarks, not the transform above it.
+const FRAME = { centerX: CX, crownY: 177, chinY: CHIN_Y };
 const VB = viewBoxForHead(FRAME);
 
 /**
@@ -111,7 +147,10 @@ const VB = viewBoxForHead(FRAME);
  */
 export const META = {
   viewBox: { x: VB.x, y: VB.y, w: VB.w, h: VB.h },
-  mouthCrop: { x: 296, y: 434, w: 168, h: 98 },
+  // The original crop (296, 434, 168, 98) with its corners carried through
+  // RESHAPE. A camera change does not move a path, but the reshape is geometry
+  // rather than camera, so the inspection crop has to follow it.
+  mouthCrop: { x: 288, y: 454, w: 185, h: 86 },
 };
 
 // --- landmarks --------------------------------------------------------------
@@ -121,9 +160,11 @@ export const META = {
 // about a third of the head's width. Most of a peep's head is empty, and
 // spreading the features to fill it — which is what "correct" proportion pushes
 // you toward — is the single fastest way to lose the style.
-const CX = FRAME.centerX;
+//
+// These are the NATIVE art space and RESHAPE never enters them: it is a wrapper
+// on the rendered group, so `apply()` and every number below still mean what
+// they meant before it existed.
 const HEAD_TOP = 120;
-const CHIN_Y = 597;
 
 // Brows are given as the DRAWN control points, not as an inner/outer pair for a
 // generator to invent a curve between. That is a correction: a generator that
@@ -143,7 +184,11 @@ const BROW_L = [[CX - 20, 347], [CX - 40, 340], [CX - 60, 336], [CX - 76, 337],
                 [CX - 86, 339], [CX - 94, 343], [CX - 99, 348]];
 const BROW_R = [[CX + 22, 344], [CX + 40, 337], [CX + 58, 333], [CX + 73, 335],
                 [CX + 83, 337], [CX + 90, 341], [CX + 95, 346]];
-const EYE = { y: 386, dx: 55, rx: 14, ry: 16.5 };
+// rx was 14 — the bean was very nearly round — until the eye was opened out.
+// You cannot cut an almond aperture from a round bean without making the lid
+// line absurdly heavy, and a round aperture is exactly what read as a target.
+// Widening the bean was the unlock; see the eyes section.
+const EYE = { y: 386, dx: 55, rx: 16.5, ry: 16.5 };
 const NOSE_TOP = 402;
 const MOUTH = { cx: CX, cy: 488 };
 
@@ -188,7 +233,11 @@ const HEAD = [
 // Heavy along the jaw, nearly nothing at the crown. The crown is under the hair
 // mass, and ink drawn where it will be covered only ever shows up as a dark
 // fringe along the hairline.
-const HEAD_W = [4, 8, 13, 16, 17, 15, 11.5, 8, 5, 4];
+//
+// Scaled to ~0.65 of the original profile ([4, 8, 13, 16, 17, 15, 11.5, 8, 5,
+// 4]) when RESHAPE landed: the same taper shape, but a line rather than a rope
+// once the head is drawn broader and the frame tighter around it.
+const HEAD_W = [3, 5, 8.5, 10.5, 11, 10, 7.5, 5, 3.5, 3];
 
 const EAR_L = [[236, 366], [208, 352], [186, 380], [192, 418], [198, 450], [224, 462], [239, 452]];
 const EAR_R = [[537, 372], [563, 360], [583, 388], [576, 424], [570, 452], [546, 462], [533, 452]];
@@ -532,36 +581,106 @@ function teethPath(m, amt, lower) {
 // ---------------------------------------------------------------------------
 // Generators: eyes
 //
-// A solid ink bean, built as two cubics meeting at pointed corners: an upper
-// lid arc and a lower lid arc. Not an <ellipse> — an ellipse cannot blink, and
-// it cannot have corners.
+// A bean, built as two cubics meeting at pointed corners: an upper lid arc and
+// a lower lid arc. Not an <ellipse> — an ellipse cannot blink, and it cannot
+// have corners.
 //
 // Blinking is the top edge descending toward the bottom one. At full closure
 // both edges end up ABOVE the corners, so the shape is a thin crescent bowing
 // upward: the relaxed closed lid every peep is drawn with. Collapsing it to a
 // straight line instead reads as the eyes being deleted for a frame.
+//
+// The bean used to be the whole eye — one solid mark, translated bodily for
+// gaze. It is now the LID LINE, with a paper almond cut out of it and an ink
+// iris inside that. Two passes at this were wrong, and the shape of the
+// mistakes is the reason the numbers below are so specific:
+//
+//   1. A paper disc drawn straight onto the ink bean — a light hole in a dark
+//      shape, backwards from how an eye reads.
+//   2. Paper disc, then a small ink disc on top. Right order, wrong
+//      proportions: paper visible all the way around a small central pupil is
+//      three concentric rings, which is a target, and on a face it is the
+//      classic startle cue — sclera showing above and below the iris. Every
+//      frame, both eyes, so the whole rig read as alarmed.
+//
+// So the aperture is deliberately WIDER THAN IT IS TALL while the bean is not,
+// and the iris is sized to fill its height rather than float inside it. Paper
+// then survives only at the two corners, which is what makes gaze read: a small
+// iris shift kills one corner and doubles the other — a far larger signal than
+// the same shift of a disc in open space, and the reason travel could come
+// DOWN (11 × 8 for the whole bean, against 4.5 × 2.2 for the iris) while the
+// reading got stronger.
 // ---------------------------------------------------------------------------
-function eyePath(cx, cy, lid, squint, tiltDeg) {
-  const L = clamp(lid);
-  // 1.05 rather than 0.75 because a cubic reaches only ~0.75 of its control
-  // offset at the midpoint; this is what makes the open bean EYE.ry tall. It
-  // was 1.4, which drew a bean noticeably taller than it was wide — read as a
-  // stare rather than as a peep, whose eyes sit at or below square.
-  const topY = lerp(cy - EYE.ry * 1.05, cy - EYE.ry * 0.42, L);
-  const botY = lerp(cy + EYE.ry * 1.05, cy - EYE.ry * 0.05, L) - clamp(squint) * EYE.ry * 0.7;
-  const rx = EYE.rx;
+
+// A cubic whose two controls share a y reaches only 3/4 of the way to it.
+// Everything below works in DRAWN extents and divides that back out, so an
+// inset of n units is n units on screen. The second pass's inset was a
+// proportional one and could not be: scaled about the eye centre it inverts the
+// moment a closing lid carries the bean's lower edge above that centre, and it
+// leaked paper out through a shut eye.
+const BULGE = 0.75;
+
+/** Two cubics between (cx±rx, cyMid), bulging to yTop and yBot; tilt about cy. */
+function lensPath(cx, cy, g, tiltDeg) {
+  if (!g) return '';
   const a = (tiltDeg * Math.PI) / 180;
   const ca = Math.cos(a), sa = Math.sin(a);
   const R = (x, y) => {
     const dx = x - cx, dy = y - cy;
     return `${f(cx + dx * ca - dy * sa)} ${f(cy + dx * sa + dy * ca)}`;
   };
+  const ctlTop = g.cyMid + (g.yTop - g.cyMid) / BULGE;
+  const ctlBot = g.cyMid + (g.yBot - g.cyMid) / BULGE;
   return (
-    `M${R(cx - rx, cy)}` +
-    `C${R(cx - rx * 0.5, topY)} ${R(cx + rx * 0.5, topY)} ${R(cx + rx, cy)}` +
-    `C${R(cx + rx * 0.5, botY)} ${R(cx - rx * 0.5, botY)} ${R(cx - rx, cy)}Z`
+    `M${R(cx - g.rx, g.cyMid)}` +
+    `C${R(cx - g.rx * 0.5, ctlTop)} ${R(cx + g.rx * 0.5, ctlTop)} ${R(cx + g.rx, g.cyMid)}` +
+    `C${R(cx + g.rx * 0.5, ctlBot)} ${R(cx - g.rx * 0.5, ctlBot)} ${R(cx - g.rx, g.cyMid)}Z`
   );
 }
+
+/** The lid silhouette, in drawn extents. */
+function eyeGeom(cy, lid, squint) {
+  const L = clamp(lid);
+  // 1.05 rather than 0.75 because of BULGE; this is what makes the open bean
+  // EYE.ry tall. It was 1.4, which drew a bean noticeably taller than it was
+  // wide — read as a stare rather than as a peep, whose eyes sit at or below
+  // square.
+  const ctlTop = lerp(cy - EYE.ry * 1.05, cy - EYE.ry * 0.42, L);
+  const ctlBot = lerp(cy + EYE.ry * 1.05, cy - EYE.ry * 0.05, L) - clamp(squint) * EYE.ry * 0.7;
+  return {
+    cyMid: cy,
+    rx: EYE.rx,
+    yTop: cy + BULGE * (ctlTop - cy),
+    yBot: cy + BULGE * (ctlBot - cy),
+  };
+}
+
+// The lid line, as constant distances. Heavier above than below: an upper lid
+// carries the lashes and reads as the eye's weight, and a lower line as heavy
+// makes a doll. LASH_X is the corner, where the line has to stay thin or the
+// almond loses its points and rounds back into the target shape.
+const LASH_X = 3.0;
+const LASH_TOP = 5.5;
+const LASH_BOT = 4.5;
+
+/** The paper almond inside the lid line, or null once the lid has shut on it. */
+function apertureGeom(g) {
+  const yTop = g.yTop + LASH_TOP;
+  const yBot = g.yBot - LASH_BOT;
+  const rx = g.rx - LASH_X;
+  if (yBot - yTop < 0.5 || rx < 0.5) return null;
+  return { cyMid: (yTop + yBot) / 2, rx, yTop, yBot };
+}
+
+// Sized to fill the resting aperture's height (26 − 5.5 − 4.5 = 16 drawn units)
+// rather than float inside it, so both lids crop it and the paper survives only
+// as two corner slivers.
+const IRIS_R = 8.0;
+
+// Travel, native units. x is roughly one corner's worth of paper: at either
+// extreme one sliver closes and the other doubles, which is the whole gaze
+// signal.
+const IRIS_TRAVEL = { x: 4.5, y: 2.2 };
 
 // ---------------------------------------------------------------------------
 // Generators: brows
@@ -607,7 +726,11 @@ function markup(id, t) {
   return `
 <svg id="${id}" viewBox="${VB.x} ${VB.y} ${VB.w} ${VB.h}" xmlns="http://www.w3.org/2000/svg"
      preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:100%">
-  <defs><clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath></defs>
+  <defs>
+    <clipPath id="${id}-clipMouth"><path id="${id}-clipMouthP" d=""/></clipPath>
+    <clipPath id="${id}-clipEyeL"><path id="${id}-clipEyeLP" d=""/></clipPath>
+    <clipPath id="${id}-clipEyeR"><path id="${id}-clipEyeRP" d=""/></clipPath>
+  </defs>
 
   <!-- The neck stays behind the skull. This explicit split is what makes a nod
        a nod: it lets one shorten the neck and pivot the head surface instead of
@@ -619,24 +742,32 @@ function markup(id, t) {
   </g>
 
   <!-- head and ears. Ears go under the head fill so the loop's inner half
-       is covered and only the rim reads. -->
+       is covered and only the rim reads.
+
+       RESHAPE wraps the art INSIDE the parallax group, never the group itself:
+       poseTransforms writes the group's own transform every frame and would
+       overwrite it. Same for features and hair below. The neck and body are
+       deliberately outside it — the reshape is pivoted on the chin so that
+       join still lands. -->
   <g id="${id}-skull">
-    <path d="${EAR_L_FILL}" fill="${t.paper}"/>
-    <path d="${EAR_R_FILL}" fill="${t.paper}"/>
-    ${ink(EAR_L_RING)}
-    ${ink(EAR_R_RING)}
-    <path d="${HEAD_FILL}" fill="${t.paper}"/>
-    ${ink(HEAD_RING)}
-    ${ink(taper(EAR_L_IN, [2.5, 5, 2.5]))}
-    ${ink(taper(EAR_R_IN, [2.5, 4.5, 2.5]))}
-    ${ink(taper(JAW_UNDER, [2, 5.5, 2]))}
-    <!-- Hair underlay: the same mass, locked to the skull at head parallax.
-         The hair layer runs faster, so under yaw it slides a few units across
-         the cranium; the mass abuts the head outline with no overlap margin, so
-         that slide would otherwise open a bright white sliver of scalp along the
-         leading edge. On a white-on-white avatar that sliver is far more visible
-         than blue-shirt's equivalent. Cheap insurance; do not remove it. -->
-    <path d="${HAIR_D}" fill="${t.ink}"/>
+    <g transform="${RESHAPE}">
+      <path d="${EAR_L_FILL}" fill="${t.paper}"/>
+      <path d="${EAR_R_FILL}" fill="${t.paper}"/>
+      ${ink(EAR_L_RING)}
+      ${ink(EAR_R_RING)}
+      <path d="${HEAD_FILL}" fill="${t.paper}"/>
+      ${ink(HEAD_RING)}
+      ${ink(taper(EAR_L_IN, [2.5, 5, 2.5]))}
+      ${ink(taper(EAR_R_IN, [2.5, 4.5, 2.5]))}
+      ${ink(taper(JAW_UNDER, [2, 5.5, 2]))}
+      <!-- Hair underlay: the same mass, locked to the skull at head parallax.
+           The hair layer runs faster, so under yaw it slides a few units across
+           the cranium; the mass abuts the head outline with no overlap margin, so
+           that slide would otherwise open a bright white sliver of scalp along the
+           leading edge. On a white-on-white avatar that sliver is far more visible
+           than blue-shirt's equivalent. Cheap insurance; do not remove it. -->
+      <path d="${HAIR_D}" fill="${t.ink}"/>
+    </g>
   </g>
 
   <!-- shirt: silhouette, arm separation, creases, collar -->
@@ -661,28 +792,36 @@ function markup(id, t) {
 
   <!-- features: six marks and nothing else -->
   <g id="${id}-features">
-    <path id="${id}-browL" fill="${t.ink}"/>
-    <path id="${id}-browR" fill="${t.ink}"/>
-    <g id="${id}-eyes">
-      <path id="${id}-eyeL" fill="${t.ink}"/>
-      <path id="${id}-eyeR" fill="${t.ink}"/>
-    </g>
-    <path d="${NOSE_D}" fill="${t.ink}"/>
-    <g id="${id}-mouth">
-      <path id="${id}-mouthIn" fill="${t.mouthIn}"/>
-      <g clip-path="url(#${id}-clipMouth)">
-        <ellipse id="${id}-tongue" fill="${t.tongue}"/>
-        <path id="${id}-teeth" fill="${t.teeth}"/>
-        <path id="${id}-teethLo" fill="${t.teeth}" opacity=".85"/>
+    <g transform="${RESHAPE}">
+      <path id="${id}-browL" fill="${t.ink}"/>
+      <path id="${id}-browR" fill="${t.ink}"/>
+      <g id="${id}-eyes">
+        <path id="${id}-eyeL" fill="${t.ink}"/>
+        <path id="${id}-eyeR" fill="${t.ink}"/>
+        <path id="${id}-apertureL" fill="${t.paper}"/>
+        <path id="${id}-apertureR" fill="${t.paper}"/>
+        <g clip-path="url(#${id}-clipEyeL)"><circle id="${id}-irisL" fill="${t.ink}"/></g>
+        <g clip-path="url(#${id}-clipEyeR)"><circle id="${id}-irisR" fill="${t.ink}"/></g>
       </g>
-      <path id="${id}-lips" fill="${t.ink}"/>
+      <path d="${NOSE_D}" fill="${t.ink}"/>
+      <g id="${id}-mouth">
+        <path id="${id}-mouthIn" fill="${t.mouthIn}"/>
+        <g clip-path="url(#${id}-clipMouth)">
+          <ellipse id="${id}-tongue" fill="${t.tongue}"/>
+          <path id="${id}-teeth" fill="${t.teeth}"/>
+          <path id="${id}-teethLo" fill="${t.teeth}" opacity=".85"/>
+        </g>
+        <path id="${id}-lips" fill="${t.ink}"/>
+      </g>
     </g>
   </g>
 
   <!-- hair -->
   <g id="${id}-hair">
-    <path d="${HAIR_D}" fill="${t.ink}"/>
-    <path d="${region(HAIR_TUFT)}" fill="${t.ink}"/>
+    <g transform="${RESHAPE}">
+      <path d="${HAIR_D}" fill="${t.ink}"/>
+      <path d="${region(HAIR_TUFT)}" fill="${t.ink}"/>
+    </g>
   </g>
 </svg>`;
 }
@@ -705,7 +844,10 @@ export function createFace(mount, theme = {}) {
   const el = {
     neck: $('neck'), skull: $('skull'), body: $('body'), features: $('features'), hair: $('hair'),
     browL: $('browL'), browR: $('browR'),
-    eyes: $('eyes'), eyeL: $('eyeL'), eyeR: $('eyeR'),
+    eyeL: $('eyeL'), eyeR: $('eyeR'),
+    clipEyeL: $('clipEyeLP'), clipEyeR: $('clipEyeRP'),
+    apertureL: $('apertureL'), apertureR: $('apertureR'),
+    irisL: $('irisL'), irisR: $('irisR'),
     mouthIn: $('mouthIn'), lips: $('lips'), clipMouth: $('clipMouthP'),
     teeth: $('teeth'), teethLo: $('teethLo'), tongue: $('tongue'),
   };
@@ -714,17 +856,31 @@ export function createFace(mount, theme = {}) {
     poseTransforms(p, set, el, POSE);
 
     // --- eyes -------------------------------------------------------------
-    // With no sclera the whole bean travels; see the header for what that costs
-    // and why it is still the right call. 7 units on a 25-wide eye is a lot of
-    // relative travel — more than blue-shirt's iris gets — and it has to be, or
-    // a gaze target does not read at all.
-    set(el.eyes, 'transform', `translate(${f(p.pupilX * 11)} ${f(p.pupilY * 8)})`);
-
-    // The lid follows vertical gaze downward only. Looking up genuinely does
-    // widen the aperture, so there is nothing to add on that side.
+    // The lid line holds still and the iris carries the gaze. The lid follows
+    // vertical gaze downward only: looking up genuinely does widen the
+    // aperture, so there is nothing to add on that side.
     const lidFollow = Math.max(0, p.pupilY) * 0.22;
-    set(el.eyeL, 'd', eyePath(CX - EYE.dx, EYE.y + 1, p.lidL + lidFollow, p.squintL, -9));
-    set(el.eyeR, 'd', eyePath(CX + EYE.dx, EYE.y - 1, p.lidR + lidFollow, p.squintR, 8));
+    const eye = (cx, cy, lid, squint, tilt, aperture, iris, clip) => {
+      const g = eyeGeom(cy, lid, squint);
+      const ap = apertureGeom(g);
+      const apD = lensPath(cx, cy, ap, tilt);
+      set(el[aperture], 'd', apD);
+      // The iris is clipped to the APERTURE, not to the lid line, so it is
+      // cropped by the same edge the paper is — and a shut lid, which has no
+      // aperture at all, takes the iris with it and needs no opacity logic.
+      set(el[clip], 'd', apD);
+      set(el[iris], 'cx', f(cx + p.pupilX * IRIS_TRAVEL.x));
+      // Anchored to the aperture's midline rather than the eye's, so a
+      // half-closed eye keeps the iris centred in the slit instead of showing
+      // a band of paper above it.
+      set(el[iris], 'cy', f((ap ? ap.cyMid : cy) + p.pupilY * IRIS_TRAVEL.y));
+      set(el[iris], 'r', f(IRIS_R));
+      return lensPath(cx, cy, g, tilt);
+    };
+    set(el.eyeL, 'd', eye(CX - EYE.dx, EYE.y + 1, p.lidL + lidFollow, p.squintL, -9,
+                          'apertureL', 'irisL', 'clipEyeL'));
+    set(el.eyeR, 'd', eye(CX + EYE.dx, EYE.y - 1, p.lidR + lidFollow, p.squintR, 8,
+                          'apertureR', 'irisR', 'clipEyeR'));
 
     // --- brows ------------------------------------------------------------
     set(el.browL, 'd', browPath(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL));
