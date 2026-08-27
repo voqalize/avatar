@@ -157,21 +157,6 @@ jobs:
         if: steps.aligner-cache.outputs.cache-hit != 'true'
         run: packages/avatar-py/native/avatarsync/build.sh
 
-      # TEMPORARY: capture a native backtrace for the avs_open segfault.
-      # Remove once diagnosed — packages/avatar-py/debug_repro.py goes with it.
-      - name: debug native backtrace
-        working-directory: packages/avatar-py
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq gdb
-          uv run --resolution "${{ matrix.resolution }}" python -c "import sys; print(sys.executable)"
-          ulimit -c unlimited
-          gdb -batch \
-            -ex run \
-            -ex "thread apply all bt full" \
-            -ex quit \
-            --args .venv/bin/python debug_repro.py 2>&1 | tee /tmp/gdb-out.log
-          echo "---- exit status of gdb'd process is above ----"
-
       - name: tests
         working-directory: packages/avatar-py
         env:
