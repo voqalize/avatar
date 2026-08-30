@@ -29,6 +29,7 @@ import { clamp, lerp } from './params.js';
 import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
+import { lidCurve, lensPath, browDeform, scaleWidths } from './face-features.js';
 import { taper, taperRing, region } from './line-art.js';
 import { viewBoxForHead } from './camera.js';
 
@@ -55,7 +56,7 @@ const CX = FRAME.centerX;
 const HEAD_TOP = 148;
 const CHIN_Y = 572;
 
-const EYE = { y: 386, dx: 55, rx: 15, ry: 17.5 };
+const EYE = { y: 386, dx: 55, rx: 15, ry: 17.5, lidPow: 1, squintGain: 0.7 };
 const NOSE_TOP = 408;
 const MOUTH = { cx: CX, cy: 486 };
 const MOUTH_APERTURE = 36;
@@ -275,36 +276,18 @@ function mouthGeometry(p) {
   return { contour, profile, cx, cy, w, h, topY, botY, innerTop, innerBot, open, tuck };
 }
 
-// Eyes: peep's bean model, verbatim but for the tilt values (wren's beans sit
-// nearly level — the glasses rings already give the face its geometry, and a
-// strong bean tilt inside a perfect circle reads as misaligned lenses).
-function eyePath(cx, cy, lid, squint, tiltDeg) {
-  const L = clamp(lid);
-  const topY = lerp(cy - EYE.ry * 1.05, cy - EYE.ry * 0.42, L);
-  const botY = lerp(cy + EYE.ry * 1.05, cy - EYE.ry * 0.05, L) - clamp(squint) * EYE.ry * 0.7;
-  const rx = EYE.rx;
-  const a = (tiltDeg * Math.PI) / 180;
-  const ca = Math.cos(a), sa = Math.sin(a);
-  const R = (x, y) => {
-    const dx = x - cx, dy = y - cy;
-    return `${f(cx + dx * ca - dy * sa)} ${f(cy + dx * sa + dy * ca)}`;
-  };
-  return (
-    `M${R(cx - rx, cy)}` +
-    `C${R(cx - rx * 0.5, topY)} ${R(cx + rx * 0.5, topY)} ${R(cx + rx, cy)}` +
-    `C${R(cx + rx * 0.5, botY)} ${R(cx - rx * 0.5, botY)} ${R(cx - rx, cy)}Z`
-  );
-}
+// Eyes: the shared lid curve, FILLED, and nothing over it. That is the whole
+// of this eye and it is a choice, not a shortfall — see the header. peep needs
+// an iris travelling inside an aperture because its beans move against
+// nothing; wren's bean moves against a fixed ring, and a solid mark shifting
+// against that reference is the stronger gaze cue at tile size.
+const EYE_CURVE = lidCurve(EYE);
 
-// Brows: peep's point-list deformation, wren's points and a lighter profile.
-function browPath(pts, raise, angle, inner) {
-  const n = pts.length - 1;
-  const out = pts.map(([x, y], i) => {
-    const u = i / n;
-    return [x, y - raise * 15 - inner * 11 * (1 - u) - angle * 12 * u];
-  });
-  return taper(out, [3, 12, 6], 6);
-}
+// Brows: the shared deformation, peep's gains, wren's points and a lighter
+// profile — the mark is thinner because the glasses already carry weight here.
+const BROW_GAINS = { up: 15, down: 15, downSkew: 0, inner: 11, angle: 12, bulk: 0 };
+const BROW_W = [3, 12, 6];
+const BROW = browDeform(BROW_GAINS);
 
 // ---------------------------------------------------------------------------
 // Static markup
@@ -403,11 +386,15 @@ export function createFace(mount, theme = {}) {
     set(el.eyes, 'transform', `translate(${f(p.pupilX * 10)} ${f(p.pupilY * 7)})`);
 
     const lidFollow = Math.max(0, p.pupilY) * 0.22;
-    set(el.eyeL, 'd', eyePath(CX - EYE.dx, EYE.y + 1, p.lidL + lidFollow, p.squintL, -3));
-    set(el.eyeR, 'd', eyePath(CX + EYE.dx, EYE.y - 1, p.lidR + lidFollow, p.squintR, 3));
+    const bean = (cx, cy, lid, squint, tilt) =>
+      lensPath(cx, cy, EYE_CURVE(cy, lid, squint), tilt);
+    set(el.eyeL, 'd', bean(CX - EYE.dx, EYE.y + 1, p.lidL + lidFollow, p.squintL, -3));
+    set(el.eyeR, 'd', bean(CX + EYE.dx, EYE.y - 1, p.lidR + lidFollow, p.squintR, 3));
 
-    set(el.browL, 'd', browPath(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL));
-    set(el.browR, 'd', browPath(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR));
+    const bL = BROW(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL);
+    const bR = BROW(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR);
+    set(el.browL, 'd', taper(bL.pts, scaleWidths(BROW_W, bL.weight), 6));
+    set(el.browR, 'd', taper(bR.pts, scaleWidths(BROW_W, bR.weight), 6));
 
     const m = mouthGeometry(p);
     const contour = region(m.contour);

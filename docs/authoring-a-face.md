@@ -332,6 +332,28 @@ memoizer and the same return shape. That convergence now lives in
   lower-teeth reveal ramp `(open − 0.45) / 0.4`, tongue gate `> 0.02`;
 - `faceApi` — the return shape.
 
+And **`packages/avatar/src/face-features.js`** owns the other half of the shared
+ground: the feature *laws*, with no drawing in them. Three layers, and the
+layering is the whole idea —
+
+1. **the solve** (`face-features.js`): channels plus named scalars in, points
+   and numbers out. `lidCurve(E)` is the eye silhouette every rig computes
+   identically; `lensPath` draws it, or any two-arc lens inset off it;
+   `browDeform(G)` is the brow deformation, and `scaleWidths` spends the width
+   multiplier it returns.
+2. **the marks** (your module): width profiles, brow point lists, which
+   optional layers exist at all. This is the drawing and it does not
+   generalise.
+3. **the type** (your module, composing layer 1): wren fills the lid curve and
+   stops; peep and myna cut a paper aperture out of it and put an iris inside.
+   Those are two *compositions* of one silhouette, not one eye behind a flag,
+   and a third eye is a third composition. Pick by the rule below.
+
+What earns a scalar there is a face that already differs in it — `lidPow` and
+`squintGain` on the eye, six gains on the brow. What does not is a knob nobody
+turns: the teeth take no spec at all. Where two faces disagree, both state
+their number; nothing is inherited by accident.
+
 What legitimately varies per avatar, and stays in the face module:
 
 - **The `POSE` spec values**: `yawPx`/`pitchPx` (parallax travel), `pivot`, lean

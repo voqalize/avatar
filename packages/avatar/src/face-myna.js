@@ -42,6 +42,7 @@ import { clamp, lerp } from './params.js';
 import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
+import { lidCurve, lensPath, browDeform, scaleWidths } from './face-features.js';
 import { taper, taperRing, region } from './line-art.js';
 import { viewBoxForHead } from './camera.js';
 
@@ -96,7 +97,12 @@ const HEAD_TOP = 150;
 // rx widened from 15 — the bean was very nearly round, and cutting an almond
 // aperture from it without an absurd lid line needed the same headroom peep's
 // eye needed. See the eyes section.
-const EYE = { y: 386, dx: 56, rx: 17, ry: 16 };
+// lidPow 0.6 is not taste. On beans this big a linear map had spent only 7%
+// of its travel by the rest lid of 0.12, so rest rendered as a wide-eyed
+// stare — a long-session comfort failure. The power curve spends ~28% by then
+// (a visible flat on the bean top: attentive-relaxed, not sleepy) while a true
+// wide still rounds fully open and closed is unchanged.
+const EYE = { y: 386, dx: 56, rx: 17, ry: 16, lidPow: 0.6, squintGain: 0.95 };
 const MOUTH = { cx: CX, cy: 492 };
 const MOUTH_APERTURE = 36;
 
@@ -441,60 +447,8 @@ function mouthGeometry(p) {
 // for the two wrong passes (paper-on-ink, then a too-small pupil that read as
 // a startled target) that are not recoverable from the numbers alone.
 
-/** Top-lid height for a given lid value — shared by bean and lash so they can
- *  never disagree. The mapping is a 0.6-power, not linear: the mixer's rest
- *  lid is 0.12 (params.js: real neutral eyes graze the iris) and on beans
- *  this big a linear map spent only 7% of the travel by then — rest rendered
- *  as a wide-eyed stare, a long-session comfort failure. The power curve
- *  spends ~28% by 0.12 (a visible flat on the bean top: attentive-relaxed,
- *  not sleepy) while a true wide (curious sends lid −0.10 → clamps to ~0)
- *  still rounds fully open, and closed is unchanged. */
-function lidTopY(cy, lid) {
-  return lerp(cy - EYE.ry * 1.05, cy - EYE.ry * 0.42, Math.pow(clamp(lid), 0.6));
-}
+const EYE_CURVE = lidCurve(EYE);
 
-// A cubic whose two controls share a y reaches only 3/4 of the way to it.
-// Everything below works in DRAWN extents and divides that back out, so an
-// inset of n units is n units on screen — see face-peep.js for why the inset
-// below cannot be proportional instead.
-const BULGE = 0.75;
-
-/** Two cubics between (cx±rx, cyMid), bulging to yTop and yBot; tilt about cy. */
-function lensPath(cx, cy, g, tiltDeg) {
-  if (!g) return '';
-  const a = (tiltDeg * Math.PI) / 180;
-  const ca = Math.cos(a), sa = Math.sin(a);
-  const R = (x, y) => {
-    const dx = x - cx, dy = y - cy;
-    return `${f(cx + dx * ca - dy * sa)} ${f(cy + dx * sa + dy * ca)}`;
-  };
-  const ctlTop = g.cyMid + (g.yTop - g.cyMid) / BULGE;
-  const ctlBot = g.cyMid + (g.yBot - g.cyMid) / BULGE;
-  return (
-    `M${R(cx - g.rx, g.cyMid)}` +
-    `C${R(cx - g.rx * 0.5, ctlTop)} ${R(cx + g.rx * 0.5, ctlTop)} ${R(cx + g.rx, g.cyMid)}` +
-    `C${R(cx + g.rx * 0.5, ctlBot)} ${R(cx - g.rx * 0.5, ctlBot)} ${R(cx - g.rx, g.cyMid)}Z`
-  );
-}
-
-/** The lid silhouette, in drawn extents. Same power-curve lid mapping and
- *  squint gain (.95: the smile-squint is most of what separates warm from
- *  neutral at tile size) as before the eye was opened out. */
-function eyeGeom(cy, lid, squint) {
-  const L = clamp(lid);
-  const ctlTop = lidTopY(cy, lid);
-  const ctlBot = lerp(cy + EYE.ry * 1.05, cy - EYE.ry * 0.05, L) - clamp(squint) * EYE.ry * 0.95;
-  return {
-    cyMid: cy,
-    rx: EYE.rx,
-    yTop: cy + BULGE * (ctlTop - cy),
-    yBot: cy + BULGE * (ctlBot - cy),
-  };
-}
-
-// The lid line, as constant distances — a proportional inset inverts the
-// moment a closing lid carries the bean's lower edge above the eye centre and
-// leaks paper out through a shut eye.
 const LASH_X = 3.0;
 const LASH_TOP = 5.5;
 const LASH_BOT = 4.5;
@@ -528,7 +482,7 @@ const IRIS_TRAVEL = { x: 4.5, y: 2.2 };
  * `dir` is −1 for the left eye (flick outward-left), +1 for the right.
  */
 function lashPath(cx, cy, lid, dir) {
-  const topY = lidTopY(cy, lid);
+  const topY = EYE_CURVE(cy, lid, 0).ctlTop;
   const rx = EYE.rx;
   const at = (u) => {
     const v = 1 - u;
@@ -552,18 +506,11 @@ function lashPath(cx, cy, lid, dir) {
 //   pull), so brows-down reads as concentration rather than a merged smear.
 //   What travel can't carry, thickness does: a knitted brow bulks up 30% at
 //   full descent.
-function browPath(pts, raise, angle, inner) {
-  const n = pts.length - 1;
-  const up = Math.max(0, raise);
-  const dn = Math.max(0, -raise);
-  const out = pts.map(([x, y], i) => {
-    const u = i / n;
-    return [x, y - up * 20 + dn * 8.5 * (1 - 0.45 * u)
-             - inner * 15 * (1 - u) - angle * 16 * u];
-  });
-  const wk = 1 + 0.3 * dn;
-  return taper(out, [3 * wk, 12 * wk, 4 * wk], 6);
-}
+// These gains ARE the law in face-features.js; peep and wren are the same law
+// with `down` equal to `up` and no skew or bulk at all.
+const BROW_GAINS = { up: 20, down: 8.5, downSkew: 0.45, inner: 15, angle: 16, bulk: 0.3 };
+const BROW_W = [3, 12, 4];
+const BROW = browDeform(BROW_GAINS);
 
 // ---------------------------------------------------------------------------
 // Static markup
@@ -701,7 +648,7 @@ export function createFace(mount, theme = {}) {
     // Both beans exactly on EYE.y: a ±1 stagger here read as head tilt at
     // rest, and rest must be level (see BROW_R).
     const eye = (cx, cy, lid, squint, tilt, aperture, iris, clip) => {
-      const g = eyeGeom(cy, lid, squint);
+      const g = EYE_CURVE(cy, lid, squint);
       const ap = apertureGeom(g);
       const apD = lensPath(cx, cy, ap, tilt);
       set(el[aperture], 'd', apD);
@@ -724,8 +671,10 @@ export function createFace(mount, theme = {}) {
     set(el.lashL, 'd', lashPath(CX - EYE.dx, EYE.y, lidL, -1));
     set(el.lashR, 'd', lashPath(CX + EYE.dx, EYE.y, lidR, 1));
 
-    set(el.browL, 'd', browPath(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL));
-    set(el.browR, 'd', browPath(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR));
+    const bL = BROW(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL);
+    const bR = BROW(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR);
+    set(el.browL, 'd', taper(bL.pts, scaleWidths(BROW_W, bL.weight), 6));
+    set(el.browR, 'd', taper(bR.pts, scaleWidths(BROW_W, bR.weight), 6));
 
     const m = mouthGeometry(p);
     const contour = region(m.contour);

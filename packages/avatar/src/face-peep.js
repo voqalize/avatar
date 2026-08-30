@@ -90,6 +90,7 @@ import { clamp, lerp } from './params.js';
 import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
+import { lidCurve, lensPath, browDeform, scaleWidths } from './face-features.js';
 import { taper, taperRing, region, polyD, rng } from './line-art.js';
 import { viewBoxForHead } from './camera.js';
 
@@ -188,7 +189,7 @@ const BROW_R = [[CX + 22, 344], [CX + 40, 337], [CX + 58, 333], [CX + 73, 335],
 // You cannot cut an almond aperture from a round bean without making the lid
 // line absurdly heavy, and a round aperture is exactly what read as a target.
 // Widening the bean was the unlock; see the eyes section.
-const EYE = { y: 386, dx: 55, rx: 16.5, ry: 16.5 };
+const EYE = { y: 386, dx: 55, rx: 16.5, ry: 16.5, lidPow: 1, squintGain: 0.7 };
 const NOSE_TOP = 402;
 const MOUTH = { cx: CX, cy: 488 };
 
@@ -566,48 +567,10 @@ function mouthGeometry(p) {
 // reading got stronger.
 // ---------------------------------------------------------------------------
 
-// A cubic whose two controls share a y reaches only 3/4 of the way to it.
-// Everything below works in DRAWN extents and divides that back out, so an
-// inset of n units is n units on screen. The second pass's inset was a
-// proportional one and could not be: scaled about the eye centre it inverts the
-// moment a closing lid carries the bean's lower edge above that centre, and it
-// leaked paper out through a shut eye.
-const BULGE = 0.75;
-
-/** Two cubics between (cx±rx, cyMid), bulging to yTop and yBot; tilt about cy. */
-function lensPath(cx, cy, g, tiltDeg) {
-  if (!g) return '';
-  const a = (tiltDeg * Math.PI) / 180;
-  const ca = Math.cos(a), sa = Math.sin(a);
-  const R = (x, y) => {
-    const dx = x - cx, dy = y - cy;
-    return `${f(cx + dx * ca - dy * sa)} ${f(cy + dx * sa + dy * ca)}`;
-  };
-  const ctlTop = g.cyMid + (g.yTop - g.cyMid) / BULGE;
-  const ctlBot = g.cyMid + (g.yBot - g.cyMid) / BULGE;
-  return (
-    `M${R(cx - g.rx, g.cyMid)}` +
-    `C${R(cx - g.rx * 0.5, ctlTop)} ${R(cx + g.rx * 0.5, ctlTop)} ${R(cx + g.rx, g.cyMid)}` +
-    `C${R(cx + g.rx * 0.5, ctlBot)} ${R(cx - g.rx * 0.5, ctlBot)} ${R(cx - g.rx, g.cyMid)}Z`
-  );
-}
-
-/** The lid silhouette, in drawn extents. */
-function eyeGeom(cy, lid, squint) {
-  const L = clamp(lid);
-  // 1.05 rather than 0.75 because of BULGE; this is what makes the open bean
-  // EYE.ry tall. It was 1.4, which drew a bean noticeably taller than it was
-  // wide — read as a stare rather than as a peep, whose eyes sit at or below
-  // square.
-  const ctlTop = lerp(cy - EYE.ry * 1.05, cy - EYE.ry * 0.42, L);
-  const ctlBot = lerp(cy + EYE.ry * 1.05, cy - EYE.ry * 0.05, L) - clamp(squint) * EYE.ry * 0.7;
-  return {
-    cyMid: cy,
-    rx: EYE.rx,
-    yTop: cy + BULGE * (ctlTop - cy),
-    yBot: cy + BULGE * (ctlBot - cy),
-  };
-}
+// The silhouette itself is `lidCurve`/`lensPath` in face-features.js — five
+// rigs computed it identically. What stays here is what makes this eye THIS
+// eye: a paper almond cut out of the lid line, and an ink iris inside it.
+const EYE_CURVE = lidCurve(EYE);
 
 // The lid line, as constant distances. Heavier above than below: an upper lid
 // carries the lashes and reads as the eye's weight, and a lower line as heavy
@@ -647,17 +610,13 @@ const IRIS_TRAVEL = { x: 4.5, y: 2.2 };
 // The left brow is longer and flatter and the right sits 3 units higher. That
 // asymmetry is baked into the control points, so it survives every pose.
 // ---------------------------------------------------------------------------
-function browPath(pts, raise, angle, inner) {
-  const n = pts.length - 1;
-  const out = pts.map(([x, y], i) => {
-    // u runs 0 at the inner end to 1 at the outer, so `inner` and `angle` each
-    // pivot their own end and fade out across the brow rather than translating
-    // the whole mark. That is the only reason these are separate channels.
-    const u = i / n;
-    return [x, y - raise * 15 - inner * 11 * (1 - u) - angle * 12 * u];
-  });
-  return taper(out, [3.5, 17, 8], 6);
-}
+// The deformation is face-features.js's; the gains and the width profile are
+// peep's. A raised and a lowered brow travel the same distance here, and the
+// mark does not thicken as it falls — both of which myna disagrees with, which
+// is why they are numbers rather than the law.
+const BROW_GAINS = { up: 15, down: 15, downSkew: 0, inner: 11, angle: 12, bulk: 0 };
+const BROW_W = [3.5, 17, 8];
+const BROW = browDeform(BROW_GAINS);
 
 // ---------------------------------------------------------------------------
 // Static markup
@@ -815,7 +774,7 @@ export function createFace(mount, theme = {}) {
     // aperture, so there is nothing to add on that side.
     const lidFollow = Math.max(0, p.pupilY) * 0.22;
     const eye = (cx, cy, lid, squint, tilt, aperture, iris, clip) => {
-      const g = eyeGeom(cy, lid, squint);
+      const g = EYE_CURVE(cy, lid, squint);
       const ap = apertureGeom(g);
       const apD = lensPath(cx, cy, ap, tilt);
       set(el[aperture], 'd', apD);
@@ -837,8 +796,10 @@ export function createFace(mount, theme = {}) {
                           'apertureR', 'irisR', 'clipEyeR'));
 
     // --- brows ------------------------------------------------------------
-    set(el.browL, 'd', browPath(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL));
-    set(el.browR, 'd', browPath(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR));
+    const bL = BROW(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL);
+    const bR = BROW(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR);
+    set(el.browL, 'd', taper(bL.pts, scaleWidths(BROW_W, bL.weight), 6));
+    set(el.browR, 'd', taper(bR.pts, scaleWidths(BROW_W, bR.weight), 6));
 
     // --- mouth ------------------------------------------------------------
     const m = mouthGeometry(p);
