@@ -716,6 +716,32 @@ A new face module supplies:
    and landmark tables stayed in the face module. Expect the same split — a
    shared law, per-face drawing — rather than one implementation with a
    settings object.
+
+   **The eye has been measured, and it does not want to be one feature.** A
+   spike (2026-08-30) ported peep's lid-line + aperture + iris model into wren,
+   inside the lens rings, to see whether wren's simpler bean could be retired.
+   Two results, and they point opposite ways:
+
+   * *The lid curve is already one law, written three times.* wren's `eyePath`
+     is exactly peep's `lensPath(eyeGeom(...))` composed — identical path
+     strings at every sampled lid, squint and tilt. myna's is the same law with
+     two changes it can state as numbers: a 0.6-power lid map and a 0.95 squint
+     gain against peep and wren's linear map and 0.7. That is extractable, and
+     it is the eye's version of what the teeth were.
+   * *The iris stack is not a parameter of it, and must not become one.* At the
+     130 px tile the two models carry near-identical ink (839 px against 823
+     across the eye band), but the gaze signal is halved: 98 changed pixels
+     between full-left and full-right gaze on the bean, 45 on the iris. The
+     cause is specific to wren and worth keeping: peep's beans move against
+     nothing, so peep needs an iris travelling inside an aperture to say where
+     it is looking; wren's bean moves 10 units against a *fixed orange ring*,
+     and that reference frame is a stronger gaze cue than any amount of detail
+     inside the eye. The glasses are not a constraint wren pays for — they are
+     why its simpler eye wins.
+
+   So the eye decomposes as a **lid solve every face shares** plus an **iris
+   layer two of the three draw**, and not as one eye with an `iris: true` flag.
+   Do not re-run this spike; recover it from git if the numbers need auditing.
 4. **`META` and camera landmarks** — `centerX`, visible `crownY` and resting
    `chinY` derive the 4:3 `viewBox` through `viewBoxForHead`; `mouthCrop` remains
    a native-art inspection crop (§ The camera: 4:3, derived from the drawing).
