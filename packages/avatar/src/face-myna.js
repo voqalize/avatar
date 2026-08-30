@@ -42,7 +42,8 @@ import { clamp, lerp } from './params.js';
 import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
-import { lidCurve, lensPath, browDeform, scaleWidths } from './face-features.js';
+import { browDeform, scaleWidths } from './face-features.js';
+import { irisEye } from './face-eyes.js';
 import { taper, taperRing, region } from './line-art.js';
 import { viewBoxForHead } from './camera.js';
 
@@ -102,7 +103,15 @@ const HEAD_TOP = 150;
 // stare — a long-session comfort failure. The power curve spends ~28% by then
 // (a visible flat on the bean top: attentive-relaxed, not sleepy) while a true
 // wide still rounds fully open and closed is unchanged.
-const EYE = { y: 386, dx: 56, rx: 17, ry: 16, lidPow: 0.6, squintGain: 0.95 };
+const EYE = {
+  y: 386, dx: 56, rx: 17, ry: 16, lidPow: 0.6, squintGain: 0.95, lidFollow: 0.22,
+  aperture: { x: 3.0, top: 5.5, bot: 4.5 },
+  // Sized to fill the resting aperture's height rather than float inside it —
+  // this is what "big and dark pupils" means now that the eye has a real iris
+  // instead of a translating bean.
+  irisR: 8.0,
+  irisTravel: { x: 4.5, y: 2.2 },
+};
 const MOUTH = { cx: CX, cy: 492 };
 const MOUTH_APERTURE = 36;
 
@@ -447,29 +456,10 @@ function mouthGeometry(p) {
 // for the two wrong passes (paper-on-ink, then a too-small pupil that read as
 // a startled target) that are not recoverable from the numbers alone.
 
-const EYE_CURVE = lidCurve(EYE);
-
-const LASH_X = 3.0;
-const LASH_TOP = 5.5;
-const LASH_BOT = 4.5;
-
-/** The paper almond inside the lid line, or null once the lid has shut on it. */
-function apertureGeom(g) {
-  const yTop = g.yTop + LASH_TOP;
-  const yBot = g.yBot - LASH_BOT;
-  const rx = g.rx - LASH_X;
-  if (yBot - yTop < 0.5 || rx < 0.5) return null;
-  return { cyMid: (yTop + yBot) / 2, rx, yTop, yBot };
-}
-
-// Sized to fill the resting aperture's height rather than float inside it —
-// this is what "big and dark pupils" means now that the eye has a real iris
-// instead of a translating bean.
-const IRIS_R = 8.0;
-
-// Travel, native units: one corner's worth of paper. At either extreme one
-// sliver closes and the other doubles, which is the whole gaze signal.
-const IRIS_TRAVEL = { x: 4.5, y: 2.2 };
+// myna is an IRIS eye, same as peep and for the same reason: nothing in the
+// drawing gives a solid bean a reference to move against. What myna adds on
+// top is its own — the lash.
+const EYE_DRAW = irisEye(EYE);
 
 /**
  * The upper lash line: lies ON the bean's top edge and ends in a small
@@ -481,8 +471,8 @@ const IRIS_TRAVEL = { x: 4.5, y: 2.2 };
  * anchored at the corner, which the lid never moves.
  * `dir` is −1 for the left eye (flick outward-left), +1 for the right.
  */
-function lashPath(cx, cy, lid, dir) {
-  const topY = EYE_CURVE(cy, lid, 0).ctlTop;
+function lashPath(cx, cy, g, dir) {
+  const topY = g.ctlTop;
   const rx = EYE.rx;
   const at = (u) => {
     const v = 1 - u;
@@ -636,40 +626,20 @@ export function createFace(mount, theme = {}) {
     teeth: $('teeth'), teethLo: $('teethLo'), tongue: $('tongue'),
   };
 
+  const EYE_L = { lid: el.eyeL, aperture: el.apertureL, iris: el.irisL, clip: el.clipEyeL };
+  const EYE_R = { lid: el.eyeR, aperture: el.apertureR, iris: el.irisR, clip: el.clipEyeR };
+
   function apply(p) {
     poseTransforms(p, set, el, POSE);
 
-    // The lid line holds still and the iris carries the gaze — see the eyes
-    // section. The lid follows vertical gaze downward only: looking up
-    // genuinely does widen the aperture, so there is nothing to add there.
-    const lidFollow = Math.max(0, p.pupilY) * 0.22;
-    const lidL = p.lidL + lidFollow;
-    const lidR = p.lidR + lidFollow;
     // Both beans exactly on EYE.y: a ±1 stagger here read as head tilt at
     // rest, and rest must be level (see BROW_R).
-    const eye = (cx, cy, lid, squint, tilt, aperture, iris, clip) => {
-      const g = EYE_CURVE(cy, lid, squint);
-      const ap = apertureGeom(g);
-      const apD = lensPath(cx, cy, ap, tilt);
-      set(el[aperture], 'd', apD);
-      // The iris is clipped to the APERTURE, not to the lid line, so it is
-      // cropped by the same edge the paper is — a shut lid, which has no
-      // aperture at all, takes the iris with it and needs no opacity logic.
-      set(el[clip], 'd', apD);
-      set(el[iris], 'cx', f(cx + p.pupilX * IRIS_TRAVEL.x));
-      // Anchored to the aperture's midline rather than the eye's, so a
-      // half-closed eye keeps the iris centred in the slit instead of showing
-      // a band of paper above it.
-      set(el[iris], 'cy', f((ap ? ap.cyMid : cy) + p.pupilY * IRIS_TRAVEL.y));
-      set(el[iris], 'r', f(IRIS_R));
-      return lensPath(cx, cy, g, tilt);
-    };
-    set(el.eyeL, 'd', eye(CX - EYE.dx, EYE.y, lidL, p.squintL, -3,
-                          'apertureL', 'irisL', 'clipEyeL'));
-    set(el.eyeR, 'd', eye(CX + EYE.dx, EYE.y, lidR, p.squintR, 3,
-                          'apertureR', 'irisR', 'clipEyeR'));
-    set(el.lashL, 'd', lashPath(CX - EYE.dx, EYE.y, lidL, -1));
-    set(el.lashR, 'd', lashPath(CX + EYE.dx, EYE.y, lidR, 1));
+    const gL = EYE_DRAW(set, EYE_L, { cx: CX - EYE.dx, cy: EYE.y, tilt: -3,
+      lid: p.lidL, squint: p.squintL, pupilX: p.pupilX, pupilY: p.pupilY });
+    const gR = EYE_DRAW(set, EYE_R, { cx: CX + EYE.dx, cy: EYE.y, tilt: 3,
+      lid: p.lidR, squint: p.squintR, pupilX: p.pupilX, pupilY: p.pupilY });
+    set(el.lashL, 'd', lashPath(CX - EYE.dx, EYE.y, gL, -1));
+    set(el.lashR, 'd', lashPath(CX + EYE.dx, EYE.y, gR, 1));
 
     const bL = BROW(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL);
     const bR = BROW(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR);

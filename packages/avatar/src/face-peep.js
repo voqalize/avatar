@@ -90,7 +90,8 @@ import { clamp, lerp } from './params.js';
 import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
-import { lidCurve, lensPath, browDeform, scaleWidths } from './face-features.js';
+import { browDeform, scaleWidths } from './face-features.js';
+import { irisEye } from './face-eyes.js';
 import { taper, taperRing, region, polyD, rng } from './line-art.js';
 import { viewBoxForHead } from './camera.js';
 
@@ -189,7 +190,17 @@ const BROW_R = [[CX + 22, 344], [CX + 40, 337], [CX + 58, 333], [CX + 73, 335],
 // You cannot cut an almond aperture from a round bean without making the lid
 // line absurdly heavy, and a round aperture is exactly what read as a target.
 // Widening the bean was the unlock; see the eyes section.
-const EYE = { y: 386, dx: 55, rx: 16.5, ry: 16.5, lidPow: 1, squintGain: 0.7 };
+const EYE = {
+  y: 386, dx: 55, rx: 16.5, ry: 16.5, lidPow: 1, squintGain: 0.7, lidFollow: 0.22,
+  // The lid line's inset, in drawn units. Heavier above than below: an upper
+  // lid carries the lashes and reads as the eye's weight, and a lower line as
+  // heavy makes a doll.
+  aperture: { x: 3.0, top: 5.5, bot: 4.5 },
+  // Sized to fill the resting aperture's height (26 − 5.5 − 4.5 = 16 drawn
+  // units) rather than float inside it.
+  irisR: 8.0,
+  irisTravel: { x: 4.5, y: 2.2 },
+};
 const NOSE_TOP = 402;
 const MOUTH = { cx: CX, cy: 488 };
 
@@ -567,37 +578,11 @@ function mouthGeometry(p) {
 // reading got stronger.
 // ---------------------------------------------------------------------------
 
-// The silhouette itself is `lidCurve`/`lensPath` in face-features.js — five
-// rigs computed it identically. What stays here is what makes this eye THIS
-// eye: a paper almond cut out of the lid line, and an ink iris inside it.
-const EYE_CURVE = lidCurve(EYE);
-
-// The lid line, as constant distances. Heavier above than below: an upper lid
-// carries the lashes and reads as the eye's weight, and a lower line as heavy
-// makes a doll. LASH_X is the corner, where the line has to stay thin or the
-// almond loses its points and rounds back into the target shape.
-const LASH_X = 3.0;
-const LASH_TOP = 5.5;
-const LASH_BOT = 4.5;
-
-/** The paper almond inside the lid line, or null once the lid has shut on it. */
-function apertureGeom(g) {
-  const yTop = g.yTop + LASH_TOP;
-  const yBot = g.yBot - LASH_BOT;
-  const rx = g.rx - LASH_X;
-  if (yBot - yTop < 0.5 || rx < 0.5) return null;
-  return { cyMid: (yTop + yBot) / 2, rx, yTop, yBot };
-}
-
-// Sized to fill the resting aperture's height (26 − 5.5 − 4.5 = 16 drawn units)
-// rather than float inside it, so both lids crop it and the paper survives only
-// as two corner slivers.
-const IRIS_R = 8.0;
-
-// Travel, native units. x is roughly one corner's worth of paper: at either
-// extreme one sliver closes and the other doubles, which is the whole gaze
-// signal.
-const IRIS_TRAVEL = { x: 4.5, y: 2.2 };
+// peep is an IRIS eye: a paper almond cut out of the lid line with an ink iris
+// inside it. Its beans move against nothing — there is no ring or socket for a
+// solid mark to shift against — so the gaze has to be carried by structure
+// inside the eye. See face-eyes.js for the rule and the numbers behind it.
+const EYE_DRAW = irisEye(EYE);
 
 // ---------------------------------------------------------------------------
 // Generators: brows
@@ -765,35 +750,19 @@ export function createFace(mount, theme = {}) {
     teeth: $('teeth'), teethLo: $('teethLo'), tongue: $('tongue'),
   };
 
+  const EYE_L = { lid: el.eyeL, aperture: el.apertureL, iris: el.irisL, clip: el.clipEyeL };
+  const EYE_R = { lid: el.eyeR, aperture: el.apertureR, iris: el.irisR, clip: el.clipEyeR };
+
   function apply(p) {
     poseTransforms(p, set, el, POSE);
 
     // --- eyes -------------------------------------------------------------
-    // The lid line holds still and the iris carries the gaze. The lid follows
-    // vertical gaze downward only: looking up genuinely does widen the
-    // aperture, so there is nothing to add on that side.
-    const lidFollow = Math.max(0, p.pupilY) * 0.22;
-    const eye = (cx, cy, lid, squint, tilt, aperture, iris, clip) => {
-      const g = EYE_CURVE(cy, lid, squint);
-      const ap = apertureGeom(g);
-      const apD = lensPath(cx, cy, ap, tilt);
-      set(el[aperture], 'd', apD);
-      // The iris is clipped to the APERTURE, not to the lid line, so it is
-      // cropped by the same edge the paper is — and a shut lid, which has no
-      // aperture at all, takes the iris with it and needs no opacity logic.
-      set(el[clip], 'd', apD);
-      set(el[iris], 'cx', f(cx + p.pupilX * IRIS_TRAVEL.x));
-      // Anchored to the aperture's midline rather than the eye's, so a
-      // half-closed eye keeps the iris centred in the slit instead of showing
-      // a band of paper above it.
-      set(el[iris], 'cy', f((ap ? ap.cyMid : cy) + p.pupilY * IRIS_TRAVEL.y));
-      set(el[iris], 'r', f(IRIS_R));
-      return lensPath(cx, cy, g, tilt);
-    };
-    set(el.eyeL, 'd', eye(CX - EYE.dx, EYE.y + 1, p.lidL + lidFollow, p.squintL, -9,
-                          'apertureL', 'irisL', 'clipEyeL'));
-    set(el.eyeR, 'd', eye(CX + EYE.dx, EYE.y - 1, p.lidR + lidFollow, p.squintR, 8,
-                          'apertureR', 'irisR', 'clipEyeR'));
+    // The ±1 y stagger and the −9/+8 tilts are peep's drawn asymmetry: they
+    // survive every pose because they are the face's, not the eye type's.
+    EYE_DRAW(set, EYE_L, { cx: CX - EYE.dx, cy: EYE.y + 1, tilt: -9,
+      lid: p.lidL, squint: p.squintL, pupilX: p.pupilX, pupilY: p.pupilY });
+    EYE_DRAW(set, EYE_R, { cx: CX + EYE.dx, cy: EYE.y - 1, tilt: 8,
+      lid: p.lidR, squint: p.squintR, pupilX: p.pupilX, pupilY: p.pupilY });
 
     // --- brows ------------------------------------------------------------
     const bL = BROW(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL);

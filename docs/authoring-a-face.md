@@ -344,10 +344,21 @@ layering is the whole idea —
 2. **the marks** (your module): width profiles, brow point lists, which
    optional layers exist at all. This is the drawing and it does not
    generalise.
-3. **the type** (your module, composing layer 1): wren fills the lid curve and
-   stops; peep and myna cut a paper aperture out of it and put an iris inside.
-   Those are two *compositions* of one silhouette, not one eye behind a flag,
-   and a third eye is a third composition. Pick by the rule below.
+3. **the type** (`packages/avatar/src/face-eyes.js`): `beanEye` fills the lid
+   curve and stops; `irisEye` cuts a paper almond out of it and hangs a clipped
+   iris inside. Two *compositions* of one silhouette, not one eye behind a
+   flag, and a third eye is a third function there. Both take the elements they
+   write — never element names — so your module keeps its markup, its ids and
+   its paint order, and hands down the nodes. Both hand back the lid geometry
+   they solved, which is how myna's lash rides the bean's own top control point
+   without recomputing anything.
+
+   **Pick your eye type by the drawing, not by which one sounds better:** does
+   your face give the eye a fixed reference frame to move against? wren's
+   glasses are one, and a solid bean shifting inside a ring that does not move
+   beats structure inside the eye — at the 130 px tile, full-left to full-right
+   gaze moves 98 pixels on the bean against 45 on an iris, for the same ink.
+   peep's beans move against nothing, so peep needs the iris.
 
 What earns a scalar there is a face that already differs in it — `lidPow` and
 `squintGain` on the eye, six gains on the brow. What does not is a knob nobody

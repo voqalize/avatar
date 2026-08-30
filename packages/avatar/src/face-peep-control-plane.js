@@ -11,7 +11,8 @@
 
 import { clamp, lerp } from './params.js';
 import { f, createFaceShell, faceApi, poseTransforms, pairedTeeth } from './face-core.js';
-import { lidCurve, lensPath, browDeform, scaleWidths } from './face-features.js';
+import { browDeform, scaleWidths } from './face-features.js';
+import { beanEye } from './face-eyes.js';
 import { taper, taperRing, region } from './line-art.js';
 
 export const THEME = {
@@ -31,7 +32,7 @@ const BROW_L = [[CX - 20, 347], [CX - 40, 340], [CX - 60, 336], [CX - 76, 337],
   [CX - 86, 339], [CX - 94, 343], [CX - 99, 348]];
 const BROW_R = [[CX + 22, 344], [CX + 40, 337], [CX + 58, 333], [CX + 73, 335],
   [CX + 83, 337], [CX + 90, 341], [CX + 95, 346]];
-const EYE = { y: 386, dx: 55, rx: 14, ry: 16.5, lidPow: 1, squintGain: 0.7 };
+const EYE = { y: 386, dx: 55, rx: 14, ry: 16.5, lidPow: 1, squintGain: 0.7, lidFollow: 0.22 };
 const MOUTH = { cx: CX, cy: 488 };
 const MOUTH_APERTURE = 38;
 
@@ -80,7 +81,7 @@ function mouthGeometry(p) {
   };
 }
 
-const EYE_CURVE = lidCurve(EYE);
+const EYE_DRAW = beanEye(EYE);
 const BROW_GAINS = { up: 15, down: 15, downSkew: 0, inner: 11, angle: 12, bulk: 0 };
 const BROW_W = [3.5, 17, 8];
 const BROW = browDeform(BROW_GAINS);
@@ -113,14 +114,16 @@ export function createFace(mount, theme = {}) {
     mouthIn: $('mouthIn'), lips: $('lips'), clipMouth: $('clipMouthP'),
     teeth: $('teeth'), teethLo: $('teethLo'), tongue: $('tongue'),
   };
+  const EYE_L = { lid: el.eyeL };
+  const EYE_R = { lid: el.eyeR };
+
   function apply(p) {
     poseTransforms(p, set, el, POSE);
     set(el.eyes, 'transform', `translate(${f(p.pupilX * 11)} ${f(p.pupilY * 8)})`);
-    const lidFollow = Math.max(0, p.pupilY) * 0.22;
-    const bean = (cx, cy, lid, squint, tilt) =>
-      lensPath(cx, cy, EYE_CURVE(cy, lid, squint), tilt);
-    set(el.eyeL, 'd', bean(CX - EYE.dx, EYE.y + 1, p.lidL + lidFollow, p.squintL, -9));
-    set(el.eyeR, 'd', bean(CX + EYE.dx, EYE.y - 1, p.lidR + lidFollow, p.squintR, 8));
+    EYE_DRAW(set, EYE_L, { cx: CX - EYE.dx, cy: EYE.y + 1, tilt: -9,
+      lid: p.lidL, squint: p.squintL, pupilX: p.pupilX, pupilY: p.pupilY });
+    EYE_DRAW(set, EYE_R, { cx: CX + EYE.dx, cy: EYE.y - 1, tilt: 8,
+      lid: p.lidR, squint: p.squintR, pupilX: p.pupilX, pupilY: p.pupilY });
     const bL = BROW(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL);
     const bR = BROW(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR);
     set(el.browL, 'd', taper(bL.pts, scaleWidths(BROW_W, bL.weight), 6));

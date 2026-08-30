@@ -29,7 +29,8 @@ import { clamp, lerp } from './params.js';
 import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
-import { lidCurve, lensPath, browDeform, scaleWidths } from './face-features.js';
+import { browDeform, scaleWidths } from './face-features.js';
+import { beanEye } from './face-eyes.js';
 import { taper, taperRing, region } from './line-art.js';
 import { viewBoxForHead } from './camera.js';
 
@@ -56,7 +57,7 @@ const CX = FRAME.centerX;
 const HEAD_TOP = 148;
 const CHIN_Y = 572;
 
-const EYE = { y: 386, dx: 55, rx: 15, ry: 17.5, lidPow: 1, squintGain: 0.7 };
+const EYE = { y: 386, dx: 55, rx: 15, ry: 17.5, lidPow: 1, squintGain: 0.7, lidFollow: 0.22 };
 const NOSE_TOP = 408;
 const MOUTH = { cx: CX, cy: 486 };
 const MOUTH_APERTURE = 36;
@@ -281,7 +282,7 @@ function mouthGeometry(p) {
 // an iris travelling inside an aperture because its beans move against
 // nothing; wren's bean moves against a fixed ring, and a solid mark shifting
 // against that reference is the stronger gaze cue at tile size.
-const EYE_CURVE = lidCurve(EYE);
+const EYE_DRAW = beanEye(EYE);
 
 // Brows: the shared deformation, peep's gains, wren's points and a lighter
 // profile — the mark is thinner because the glasses already carry weight here.
@@ -376,6 +377,9 @@ export function createFace(mount, theme = {}) {
     teeth: $('teeth'), teethLo: $('teethLo'), tongue: $('tongue'),
   };
 
+  const EYE_L = { lid: el.eyeL };
+  const EYE_R = { lid: el.eyeR };
+
   function apply(p) {
     poseTransforms(p, set, el, POSE);
 
@@ -385,11 +389,10 @@ export function createFace(mount, theme = {}) {
     // peep's 7→11 raise, hit from the other side.
     set(el.eyes, 'transform', `translate(${f(p.pupilX * 10)} ${f(p.pupilY * 7)})`);
 
-    const lidFollow = Math.max(0, p.pupilY) * 0.22;
-    const bean = (cx, cy, lid, squint, tilt) =>
-      lensPath(cx, cy, EYE_CURVE(cy, lid, squint), tilt);
-    set(el.eyeL, 'd', bean(CX - EYE.dx, EYE.y + 1, p.lidL + lidFollow, p.squintL, -3));
-    set(el.eyeR, 'd', bean(CX + EYE.dx, EYE.y - 1, p.lidR + lidFollow, p.squintR, 3));
+    EYE_DRAW(set, EYE_L, { cx: CX - EYE.dx, cy: EYE.y + 1, tilt: -3,
+      lid: p.lidL, squint: p.squintL, pupilX: p.pupilX, pupilY: p.pupilY });
+    EYE_DRAW(set, EYE_R, { cx: CX + EYE.dx, cy: EYE.y - 1, tilt: 3,
+      lid: p.lidR, squint: p.squintR, pupilX: p.pupilX, pupilY: p.pupilY });
 
     const bL = BROW(BROW_L, p.browRaiseL, p.browAngleL, p.browInnerL);
     const bR = BROW(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR);
