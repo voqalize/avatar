@@ -275,35 +275,6 @@ function mouthGeometry(p) {
   return { contour, profile, cx, cy, w, h, topY, botY, innerTop, innerBot, open, tuck };
 }
 
-/** peep's dental-arch teeth, verbatim but for the width factors. */
-function teethPath(m, amt, lower) {
-  if (amt < 0.01) return '';
-  const gap = m.innerBot - m.innerTop;
-  if (gap < 2) return '';
-  const tw = m.w * (lower ? 0.6 : 0.76);
-  const cap = lower ? 0.5 : 0.5 + 0.35 * m.tuck;
-  const th = Math.min(amt * (lower ? 13 : 20), gap * cap);
-
-  if (lower) {
-    const base = m.innerBot + 8;
-    const edge = m.innerBot - th;
-    const end = m.innerBot - th * 0.35;
-    return (
-      `M${f(m.cx - tw)} ${f(base)}L${f(m.cx + tw)} ${f(base)}` +
-      `L${f(m.cx + tw * 0.92)} ${f(end)}` +
-      `Q${f(m.cx)} ${f(2 * edge - end)} ${f(m.cx - tw * 0.92)} ${f(end)}Z`
-    );
-  }
-  const top = m.innerTop - 8;
-  const edge = m.innerTop + th;
-  const end = m.innerTop + th * 0.35;
-  return (
-    `M${f(m.cx - tw)} ${f(top)}L${f(m.cx + tw)} ${f(top)}` +
-    `L${f(m.cx + tw * 0.92)} ${f(end)}` +
-    `Q${f(m.cx)} ${f(2 * edge - end)} ${f(m.cx - tw * 0.92)} ${f(end)}Z`
-  );
-}
-
 // Eyes: peep's bean model, verbatim but for the tilt values (wren's beans sit
 // nearly level — the glasses rings already give the face its geometry, and a
 // strong bean tilt inside a perfect circle reads as misaligned lenses).
@@ -447,7 +418,7 @@ export function createFace(mount, theme = {}) {
     // and grey on a two-value face reads as a rendering fault (peep's F bug).
     set(el.mouthIn, 'opacity', f(clamp((m.innerBot - m.innerTop) / 3)));
 
-    pairedTeeth(p, set, el, teethPath, m);
+    pairedTeeth(p, set, el, m);
 
     const tg = clamp(p.tongue);
     set(el.tongue, 'cx', f(m.cx));

@@ -36,11 +36,20 @@ export function createFaceShell(mount, id, markupHtml) {
   mount.innerHTML = markupHtml;
   const svg = mount.querySelector(`#${id}`);
   const $ = (n) => svg.querySelector(`#${id}-${n}`);
-  const prev = new Map();
+  // Keyed on the NODE, not on its id. The id was load-bearing in a way nothing
+  // said out loud: `node.id + attr` collapses to just the attribute name for
+  // any element without an id, so every id-less node shared one memo slot per
+  // attribute and the second one to ask for a value the first had already
+  // written was silently skipped. Nothing was broken by it, because every
+  // animated element here happens to carry an id — which is exactly what makes
+  // it the kind of trap a shared feature would spring, since a feature that
+  // emits its own marks has no reason to name every one of them.
+  const prev = new WeakMap();
   const set = (node, attr, val) => {
-    const k = node.id + attr;
-    if (prev.get(k) === val) return;
-    prev.set(k, val);
+    let attrs = prev.get(node);
+    if (attrs === undefined) prev.set(node, (attrs = new Map()));
+    if (attrs.get(attr) === val) return;
+    attrs.set(attr, val);
     node.setAttribute(attr, val);
   };
   return { svg, $, set };
@@ -169,12 +178,70 @@ export function poseTransforms(p, set, el, spec) {
 }
 
 /**
- * Upper-and-lower teeth pair (peep, wren). Lower teeth appear only once
- * the mouth is genuinely open: below that the lower lip is over them and
- * drawing them turns every mid-open viseme into a grin; above it, their
- * absence is what made viseme D read as a cave.
+ * The teeth, as a dental arch rather than a bar.
+ *
+ * The incisal edge follows the smile arc; a dead-straight one is most of what
+ * makes a white rect read as a strip of paper in the mouth. Deliberately no
+ * per-tooth lines: at avatar size they are sub-pixel, and a single midline tick
+ * is exactly what makes a cheap avatar look like it has a gap tooth. The row
+ * runs well past the lip and is cut off by the aperture clip, so the strip's
+ * outer boundary is always the lip's own inner contour.
+ *
+ * Every rig that has ever drawn teeth here wrote this function identically —
+ * four copies, byte-for-byte — so it is not per-character geometry, and the
+ * only thing that made it look per-character was living in the face files. It
+ * takes no spec because it needs none: every length is a fraction of the
+ * mouth's own `w` or of the aperture it hangs in, so it follows a wider or
+ * narrower mouth without being told. A rig that genuinely needs a different
+ * tooth row states so by growing a spec entry here, not by forking the file.
  */
-export function pairedTeeth(p, set, el, teethPath, m) {
+function teethPath(m, amt, lower) {
+  if (amt < 0.01) return '';
+  const gap = m.innerBot - m.innerTop;
+  if (gap < 2) return '';
+  const tw = m.w * (lower ? 0.6 : 0.76);
+  // Normally never more than half the aperture: teeth that meet across the gap
+  // close the mouth optically no matter how far mouthOpen has driven the
+  // contour. F/V is the exception and the reason the cap is not a constant —
+  // there the upper teeth are literally resting ON the lower lip, so the dark
+  // is a rim rather than a cavity, and holding G to the same half-and-half
+  // split as B left the two letters drawing the same slit.
+  const cap = lower ? 0.5 : 0.5 + 0.35 * m.tuck;
+  const th = Math.min(amt * (lower ? 13 : 20), gap * cap);
+
+  if (lower) {
+    // The strip runs off past the lip on the far side so its outer boundary is
+    // always the clip, never an edge of its own.
+    const base = m.innerBot + 8;
+    const edge = m.innerBot - th; // deepest point, at the midline
+    const end = m.innerBot - th * 0.35; // shallowest, at the corners
+    return (
+      `M${f(m.cx - tw)} ${f(base)}L${f(m.cx + tw)} ${f(base)}` +
+      `L${f(m.cx + tw * 0.92)} ${f(end)}` +
+      `Q${f(m.cx)} ${f(2 * edge - end)} ${f(m.cx - tw * 0.92)} ${f(end)}Z`
+    );
+  }
+  const top = m.innerTop - 8;
+  const edge = m.innerTop + th;
+  const end = m.innerTop + th * 0.35;
+  return (
+    `M${f(m.cx - tw)} ${f(top)}L${f(m.cx + tw)} ${f(top)}` +
+    `L${f(m.cx + tw * 0.92)} ${f(end)}` +
+    `Q${f(m.cx)} ${f(2 * edge - end)} ${f(m.cx - tw * 0.92)} ${f(end)}Z`
+  );
+}
+
+/**
+ * Upper-and-lower teeth pair. Lower teeth appear only once the mouth is
+ * genuinely open: below that the lower lip is over them and drawing them turns
+ * every mid-open viseme into a grin; above it, their absence is what made
+ * viseme D read as a cave.
+ *
+ * `m` is the face's own mouth geometry — the contract is five fields
+ * (`cx`, `w`, `innerTop`, `innerBot`, `tuck`), which every mouth already
+ * returns because the clip and the tongue need them too.
+ */
+export function pairedTeeth(p, set, el, m) {
   set(el.teeth, 'd', teethPath(m, clamp(p.teethUpper), false));
   set(el.teethLo, 'd', teethPath(m, clamp(p.teethUpper) * clamp((m.open - 0.45) / 0.4), true));
 }

@@ -317,11 +317,16 @@ memoizer and the same return shape. That convergence now lives in
 - the shell: mount, id-scoped selector, the memoized `set(node, attr, val)`;
 - `poseTransforms(p, set, el, POSE)` — lean, shoulders, parallax, driven by a
   per-rig `POSE` spec of named scalars (below);
-- the shared feature fragments a rig opts into where its model matches:
-  `pairedTeeth` (peep, wren). Two more — `irisLidEyes` and `browPair` — were
-  removed with the rigs that used them; a future rig with sclera and
-  endpoint-pair brows should recover them from git history rather than
-  re-derive them;
+- the teeth, outright: `pairedTeeth(p, set, el, m)` draws both rows from your
+  mouth geometry and owns the dental arch itself. Every rig that has drawn
+  teeth here wrote that arch identically, so it takes no spec — every length is
+  a fraction of the mouth's own `w` or of the aperture it hangs in, and it
+  follows a wider or narrower mouth without being told. It asks five fields of
+  `m` (`cx`, `w`, `innerTop`, `innerBot`, `tuck`), which your mouth already
+  returns because the clip and the tongue need them. Two further fragments —
+  `irisLidEyes` and `browPair` — were removed with the rigs that used them; a
+  future rig with sclera and endpoint-pair brows should recover them from git
+  history rather than re-derive them;
 - the shared constants: lean scale `0.055`, head-roll multipliers ×5.5
   features / ×1.5 torso, shrug/tilt derivation `shrug=(L+R)/2`, `tilt=(R−L)/2`,
   lower-teeth reveal ramp `(open − 0.45) / 0.4`, tongue gate `> 0.02`;
@@ -697,14 +702,20 @@ A new face module supplies:
    `units`. Start from the rig whose construction is closest and re-derive
    every *travel* in your own units; keep degrees as judgements about your own
    collar/neck geometry, not conversions.
-3. **Feature blocks** — use the face-core fragments where your model matches
-   (`pairedTeeth` is the one that survives; recover `irisLidEyes` / `browPair`
-   from git if you draw sclera or endpoint-pair brows); write your own where the
-   character disagrees. The mouth is always yours: honour the channel
-   semantics in *Obligations* above. peep's bean-eye, point-list-brow and
-   contour-mouth generators carried into wren as copies with re-derived
-   constants — if a third line-art face repeats that, extract them into
-   parameterized factories the way the stroke engine was extracted.
+3. **Feature blocks** — the teeth are face-core's; call `pairedTeeth` and draw
+   no arch of your own. Recover `irisLidEyes` / `browPair` from git if you draw
+   sclera or endpoint-pair brows; write your own where the character disagrees.
+   The mouth is always yours: honour the channel semantics in *Obligations*
+   above. peep's bean-eye, point-list-brow and contour-mouth generators carried
+   into wren as copies with re-derived constants, and then into myna the same
+   way — so the third line-art face has now repeated it, and extracting those
+   generators into parameterized factories, the way the stroke engine was
+   extracted, is live work rather than a contingency. Note what the teeth
+   showed about the shape that extraction should take: what came out was the
+   *arch*, a law with no per-face numbers left in it, while the width profiles
+   and landmark tables stayed in the face module. Expect the same split — a
+   shared law, per-face drawing — rather than one implementation with a
+   settings object.
 4. **`META` and camera landmarks** — `centerX`, visible `crownY` and resting
    `chinY` derive the 4:3 `viewBox` through `viewBoxForHead`; `mouthCrop` remains
    a native-art inspection crop (§ The camera: 4:3, derived from the drawing).

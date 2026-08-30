@@ -523,59 +523,13 @@ function mouthGeometry(p) {
 
   // Where the DARK actually is. Below the compensation ramp these come out
   // crossed — innerBot above innerTop — which is the correct answer for a shut
-  // mouth and is what teethPath and the tongue test against. Recomputed rather
+  // mouth and is what face-core's teeth and the tongue test against. Recomputed rather
   // than assumed equal to apTop/apBot, because the clamp above and the ramp
   // both mean the aperture asked for is not always the aperture drawn.
   const innerTop = cornerMid + 0.75 * topY + halfUp;
   const innerBot = cornerMid + 0.75 * botY - halfLo;
 
   return { contour, profile, cx, cy, w, h, topY, botY, innerTop, innerBot, open, tuck };
-}
-
-/**
- * The upper teeth as a dental arch rather than a bar.
- *
- * The incisal edge follows the smile arc; a dead-straight one is most of what
- * makes a white rect read as a strip of paper in the mouth. Deliberately no
- * per-tooth lines: at avatar size they are sub-pixel, and a single midline tick
- * is exactly what makes a cheap avatar look like it has a gap tooth. The top
- * runs well above the lip and is cut off by the aperture clip, so the strip's
- * upper boundary is always the lip's own inner contour.
- */
-function teethPath(m, amt, lower) {
-  if (amt < 0.01) return '';
-  const gap = m.innerBot - m.innerTop;
-  if (gap < 2) return '';
-  const tw = m.w * (lower ? 0.6 : 0.76);
-  // Normally never more than half the aperture: teeth that meet across the gap
-  // close the mouth optically no matter how far mouthOpen has driven the
-  // contour. F/V is the exception and the reason the cap is not a constant —
-  // there the upper teeth are literally resting ON the lower lip, so the dark
-  // is a rim rather than a cavity, and holding G to the same half-and-half
-  // split as B left the two letters drawing the same slit.
-  const cap = lower ? 0.5 : 0.5 + 0.35 * m.tuck;
-  const th = Math.min(amt * (lower ? 13 : 20), gap * cap);
-
-  if (lower) {
-    // The strip runs off past the lip on the far side so its outer boundary is
-    // always the clip, never an edge of its own.
-    const base = m.innerBot + 8;
-    const edge = m.innerBot - th; // deepest point, at the midline
-    const end = m.innerBot - th * 0.35; // shallowest, at the corners
-    return (
-      `M${f(m.cx - tw)} ${f(base)}L${f(m.cx + tw)} ${f(base)}` +
-      `L${f(m.cx + tw * 0.92)} ${f(end)}` +
-      `Q${f(m.cx)} ${f(2 * edge - end)} ${f(m.cx - tw * 0.92)} ${f(end)}Z`
-    );
-  }
-  const top = m.innerTop - 8;
-  const edge = m.innerTop + th;
-  const end = m.innerTop + th * 0.35;
-  return (
-    `M${f(m.cx - tw)} ${f(top)}L${f(m.cx + tw)} ${f(top)}` +
-    `L${f(m.cx + tw * 0.92)} ${f(end)}` +
-    `Q${f(m.cx)} ${f(2 * edge - end)} ${f(m.cx - tw * 0.92)} ${f(end)}Z`
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -904,7 +858,7 @@ export function createFace(mount, theme = {}) {
     // rendering fault. F, at mouthOpen 0.22, was a grey hole.
     set(el.mouthIn, 'opacity', f(clamp((m.innerBot - m.innerTop) / 3)));
 
-    pairedTeeth(p, set, el, teethPath, m);
+    pairedTeeth(p, set, el, m);
 
     const tg = clamp(p.tongue);
     set(el.tongue, 'cx', f(m.cx));

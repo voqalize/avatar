@@ -11,7 +11,7 @@
  * so two baselines from the same tree must be pixel-identical, and
  * `apps/authoring/tools/diff.mjs` between baselines is a real refactor-safety check.
  *
- * The avatar list is read from `src/faces.js` through the served page — the
+ * The avatar list is read from `packages/avatar/src/faces.js` through the served page — the
  * all-three tooling table, not a runtime registry (there is none) — so a face
  * added there joins the baseline without touching this file.
  */
@@ -32,7 +32,7 @@ try {
   // Ask the face table itself which faces exist.
   const probe = await openSettled(browser, server.port, 'apps/authoring/index.html');
   const names = await probe.page.evaluate(async () => {
-    const mod = await import('/src/faces.js');
+    const mod = await import('/packages/avatar/src/faces.js');
     return mod.FACE_NAMES;
   });
   await probe.page.close();

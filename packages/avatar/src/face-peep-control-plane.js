@@ -79,23 +79,6 @@ function mouthGeometry(p) {
   };
 }
 
-function teethPath(m, amt, lower) {
-  if (amt < 0.01) return '';
-  const gap = m.innerBot - m.innerTop;
-  if (gap < 2) return '';
-  const tw = m.w * (lower ? 0.6 : 0.76);
-  const cap = lower ? 0.5 : 0.5 + 0.35 * m.tuck;
-  const th = Math.min(amt * (lower ? 13 : 20), gap * cap);
-  if (lower) {
-    const base = m.innerBot + 8, edge = m.innerBot - th, end = m.innerBot - th * 0.35;
-    return `M${f(m.cx - tw)} ${f(base)}L${f(m.cx + tw)} ${f(base)}`
-      + `L${f(m.cx + tw * 0.92)} ${f(end)}Q${f(m.cx)} ${f(2 * edge - end)} ${f(m.cx - tw * 0.92)} ${f(end)}Z`;
-  }
-  const top = m.innerTop - 8, edge = m.innerTop + th, end = m.innerTop + th * 0.35;
-  return `M${f(m.cx - tw)} ${f(top)}L${f(m.cx + tw)} ${f(top)}`
-    + `L${f(m.cx + tw * 0.92)} ${f(end)}Q${f(m.cx)} ${f(2 * edge - end)} ${f(m.cx - tw * 0.92)} ${f(end)}Z`;
-}
-
 function eyePath(cx, cy, lid, squint, tiltDeg) {
   const L = clamp(lid);
   const topY = lerp(cy - EYE.ry * 1.05, cy - EYE.ry * 0.42, L);
@@ -156,7 +139,7 @@ export function createFace(mount, theme = {}) {
     const m = mouthGeometry(p), contour = region(m.contour);
     set(el.mouthIn, 'd', contour); set(el.clipMouth, 'd', contour); set(el.lips, 'd', taperRing(m.contour, m.profile, 12));
     set(el.mouthIn, 'opacity', f(clamp((m.innerBot - m.innerTop) / 3)));
-    pairedTeeth(p, set, el, teethPath, m);
+    pairedTeeth(p, set, el, m);
     const tg = clamp(p.tongue);
     set(el.tongue, 'cx', f(m.cx)); set(el.tongue, 'cy', f(m.innerBot + 6 - tg * ((m.innerBot - m.innerTop) * 0.8 + 6)));
     set(el.tongue, 'rx', f(m.w * 0.58)); set(el.tongue, 'ry', '8'); set(el.tongue, 'opacity', tg > 0.02 ? '1' : '0');
