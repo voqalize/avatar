@@ -191,3 +191,112 @@ export function browDeform(G) {
 
 /** Apply a brow's width multiplier to its profile, allocating nothing at 1. */
 export const scaleWidths = (ws, k) => (k === 1 ? ws : ws.map((w) => w * k));
+
+// ---------------------------------------------------------------------------
+// The mouth contour.
+//
+// ONE closed contour used three ways — filled with ink for the interior,
+// outlined with a tapered ring for the lips, and used as the clip for teeth and
+// tongue. That is the whole model, and it is why a closed mouth needs no
+// special case: at rest the contour is a degenerate lens, the fill collapses to
+// nothing, and what is left is the ring.
+//
+// Three rigs solved it and two of them agreed on twenty-seven lines out of
+// thirty; all three differences were scalars. The third, myna, adds one real
+// law — press changes the mouth's SHAPE and not only its weight — and that is
+// `pressNeutral` below.
+//
+// WHAT IS NOT HERE, deliberately: the width profile. `taperRing` samples a
+// profile across the whole mark, so five stops against nine is topology rather
+// than amplitude — peep's ring is thin-fat-thin-fat-thin, myna's carries a
+// cupid's-bow notch — and the number of stops also decides which of them are
+// the lip centres. It is the drawing. The face module passes a `lips(t, c)`
+// returning `{ profile, halfUp, halfLo }`, and owns every one of those
+// numbers. `t` is the press thinning already applied; `c` is the clamped
+// channels, because a profile may be a SHAPE and not only a thickness —
+// myna's cupid's-bow notch irons flat under press, which no amount of `t`
+// can say.
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {object} S
+ *   cx, cy         where the mouth sits
+ *   widthBase      half-width at mouthWidth = 0…
+ *   widthGain      …and what a full mouthWidth adds
+ *   cornerPx       px of corner lift at a full smile
+ *   aperture       px of VISIBLE DARK at mouthOpen = 1. Bounded by the chin,
+ *                  not by taste: these rigs have no jaw drop, so a fully open
+ *                  mouth has to fit the lower face that is already drawn.
+ *   pressThin      how much a full press thins the lip band
+ *   pressNeutral   how much a full press pulls the corner lift toward zero.
+ *                  0 on peep and wren. myna spends it because a bilabial
+ *                  closure has to render as a pressed BAND — corners
+ *                  neutralised, bow ironed flat — or viseme A is
+ *                  indistinguishable from idle X and the lipsync reads mushy
+ *                  however good the timing is. The pressed band is the anchor
+ *                  viewers use to verify sync, which is why this is a law and
+ *                  not a nicety.
+ */
+export function mouthContour(S) {
+  return (p, lips) => {
+    const cx = S.cx, cy = S.cy;
+    const open = clamp(p.mouthOpen);
+    const round = clamp(p.mouthRound);
+    const tuck = clamp(p.mouthTuck);
+    const press = clamp(p.mouthPress);
+
+    const w = (S.widthBase + clamp(p.mouthWidth) * S.widthGain) * (1 - 0.36 * round);
+
+    const t = 1 - S.pressThin * press;
+    const { profile, halfUp, halfLo } = lips(t, { open, round, tuck, press });
+
+    // `mouthOpen` is the height of the DARK, not the separation of the two
+    // centrelines. Those are not the same thing and the difference is the whole
+    // lip band, so with the naive reading the mouth stayed shut until
+    // mouthOpen passed 0.25 — which is above two of the nine visemes.
+    const h = open * S.aperture;
+    // …but only once the lips have actually parted. Compensating at open = 0
+    // would prise the centrelines apart by the lip thickness and the resting
+    // mouth would be a fat lens instead of the single tapered stroke these
+    // faces are built around.
+    const k = clamp(open / 0.18);
+
+    // The corners rise while the middle stays put. That is a smile.
+    const lift = 1 - S.pressNeutral * press;
+    const yL = cy - (1.5 + p.mouthCornerL * S.cornerPx) * lift;
+    const yR = cy - (1.5 + p.mouthCornerR * S.cornerPx) * lift;
+
+    // The aperture opens DOWNWARD, 3:1. The upper lip is anchored to the
+    // maxilla and barely moves; the lower rides the jaw. Splitting it evenly
+    // is what makes an open mouth read as a cat's.
+    const apTop = cy - h * 0.25;
+    let apBot = cy + h * 0.75;
+    // For F/V the lower lip rides up under the upper teeth, closing the
+    // aperture from below rather than from above. The floor matters more than
+    // the lift: an F that shuts completely is an M.
+    if (tuck > 0) apBot = Math.max(apTop + 6, apBot - tuck * (h * 0.6 + 4));
+
+    // Solve back from where the aperture must be to where the control points
+    // go. A cubic reaches only 3/4 of the way from its endpoints to its
+    // controls, and both cubics share the two corner endpoints, so the curve
+    // midpoint is cornerMid + 0.75 * ctrlY. Inverting that is the only reason
+    // this is not simply an offset.
+    const cornerMid = (yL + yR) / 8;
+    const topY = (apTop - k * halfUp - cornerMid) / 0.75;
+    const botY = (apBot + k * halfLo - cornerMid) / 0.75;
+
+    const contour = [
+      [cx - w, yL],
+      [cx - w * 0.55, topY], [cx + w * 0.55, topY], [cx + w, yR],
+      [cx + w * 0.55, botY], [cx - w * 0.55, botY], [cx - w, yL],
+    ];
+
+    // Where the DARK actually is. Below the compensation ramp these come out
+    // crossed — innerBot above innerTop — which is the correct answer for a
+    // shut mouth and is what the teeth and the tongue test against.
+    const innerTop = cornerMid + 0.75 * topY + halfUp;
+    const innerBot = cornerMid + 0.75 * botY - halfLo;
+
+    return { contour, profile, cx, cy, w, h, topY, botY, innerTop, innerBot, open, tuck };
+  };
+}

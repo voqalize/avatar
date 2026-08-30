@@ -86,11 +86,11 @@
  * parameter channel anywhere near them. See the note in params.js.
  */
 
-import { clamp, lerp } from './params.js';
+import { clamp } from './params.js';
 import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
-import { browDeform, scaleWidths } from './face-features.js';
+import { browDeform, scaleWidths, mouthContour } from './face-features.js';
 import { irisEye } from './face-eyes.js';
 import { taper, taperRing, region, polyD, rng } from './line-art.js';
 import { viewBoxForHead } from './camera.js';
@@ -461,88 +461,22 @@ const POSE = {
 // the middle and pointed at the corners, which is exactly the rest mouth the
 // concept art was drawn with.
 // ---------------------------------------------------------------------------
-function mouthGeometry(p) {
-  const cx = MOUTH.cx;
-  const cy = MOUTH.cy;
-  const open = clamp(p.mouthOpen);
-  const round = clamp(p.mouthRound);
-  const tuck = clamp(p.mouthTuck);
+// The mouth solve is face-features.js's; these are peep's numbers. The width
+// PROFILE stays here because it is the drawing: `taperRing` samples it across
+// the whole mark, so the stop count is shape and not amplitude.
+const MOUTH_SOLVE = mouthContour({
+  cx: MOUTH.cx, cy: MOUTH.cy, widthBase: 26, widthGain: 32, cornerPx: 24,
+  aperture: MOUTH_APERTURE, pressThin: 0.4, pressNeutral: 0,
+});
 
-  const w = (26 + clamp(p.mouthWidth) * 32) * (1 - 0.36 * round);
+// Pointed at the corners, heavy in the middles. `mouthPress` thins the whole
+// thing — pressed lips are thin lips — and `mouthTuck` fattens the lower one,
+// because a lip drawn in under the teeth is a compressed lip.
+const LIPS = (t, c) => {
+  const profile = [2.5 * t, 10.5 * t, 3 * t, 11.5 * t * (1 + 0.35 * c.tuck), 2.5 * t];
+  return { profile, halfUp: profile[1] / 2, halfLo: profile[3] / 2 };
+};
 
-  // Width profile around the ring: s=0 is the left corner, 0.25 the middle of
-  // the upper lip, 0.5 the right corner, 0.75 the middle of the lower. Pointed
-  // at the corners, heavy in the middles. `mouthPress` thins the whole thing —
-  // pressed lips are thin lips — and `mouthTuck` fattens the lower one, because
-  // a lip drawn in under the teeth is a compressed lip.
-  const t = 1 - 0.4 * clamp(p.mouthPress);
-  const profile = [2.5 * t, 10.5 * t, 3 * t, 11.5 * t * (1 + 0.35 * tuck), 2.5 * t];
-  const halfUp = profile[1] / 2;
-  const halfLo = profile[3] / 2;
-
-  // `mouthOpen` is the height of the DARK, not the separation of the two
-  // centrelines. Those are not the same thing and the difference is the whole
-  // lip band — about 11 units here — so with the naive reading the mouth stayed
-  // shut until mouthOpen passed 0.25. Two of the nine visemes live below that:
-  // B at 0.16 and G at 0.20, both of which ask for upper teeth. Neither could
-  // ever show them, and B, G and X all collapsed onto the same drawn line.
-  const h = open * MOUTH_APERTURE;
-
-  // ...but only once the lips have actually parted. Compensating at open = 0
-  // would prise the two centrelines apart by the lip thickness and the resting
-  // mouth would be a fat lens instead of the single tapered stroke the whole
-  // face is built around. The ramp buys the compensation in over the first
-  // fifth of the channel, which is also roughly where real lips separate.
-  const k = clamp(open / 0.18);
-
-  // The corners rise while the middle stays put. That is a smile; blue-shirt's
-  // mouth translates the whole aperture with the corners instead, which works
-  // there because its cupid's bow and modulated seam carry the expression. This
-  // face has no such detail to fall back on — the bow IS the expression, so it
-  // has to be geometric.
-  //
-  // Keep a trace of organic bow at rest, but not a social smile. Warmth is a
-  // context-driven expression layered by the behavior director, not the
-  // permanent default while the avatar is merely available.
-  const yL = cy - 1.5 - p.mouthCornerL * 24;
-  const yR = cy - 1.5 - p.mouthCornerR * 24;
-
-  // The aperture opens DOWNWARD, 3:1. The upper lip is anchored to the maxilla
-  // and barely moves; the lower rides the jaw. Splitting it evenly is what makes
-  // an open mouth read as a cat's.
-  const apTop = cy - h * 0.25;
-  let apBot = cy + h * 0.75;
-  // For F/V the lower lip rides up under the upper teeth, closing the aperture
-  // from below rather than from above. The floor matters more than the lift: an
-  // F that shuts completely is an M, and the one thing that has to survive is
-  // the sliver of upper teeth resting on the lip.
-  if (tuck > 0) apBot = Math.max(apTop + 6, apBot - tuck * (h * 0.6 + 4));
-
-  // Solve back from where the aperture must be to where the control points go.
-  // A cubic reaches only 3/4 of the way from its endpoints to its controls, and
-  // both cubics here share the two corner endpoints, so the curve midpoint is
-  // cornerMid + 0.75 * ctrlY. Inverting that is the only reason this is not
-  // simply an offset.
-  const cornerMid = (yL + yR) / 8;
-  const topY = (apTop - k * halfUp - cornerMid) / 0.75;
-  const botY = (apBot + k * halfLo - cornerMid) / 0.75;
-
-  const contour = [
-    [cx - w, yL],
-    [cx - w * 0.55, topY], [cx + w * 0.55, topY], [cx + w, yR],
-    [cx + w * 0.55, botY], [cx - w * 0.55, botY], [cx - w, yL],
-  ];
-
-  // Where the DARK actually is. Below the compensation ramp these come out
-  // crossed — innerBot above innerTop — which is the correct answer for a shut
-  // mouth and is what face-core's teeth and the tongue test against. Recomputed rather
-  // than assumed equal to apTop/apBot, because the clamp above and the ramp
-  // both mean the aperture asked for is not always the aperture drawn.
-  const innerTop = cornerMid + 0.75 * topY + halfUp;
-  const innerBot = cornerMid + 0.75 * botY - halfLo;
-
-  return { contour, profile, cx, cy, w, h, topY, botY, innerTop, innerBot, open, tuck };
-}
 
 // ---------------------------------------------------------------------------
 // Generators: eyes
@@ -771,7 +705,7 @@ export function createFace(mount, theme = {}) {
     set(el.browR, 'd', taper(bR.pts, scaleWidths(BROW_W, bR.weight), 6));
 
     // --- mouth ------------------------------------------------------------
-    const m = mouthGeometry(p);
+    const m = MOUTH_SOLVE(p, LIPS);
     const contour = region(m.contour);
     set(el.mouthIn, 'd', contour);
     set(el.clipMouth, 'd', contour);

@@ -42,7 +42,7 @@ import { clamp, lerp } from './params.js';
 import {
   f, createFaceShell, faceApi, poseTransforms, pairedTeeth,
 } from './face-core.js';
-import { browDeform, scaleWidths } from './face-features.js';
+import { browDeform, scaleWidths, mouthContour } from './face-features.js';
 import { irisEye } from './face-eyes.js';
 import { taper, taperRing, region } from './line-art.js';
 import { viewBoxForHead } from './camera.js';
@@ -392,62 +392,33 @@ const POSE = {
 const LIP_UP = 10.5; // upper lip band thickness at its fullest
 const LIP_LO = 15;   // lower lip band at centre
 
-function mouthGeometry(p) {
-  const cx = MOUTH.cx;
-  const cy = MOUTH.cy;
-  const open = clamp(p.mouthOpen);
-  const round = clamp(p.mouthRound);
-  const tuck = clamp(p.mouthTuck);
-  const press = clamp(p.mouthPress);
+// myna's numbers, and the one law the other rigs do not spend: press changes
+// the mouth's SHAPE, not just its weight. A bilabial closure (viseme A, press
+// .55) must render as a pressed band — corners neutralised, bow scallop ironed
+// flat — or A is indistinguishable from idle X and lipsync reads mushy however
+// good the timing is. The pressed band is the anchor viewers use to verify
+// sync. Corner travel 28 (was 23): the tile swallows less.
+const MOUTH_SOLVE = mouthContour({
+  cx: MOUTH.cx, cy: MOUTH.cy, widthBase: 28, widthGain: 30, cornerPx: 28,
+  aperture: MOUTH_APERTURE, pressThin: 0.18, pressNeutral: 0.85,
+});
 
-  const w = (28 + clamp(p.mouthWidth) * 30) * (1 - 0.36 * round);
+// Nine stops around the ring: s=0 left corner, 0.25 top centre, 0.5 right
+// corner, 0.75 bottom centre. The dip at 0.25 is the bow notch (a close-up
+// detail, deliberately light); press irons it up to band thickness.
+const LIPS = (t, c) => {
+  const bow = lerp(5, LIP_UP * 0.92, clamp(c.press * 1.6));
+  const lo = LIP_LO * t * (1 + 0.35 * c.tuck);
+  return {
+    profile: [
+      3 * t, LIP_UP * t, bow * t, LIP_UP * t, 3.5 * t,
+      11.5 * t, lo, 11.5 * t, 3 * t,
+    ],
+    halfUp: (LIP_UP * t) / 2,
+    halfLo: lo / 2,
+  };
+};
 
-  // Press changes SHAPE, not just weight. A bilabial closure (viseme A,
-  // press .55) must render as a pressed band — corners neutralized, bow
-  // scallop ironed flat, thickness nearly kept — or A is indistinguishable
-  // from idle X and lipsync reads mushy however good the timing is. The
-  // pressed band is the anchor viewers use to verify sync.
-  const t = 1 - 0.18 * press;
-  // Nine stops around the ring: s=0 left corner, 0.25 top centre, 0.5 right
-  // corner, 0.75 bottom centre. The dip at 0.25 is the bow notch (a close-up
-  // detail, deliberately light); press irons it up to band thickness.
-  const bow = lerp(5, LIP_UP * 0.92, clamp(press * 1.6));
-  const lo = LIP_LO * t * (1 + 0.35 * tuck);
-  const profile = [
-    3 * t, LIP_UP * t, bow * t, LIP_UP * t, 3.5 * t,
-    11.5 * t, lo, 11.5 * t, 3 * t,
-  ];
-  const halfUp = (LIP_UP * t) / 2;
-  const halfLo = lo / 2;
-
-  const h = open * MOUTH_APERTURE;
-  const k = clamp(open / 0.18);
-
-  // Corner travel 28 (was 23): the tile swallows less. Press straightens the
-  // band by pulling the corner lift toward zero.
-  const cLift = 1 - 0.85 * press;
-  const yL = cy - (1.5 + p.mouthCornerL * 28) * cLift;
-  const yR = cy - (1.5 + p.mouthCornerR * 28) * cLift;
-
-  const apTop = cy - h * 0.25;
-  let apBot = cy + h * 0.75;
-  if (tuck > 0) apBot = Math.max(apTop + 6, apBot - tuck * (h * 0.6 + 4));
-
-  const cornerMid = (yL + yR) / 8;
-  const topY = (apTop - k * halfUp - cornerMid) / 0.75;
-  const botY = (apBot + k * halfLo - cornerMid) / 0.75;
-
-  const contour = [
-    [cx - w, yL],
-    [cx - w * 0.55, topY], [cx + w * 0.55, topY], [cx + w, yR],
-    [cx + w * 0.55, botY], [cx - w * 0.55, botY], [cx - w, yL],
-  ];
-
-  const innerTop = cornerMid + 0.75 * topY + halfUp;
-  const innerBot = cornerMid + 0.75 * botY - halfLo;
-
-  return { contour, profile, cx, cy, w, h, topY, botY, innerTop, innerBot, open, tuck };
-}
 
 // Eyes: the lid-line-plus-iris model, ported from face-peep.js. It reads
 // better against the "big and dark pupils" brief than the old whole-bean
@@ -646,7 +617,7 @@ export function createFace(mount, theme = {}) {
     set(el.browL, 'd', taper(bL.pts, scaleWidths(BROW_W, bL.weight), 6));
     set(el.browR, 'd', taper(bR.pts, scaleWidths(BROW_W, bR.weight), 6));
 
-    const m = mouthGeometry(p);
+    const m = MOUTH_SOLVE(p, LIPS);
     const contour = region(m.contour);
     set(el.mouthIn, 'd', contour);
     set(el.clipMouth, 'd', contour);

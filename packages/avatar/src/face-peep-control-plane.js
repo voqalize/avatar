@@ -9,9 +9,9 @@
  * silently changing the engine.
  */
 
-import { clamp, lerp } from './params.js';
+import { clamp } from './params.js';
 import { f, createFaceShell, faceApi, poseTransforms, pairedTeeth } from './face-core.js';
-import { browDeform, scaleWidths } from './face-features.js';
+import { browDeform, scaleWidths, mouthContour } from './face-features.js';
 import { beanEye } from './face-eyes.js';
 import { taper, taperRing, region } from './line-art.js';
 
@@ -54,32 +54,15 @@ const POSE = {
   torsoLayers: ['body'], units: 1,
 };
 
-function mouthGeometry(p) {
-  const cx = MOUTH.cx, cy = MOUTH.cy;
-  const open = clamp(p.mouthOpen), round = clamp(p.mouthRound), tuck = clamp(p.mouthTuck);
-  const w = (26 + clamp(p.mouthWidth) * 32) * (1 - 0.36 * round);
-  const t = 1 - 0.4 * clamp(p.mouthPress);
-  const profile = [2.5 * t, 10.5 * t, 3 * t, 11.5 * t * (1 + 0.35 * tuck), 2.5 * t];
-  const halfUp = profile[1] / 2, halfLo = profile[3] / 2;
-  const h = open * MOUTH_APERTURE, k = clamp(open / 0.18);
-  const yL = cy - 1.5 - p.mouthCornerL * 24;
-  const yR = cy - 1.5 - p.mouthCornerR * 24;
-  const apTop = cy - h * 0.25;
-  let apBot = cy + h * 0.75;
-  if (tuck > 0) apBot = Math.max(apTop + 6, apBot - tuck * (h * 0.6 + 4));
-  const cornerMid = (yL + yR) / 8;
-  const topY = (apTop - k * halfUp - cornerMid) / 0.75;
-  const botY = (apBot + k * halfLo - cornerMid) / 0.75;
-  const contour = [
-    [cx - w, yL], [cx - w * 0.55, topY], [cx + w * 0.55, topY], [cx + w, yR],
-    [cx + w * 0.55, botY], [cx - w * 0.55, botY], [cx - w, yL],
-  ];
-  return {
-    contour, profile, cx, w, open, tuck,
-    innerTop: cornerMid + 0.75 * topY + halfUp,
-    innerBot: cornerMid + 0.75 * botY - halfLo,
-  };
-}
+const MOUTH_SOLVE = mouthContour({
+  cx: MOUTH.cx, cy: MOUTH.cy, widthBase: 26, widthGain: 32, cornerPx: 24,
+  aperture: MOUTH_APERTURE, pressThin: 0.4, pressNeutral: 0,
+});
+const LIPS = (t, c) => {
+  const profile = [2.5 * t, 10.5 * t, 3 * t, 11.5 * t * (1 + 0.35 * c.tuck), 2.5 * t];
+  return { profile, halfUp: profile[1] / 2, halfLo: profile[3] / 2 };
+};
+
 
 const EYE_DRAW = beanEye(EYE);
 const BROW_GAINS = { up: 15, down: 15, downSkew: 0, inner: 11, angle: 12, bulk: 0 };
@@ -128,7 +111,7 @@ export function createFace(mount, theme = {}) {
     const bR = BROW(BROW_R, p.browRaiseR, p.browAngleR, p.browInnerR);
     set(el.browL, 'd', taper(bL.pts, scaleWidths(BROW_W, bL.weight), 6));
     set(el.browR, 'd', taper(bR.pts, scaleWidths(BROW_W, bR.weight), 6));
-    const m = mouthGeometry(p), contour = region(m.contour);
+    const m = MOUTH_SOLVE(p, LIPS), contour = region(m.contour);
     set(el.mouthIn, 'd', contour); set(el.clipMouth, 'd', contour); set(el.lips, 'd', taperRing(m.contour, m.profile, 12));
     set(el.mouthIn, 'opacity', f(clamp((m.innerBot - m.innerTop) / 3)));
     pairedTeeth(p, set, el, m);

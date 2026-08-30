@@ -340,10 +340,16 @@ layering is the whole idea —
    and numbers out. `lidCurve(E)` is the eye silhouette every rig computes
    identically; `lensPath` draws it, or any two-arc lens inset off it;
    `browDeform(G)` is the brow deformation, and `scaleWidths` spends the width
-   multiplier it returns.
+   multiplier it returns; `mouthContour(S)` is the one closed contour the mouth
+   is made of — filled for the interior, outlined for the lips, and used as the
+   clip for teeth and tongue.
 2. **the marks** (your module): width profiles, brow point lists, which
    optional layers exist at all. This is the drawing and it does not
-   generalise.
+   generalise. The mouth's width profile is the sharpest case: `taperRing`
+   samples a profile across the whole mark, so five stops against nine is
+   *topology* rather than amplitude, and the stop count also decides which of
+   them are the lip centres. So `mouthContour` takes a `lips(t, c)` from you
+   returning `{ profile, halfUp, halfLo }` and owns none of those numbers.
 3. **the type** (`packages/avatar/src/face-eyes.js`): `beanEye` fills the lid
    curve and stops; `irisEye` cuts a paper almond out of it and hangs a clipped
    iris inside. Two *compositions* of one silhouette, not one eye behind a
