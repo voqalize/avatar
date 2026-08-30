@@ -48,9 +48,16 @@ export const STATES = {
   // Idle means present but occupied with one's own quiet business. It must not
   // compete with LISTENING's sustained user attention: the default target is
   // away from the user and the wander only visits other non-task targets.
-  IDLE:               { gaze: 'AWAY_THINKING', emotion: 'neutral', engagement: false,
+  //
+  // Level and sideways, not up-and-away. This state used to sit on
+  // AWAY_THINKING, which meant the rig performed "hmm, let me think" during the
+  // one stretch when nothing whatever is pending, and then had nothing left to
+  // say with when something was — the strongest cue in the vocabulary spent on
+  // the state that least needs it. Horizontal is also what an observer reads as
+  // attention directed *outward* (§4.4), which is what idle is.
+  IDLE:               { gaze: 'AWAY_SIDE', emotion: 'neutral', engagement: false,
                         idle: { sway: 0.72, blinkGap: [4.6, 6.6] },
-                        wander: { targets: ['AWAY_THINKING', 'AWAY_RIGHT', 'NOTES'], every: [3.6, 6.8] } },
+                        wander: { targets: ['AWAY_SIDE', 'SCREEN_LEFT', 'NOTES'], every: [3.6, 6.8] } },
   // `aversion` is why this state does not stare. Continuous eye contact is not
   // the attentive pose it looks like — it is a demand for more talk (Rossano)
   // and it measures as *tense*, not attentive (Wang & Gratch). See AVERSION in
@@ -59,29 +66,103 @@ export const STATES = {
                         aversion: 'LISTEN',
                         idle: { sway: 1.0, blinkGap: [3.1, 4.2] },
                         pose: { browRaiseL: 0.06, browRaiseR: 0.06, lidL: -0.04, lidR: -0.04 } },
+  // THINKING LOOKS UP, and getting that backwards is why this state read as
+  // sullen rather than busy for as long as it did.
+  //
+  // The confusion is between what a thinker DOES and what a viewer READS, and
+  // the two literatures answer different questions. Andrist's production data
+  // (§4.2) says cognitive aversion goes down 39% / side 31% / up 29% — a weak
+  // plurality, from an over-the-table dyad, pooling every kind of cognitive
+  // work there is. Servais et al. (§4.4, n≈160/experiment) asked the *observer*
+  // question instead — which direction is attributed to a mind turned inward —
+  // and the answer is not close: up, in 58.7% of judgements overall and 79.4%
+  // for semantic retrieval, while horizontal is what gets read as attention
+  // directed outward. Composing a reply is the retrieval case, and this rig is
+  // not thinking — it is *saying* that a reply is outstanding. So it is the
+  // observer's reading that decides, and up wins on that question outright.
+  //
+  // The rendering settles it too. A downcast hold at tile size is
+  // indistinguishable from reading, from notes, and from dejection, and here it
+  // was compounding: AWAY_DOWN's lid follow put +0.14 on a lid that
+  // `thoughtful` had already dropped 0.10, so the state's own signature was
+  // half-shut eyes. What makes an up-look work instead of turning into an
+  // eye-roll is not spent here — the head takes ~42% of the excursion and the
+  // lid follow is asymmetric, both in gaze.js, so this state needs no lid or
+  // head channel of its own.
+  //
+  // Down survives as one excursion in four, which is the honest reading of both
+  // datasets: real thinkers do glance down, they just do not *live* there.
+  // AWAY_RIGHT is the same up-and-away move mirrored, so the wander is not a
+  // metronome between one point and the user.
+  //
   // Faster, shallower breath is the measured cognitive-load signature, and the
   // occasional dead-still hold is the strongest "working on it" cue a rig this
-  // simple can make — deliberate stillness, not more motion. The aversion
-  // leads DOWN (39% of measured cognitive aversions, §4.2) and wanders on the
-  // ~3.5s cognitive-aversion cadence, coming back to the user roughly one
-  // dwell in four — still with you, working.
-  THINKING:           { gaze: 'AWAY_DOWN', emotion: 'thoughtful', engagement: false,
+  // simple can make — deliberate stillness, not more motion. Dwells run on the
+  // ~3.5 s cognitive-aversion cadence (3.54 s, SD 1.26 — §4.2).
+  THINKING:           { gaze: 'AWAY_THINKING', emotion: 'thoughtful', engagement: false,
                         idle: { sway: 0.7, blinkGap: [2.1, 2.7], breathRate: 1.18, breathAmp: 0.7,
                                 hold: { every: [4.5, 9.0], dur: [0.8, 1.5] } },
-                        wander: { targets: ['AWAY_DOWN', 'AWAY_DOWN', 'AWAY_THINKING', 'USER'],
-                                  every: [2.6, 4.4] } },
+                        wander: { targets: ['AWAY_THINKING', 'AWAY_THINKING', 'AWAY_RIGHT', 'AWAY_DOWN'],
+                                  every: [2.6, 4.4] },
+                        // The return to the user is a GLANCE, not a wander stop.
+                        // 'USER' used to be a quarter of the wander set, which
+                        // bought a *dwell* — 2.6-4.4 s of holding the user's
+                        // eyes wearing a brow-knit, pressed-mouth thinking face,
+                        // which does not read as "still with you" so much as
+                        // being sized up. Bounded at well under a second it
+                        // reads the way WORKING's glance does. Most thinks are
+                        // shorter than `every` and never spend one at all, which
+                        // is correct: only a long wait earns a check-in.
+                        glance: { to: 'USER', every: [3.6, 6.5], hold: [0.5, 0.9] } },
   SPEAKING:           { gaze: 'USER',     emotion: 'neutral',    idle: { sway: 0.55 }, engagement: false },
   REVIEWING_SCREEN:   { gaze: 'SCREEN_CENTER', emotion: 'thoughtful', engagement: false,
                         idle: { sway: 0.8, blinkGap: [4.0, 6.5] },
                         wander: { targets: ['SCREEN_CENTER', 'SCREEN_LEFT', 'SCREEN_RIGHT', 'SCREEN_TOP', 'SCREEN_WORK'],
                                   every: [1.8, 5.0] } },
+  // The floor has been handed over and nothing has come back yet. THINKING's
+  // opposite number: both are silence, one is the agent's and this one is the
+  // user's, and they must not look alike.
+  //
+  // THE STARE IS THE POINT, AND IT HAS TO EXPIRE. Everywhere else in this rig
+  // sustained mutual gaze is the thing to avoid — it measures as tense and
+  // rates no better than visible inattention (Wang & Gratch; see AVERSION in
+  // gaze.js). Here it is the message: Rossano's finding is that held mutual
+  // gaze is a *demand for more talk*, 95% of sequences expanding while both
+  // parties keep looking, and demanding more talk is precisely this state's
+  // job. So the state asks for the floor by holding the user's eyes — and then
+  // stops, because Binetti (N=498) puts comfortable mutual gaze at 3295 ± 706
+  // ms and a hold past that stops reading as invitation and starts reading as
+  // pressure. AVERSION.WAIT is that clock: the first look-away lands on
+  // Binetti's ceiling rather than on LISTEN's much longer gap, so the state
+  // softens from "well?" to "take your time" on its own. Before this it carried
+  // no aversion profile at all and stared for as long as the wait lasted.
+  //
+  // WHAT IS HELD IS WHAT CAN BE HELD. This was `encouraging` — a 0.58 smile
+  // with a 0.26 brow raise, an expression that is right for a greeting or a
+  // received answer and becomes a rictus somewhere around second four. The
+  // floor states below make the same argument for themselves: a condition gets
+  // a pose that survives being held, and the flash-and-decay of a real
+  // expectancy beat belongs to a clip. So: brows up but well short of a flash,
+  // lips parted (readiness to speak, the small cousin of TAKING_FLOOR's
+  // inbreath), and a smile that is present rather than beaming — with the
+  // squint that keeps it from reading as a mask (see `warm`).
+  //
   // The head cant is the state's signature cue, and it has to clear the roll
   // multiplier to exist at all: 0.05 here renders as 0.3° of rotation, which
   // is no tilt whatever the number says. 0.30 renders ~1.7° — visible at tile
-  // size, still gentle. Every other channel in this pose read fine on screen.
-  WAITING_FOR_USER: { gaze: 'USER',     emotion: 'encouraging', engagement: true,
+  // size, still gentle. The chin comes up with it rather than down, for the
+  // reason the floor states give below: a lowered head reads as yielding, and
+  // this state has already yielded and wants something back.
+  WAITING_FOR_USER: { gaze: 'USER',     emotion: 'neutral', engagement: true,
+                        aversion: 'WAIT',
                         idle: { sway: 1.0, blinkGap: [3.1, 4.2] },
-                        pose: { headRoll: 0.30, browRaiseL: 0.16, browRaiseR: 0.12 } },
+                        pose: { headRoll: 0.30, headPitch: -0.06,
+                                browRaiseL: 0.30, browRaiseR: 0.26,
+                                lidL: -0.06, lidR: -0.06,
+                                squintL: 0.12, squintR: 0.12,
+                                mouthOpen: 0.05, mouthPress: -0.08,
+                                mouthCornerL: 0.26, mouthCornerR: 0.22,
+                                shoulderL: 0.06, shoulderR: 0.06 } },
   // Straining to hear. The one state where the amplitude constraint yields,
   // because the lean IS the message: torsoLean well past LISTENING's
   // engagement ceiling (+0.16), head cheated aside on USER_EAR so an ear
@@ -150,8 +231,13 @@ export const STATES = {
     idle: { sway: 0.6, blinkGap: [6.0, 7.5], breathRate: 1.05,
             rhythm: { amp: 0.05, freq: 2.2 } },
     glance: { to: 'USER', every: [4, 7], hold: [0.7, 1.1] },
+    // Line-face scaled (see CANT_HEAR). This state carried no mouth at all,
+    // which on a rig whose REST mouth is drawn smiling meant the avatar ran
+    // your tool with a grin on. Milder than SEARCHING_SCREEN's -0.25 and
+    // TYPING_CHAT's -0.28: busy is neutral, not effortful.
     pose: { headPitch: 0.10, lidL: -0.04, lidR: -0.04,
-            shoulderL: 0.06, shoulderR: 0.06 },
+            shoulderL: 0.06, shoulderR: 0.06,
+            mouthPress: 0.30, mouthCornerL: -0.18, mouthCornerR: -0.14 },
   },
   // The audio channel is broken and the agent is typing in the chat window to
   // communicate — TYPING's mechanics turned *communicative*. The glance is
@@ -396,11 +482,14 @@ export function createAvatar(opts = {}) {
     //    with the eye — looking down without it bares sclera and reads as alarm)
     const g = gaze.update(elapsed, dt);
     for (const k in g) {
-      if (k === 'lidBias') continue;
+      if (k === 'lidBias' || k === 'squintBias') continue;
       target[k] = (k.startsWith('head') ? target[k] : 0) + g[k];
     }
     target.lidL += g.lidBias;
     target.lidR += g.lidBias;
+    // The lower lid's share of the same follow, which only an up-gaze spends.
+    target.squintL += g.squintBias;
+    target.squintR += g.squintBias;
 
     // 2b. the trunk follows the head. Sampled HERE, after gaze and before the
     //     clip layer, on purpose: a sustained turn toward the screen recruits
@@ -412,10 +501,31 @@ export function createAvatar(opts = {}) {
     target.torsoTurn += target.headYaw * TRUNK_FOLLOW;
 
     // 3. state-driven autonomous behaviour
-    if (st.wander && elapsed > wanderAt) {
+    //
+    // `wanderAt` is armed by setState, not merely by the last fire. It used to
+    // be global and only ever advanced when a wander fired, so entering a
+    // wandering state from a non-wandering one (LISTENING -> THINKING, every
+    // turn of every call) found the timestamp already in the past and re-rolled
+    // the target on the entry frame — discarding the state's own `gaze` before
+    // the eyes had moved. THINKING's look-away therefore failed outright
+    // whenever the re-roll happened to land on the target it was leaving.
+    //
+    // And it yields to a glance in flight: both scheduler and glance write the
+    // one gaze target, so a wander firing mid-glance stole the look-up and the
+    // glance's return leg then pointed the eyes back at the state target as if
+    // nothing had happened.
+    if (st.wander && !glanceUntil && elapsed > wanderAt) {
       const w = st.wander;
       wanderAt = elapsed + w.every[0] + Math.random() * (w.every[1] - w.every[0]);
       setGaze(w.targets[(Math.random() * w.targets.length) | 0]);
+      // Don't let a glance land on top of the move. The two schedulers are
+      // independent, so they collided: a wander at 3.9 s and a glance at 4.0 s
+      // put two large gaze shifts, and their two gaze-evoked blinks, inside a
+      // tenth of a second, which is a twitch rather than a look. The floor is
+      // roughly twice the head's travel time for a typical shift (~0.55 s, see
+      // HEAD_ACCEL in gaze.js) — the head has to arrive and be seen to have
+      // arrived, because the stop is what says attention landed.
+      if (st.glance) glanceAt = Math.max(glanceAt, elapsed + 1.2);
     }
     if (stateName === 'THINKING' && elapsed > slowBlinkAt) {
       slowBlinkAt = elapsed + 2.4 + Math.random() * 2.5;
@@ -430,6 +540,9 @@ export function createAvatar(opts = {}) {
         glanceUntil = 0;
         glanceAt = elapsed + gl.every[0] + Math.random() * (gl.every[1] - gl.every[0]);
         setGaze(st.gaze);
+        // The return leg is an arrival, so it gets a full dwell before the
+        // wander is allowed to move the eyes again.
+        if (st.wander) wanderAt = elapsed + st.wander.every[0] + Math.random() * (st.wander.every[1] - st.wander.every[0]);
       } else if (!glanceUntil && elapsed > glanceAt) {
         glanceUntil = elapsed + gl.hold[0] + Math.random() * (gl.hold[1] - gl.hold[0]);
         setGaze(gl.to);
@@ -560,10 +673,11 @@ export function createAvatar(opts = {}) {
 
     if (!o.keepGaze) setGaze(o.gaze || st.gaze);
     idle.setProfile(st.idle);
-    // Arm the glance scheduler fresh so entering a glancing state doesn't
-    // fire a stale timestamp immediately.
+    // Arm both gaze schedulers fresh so entering a state doesn't fire a stale
+    // timestamp on the entry frame and throw away the target just set.
     glanceUntil = 0;
     glanceAt = elapsed + (st.glance ? st.glance.every[0] + Math.random() * (st.glance.every[1] - st.glance.every[0]) : 0);
+    wanderAt = elapsed + (st.wander ? st.wander.every[0] + Math.random() * (st.wander.every[1] - st.wander.every[0]) : 0);
     // SVG's desaturation filter is a legacy renderer detail. A generic rig
     // receives the same state pose and may express degradation its own way.
     if (face) {

@@ -29,15 +29,37 @@ export const GAZE_TARGETS = {
   SCREEN_BOTTOM: { px:  0.00, py:  0.62, hx:  0.00, hy:  0.24 },
   SCREEN_WORK:     { px: -0.62, py:  0.18, hx: -0.26, hy:  0.12 },
   NOTES:         { px:  0.18, py:  0.72, hx:  0.04, hy:  0.28 },
-  // The classic "recalling something" break of eye contact. Keep it for the
-  // stylized "let me think" beat — audiences read up-and-away regardless of
-  // whether real thinkers do it.
-  AWAY_THINKING: { px: -0.58, py: -0.58, hx: -0.20, hy: -0.18, roll: 0.08 },
-  AWAY_RIGHT:    { px:  0.58, py: -0.52, hx:  0.20, hy: -0.16, roll: -0.06 },
-  // Where measured cognitive aversion actually goes: DOWN (39%, more than up
-  // or side — docs/research-biomechanics.md §4.2). Down-left, mild enough
-  // that the lid follow shades the eyes without sealing them; the head
-  // carries a share so the pupils stay inside the aperture at tile size.
+  // Up-and-away: what an observer reads as *thinking*. This is THINKING's home
+  // target and, apart from its right-hand mirror below, nothing else's — the
+  // one cue in the vocabulary that means "attention has gone inward", spent on
+  // the one state that means it (docs/research-biomechanics.md §4.4).
+  //
+  // The head share is the load-bearing number, not the direction. An up-look
+  // the eyes take alone, with the head level, is an EYE-ROLL — pupils up,
+  // sclera under the iris, and on a schematic face that reads as exasperation
+  // rather than thought. What separates the two is that a real look-up is a
+  // head movement the eyes merely lead: chin comes up, pupils travel less, and
+  // the pose is *held*. So the head carries ~42% of the excursion here against
+  // the ~24% these targets used to give it, and the asymmetric lid follow
+  // (lidBias / squintBias, below) keeps the upper lid from retracting off the
+  // raised iris. Same split on AWAY_RIGHT, which is the same movement mirrored.
+  AWAY_THINKING: { px: -0.48, py: -0.42, hx: -0.28, hy: -0.30, roll: 0.10 },
+  AWAY_RIGHT:    { px:  0.48, py: -0.40, hx:  0.26, hy: -0.26, roll: -0.08 },
+  // Off to the side at eye height, at nothing in particular. The direction
+  // observers attribute to attention that is *external* — 68.75% of them put
+  // it on the horizontal axis, against the vertical they read as internal
+  // (Servais et al., §4.4) — which is what IDLE is: present, occupied with its
+  // own business, not thinking about the user's question. IDLE used to sit on
+  // AWAY_THINKING, so the strongest thinking cue the rig has was being spent
+  // by the one state that means nothing is pending.
+  AWAY_SIDE:     { px: -0.62, py: -0.04, hx: -0.30, hy: -0.02, roll:  0.03 },
+  // Down-and-away. Measured cognitive aversion goes here more often than
+  // anywhere else (39%, §4.2) — but that is what a thinker DOES, not what a
+  // viewer READS, and on a face at tile size a downcast hold is
+  // indistinguishable from reading, from notes, and from dejection. So it
+  // stays in the vocabulary as one of THINKING's excursions rather than as its
+  // home. Mild enough that the lid follow shades the eyes without sealing
+  // them; the head carries a share so the pupils stay inside the aperture.
   AWAY_DOWN:     { px: -0.45, py:  0.42, hx: -0.18, hy:  0.20, roll: 0.04 },
 };
 
@@ -97,13 +119,32 @@ export const AVERSION = {
     mag: [0.30, 0.44],
     dirs: [[-1, 0.06], [-1, 0.06], [1, 0.02], [1, 0.02], [-0.7, -0.5], [0.5, 0.35]],
   },
+  // While waiting for the user to take a floor already handed to them. Same
+  // shape as LISTEN, on a different clock and for the opposite reason.
+  //
+  // LISTEN's gap is Andrist's measured 7.21 s, which is how often a *listener*
+  // breaks contact with someone who is talking. Nobody is talking here. What
+  // sets the clock instead is Binetti's 3295 (SD 706) ms of comfortable mutual
+  // gaze: the hold IS the invitation (Rossano — sustained mutual gaze demands
+  // more talk), so it must last long enough to be an invitation and then stop
+  // before it becomes a demand. `every` is the interval to the FIRST aversion
+  // as well as between later ones, so this band is what puts the opening hold
+  // on that ceiling. Slightly shorter and shallower looks than LISTEN's, and
+  // the direction bias is the same sideways one — down would read as giving up
+  // on an answer and up as impatience with waiting for it.
+  WAIT: {
+    every: [3.0, 4.6],
+    dur: [0.7, 1.15],
+    mag: [0.26, 0.38],
+    dirs: [[-1, 0.05], [-1, 0.05], [1, 0.03], [1, 0.03], [-0.75, -0.35], [0.6, 0.3]],
+  },
 };
 // There is deliberately no THINK profile. The *cognitive* aversion — 3.54 s
-// (SD 1.26), splitting 39.3% down / 29.4% up / 31.3% side (§4.2) — is longer
-// and deeper than the listening kind, and THINKING already renders it through
-// `wander`, which moves the whole gaze target rather than nudging off it. Two
-// mechanisms producing the same look would fight; the state that thinks looks
-// away properly, and this profile is for the state that must not.
+// (SD 1.26) — is longer and deeper than either kind above, and THINKING
+// already renders it through `wander`, which moves the whole gaze target
+// rather than nudging off it. Two mechanisms producing the same look would
+// fight; the state that thinks looks away properly, and the profiles above are
+// for the states that must not.
 
 export class GazeLayer {
   constructor() {
@@ -262,9 +303,26 @@ export class GazeLayer {
       headYaw: this.head.x + avx * HEAD_SHARE,
       headPitch: this.head.y + avy * HEAD_SHARE,
       headRoll: this.head.roll,
-      // The upper lid tracks the eye vertically. Without this, looking down
-      // exposes a band of sclera above the iris and the avatar looks startled.
-      lidBias: pupilY * 0.34,
+      // The lids track the eye vertically, and the tracking is ASYMMETRIC
+      // because the eye is.
+      //
+      // Looking DOWN, the upper lid comes most of the way with the eye — this
+      // is why downcast eyes look nearly shut — and without it a band of sclera
+      // opens above the iris and the avatar looks startled. That is the 0.34
+      // this has always been.
+      //
+      // Looking UP is not the mirror of it. Retracting the upper lid by the
+      // same amount bares the sclera *below* the iris, and a high iris over
+      // white is the EYE-ROLL: on a schematic face it reads as exasperation,
+      // which is the opposite of what every up-gaze in this rig is for
+      // (AWAY_THINKING, SCREEN_TOP). What actually happens on an up-gaze is
+      // that the upper lid barely moves and the LOWER lid rises with the eye,
+      // which is `squint` here. So the upper lid follows weakly and the squint
+      // takes over — the crescent never opens, and THINKING gets a considering
+      // look instead of a withering one without spending a channel of its own
+      // on the problem.
+      lidBias: pupilY >= 0 ? pupilY * 0.34 : pupilY * 0.12,
+      squintBias: pupilY < 0 ? -pupilY * 0.18 : 0,
     };
   }
 }

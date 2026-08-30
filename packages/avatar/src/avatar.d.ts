@@ -59,6 +59,7 @@ export type AvatarGazeName =
   | "NOTES"
   | "AWAY_THINKING"
   | "AWAY_RIGHT"
+  | "AWAY_SIDE"
   | "AWAY_DOWN"
   | "CUSTOM";
 

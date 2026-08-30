@@ -37,10 +37,23 @@ export const EMOTIONS = {
     squintL: 0.22, squintR: 0.22,
     headPitch: 0.05,
   },
+  // Considering, not frowning, and the difference is ASYMMETRY. A symmetric
+  // brow knit over a symmetric pressed mouth is a scowl; pull one side further
+  // than the other and the same channels read as weighing something up. The
+  // rig has the sides separately for exactly this, and 'curious' already
+  // spends them that way.
+  //
+  // The mouth used to be mouthCornerL -0.05 / R +0.02 — a net of about zero,
+  // which is not "no smile" on a line face whose REST mouth is DRAWN smiling
+  // (see CANT_HEAR and SEARCHING_SCREEN in avatar.js, which both had to learn
+  // this). Zero corners meant the avatar thought with a smile on. What a
+  // viewer is given is curvature, and flat is the halfway point of it, so
+  // "not smiling" has to be authored clearly negative.
   thoughtful: {
-    browRaiseL: -0.14, browRaiseR: -0.06,
-    browInnerL: 0.18, browInnerR: 0.10,
-    mouthPress: 0.45, mouthCornerL: -0.05, mouthCornerR: 0.02,
+    browRaiseL: -0.20, browRaiseR: -0.04,
+    browAngleL: 0.08,
+    browInnerL: 0.22, browInnerR: 0.10,
+    mouthPress: 0.50, mouthCornerL: -0.30, mouthCornerR: -0.16,
     lidL: 0.10, lidR: 0.10,
   },
 };

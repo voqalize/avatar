@@ -566,6 +566,11 @@ Note the direction data contradicts the folk conventions: **thinking is mostly
 DOWN (39 %) then side, then up** — not the up-and-left of NLP lore — and
 politeness/intimacy aversion is overwhelmingly **sideways (58 %)**.
 
+This is a table of what a thinker *does*, pooled across every kind of cognitive
+work, and 39 % is a plurality rather than a majority. What a viewer *attributes*
+runs the other way and much harder, which is the question an avatar is actually
+answering; see §4.4 before spending this row on a state.
+
 ### 4.3 Gaze aversion under cognitive load
 
 - "We spontaneously and consistently look away from the face of an interlocutor
@@ -591,12 +596,53 @@ postulates of the EAC model did not support it**."
 
 The honest position: there is **no reliable direction** for remembering vs
 imagining, but the *cultural convention* (up-and-away = thinking) is legible to
-audiences regardless of whether it's true of real people. Our `AWAY_THINKING`
-target is up-and-left. Andrist's *measured* data says thinking aversion is more
-often **down**. Recommendation: keep an up-away target for a *stylized* "let me
-think" beat, but add a **down-and-away** target and use it for the longer,
-genuinely-processing THINKING state, where it will read as considering rather
-than as performing.
+audiences regardless of whether it's true of real people.
+
+**And the convention is not merely a convention — it is measured, on the other
+side of the exchange.** Servais, Hurter & Barbeau, *Gaze direction as a facial
+cue of memory retrieval state* (Frontiers in Psychology, 2022, n ≈ 160 per
+experiment) asked the *observer's* question — which gaze direction is attributed
+to a mind turned inward — rather than the producer's, and the answer is lopsided:
+
+| what the observer attributes | direction | share |
+|---|---|---|
+| internal attention (overall) | **up** | **58.7 %** |
+| semantic memory retrieval | **up** | **79.4 %** |
+| autobiographical retrieval | **up** | **71.9 %** |
+| working memory | **up** | **66.9 %** |
+| **external** attention | **horizontal** | **68.8 %** |
+
+([Frontiers](https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2022.1063228/full),
+[PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC9813397/)) Two riders worth
+keeping: autobiographical retrieval also drew a downward attribution (39 %) but
+**only at low eccentricity** — a shallow glance down, not a downcast hold — and
+the same group's production work finds the aversion begins **less than a second
+after the question ends**
+([Servais et al. 2023](https://www.sciencedirect.com/science/article/pii/S0001691823002172)),
+which makes the onset a timing constraint and not only a direction.
+
+So §4.2 and this section are not in conflict; they answer different questions.
+Andrist measures what a thinker *does*, pooled across every kind of cognitive
+work, and gets a weak plurality (39 / 31 / 29). Servais measures what a viewer
+*reads*, and gets a landslide. An avatar is not thinking — it is saying that a
+reply is outstanding — so the reading is what decides, and the direction the
+viewer attributes to external attention is the one that must NOT be used for it.
+
+**What we do** (`packages/avatar/src/gaze.js`, `STATES.THINKING` in `avatar.js`): up-and-away is
+`THINKING`'s home target and belongs to nothing else — `IDLE` used to hold it,
+which spent the strongest cue in the vocabulary on the state that least needs
+it, and `IDLE` now sits on a level, sideways target instead. Down-away survives
+as one excursion in four, which is the honest reading of both datasets: real
+thinkers do glance down, they just do not live there. Two renderer-side
+constraints come with it, and both are load-bearing:
+
+- **An up-look must be a head movement.** Eyes-only, head level, is an eye-roll.
+  The head takes ~42 % of the excursion on the up targets against the ~24 % it
+  used to.
+- **The upper lid must not retract with it.** A symmetric lid follow bares
+  sclera *below* a high iris, which is the other half of the eye-roll. The
+  follow is asymmetric: 0.34 of the eye's travel downward, 0.12 upward, with the
+  lower lid (`squint`) taking the rest on an up-gaze.
 
 ### 4.5 Saccade statistics — Lee, Badler & Badler, "Eyes Alive"
 
@@ -983,11 +1029,18 @@ it touches. Ordered roughly by expected value per unit of work.
    agent can pass the floor with mutual gaze. This is a floor-management rule
    with a number on it. — *SPEAKING → LISTENING transition* — `pupilX/Y`. (§4.2)
 
-10. **Add a `AWAY_THINKING_DOWN` gaze target and use it for genuine processing.**
-    Measured cognitive aversion is 39 % down, 31 % side, 29 % up — the opposite
-    of the NLP convention our current up-left `AWAY_THINKING` encodes. Keep the
-    up-away target for a short stylized "let me think" beat; use down-away for
-    anything over ~2 s. — *THINKING* — `pupilY`, `headPitch`. (§4.2, §4.4)
+10. **Look UP to think, and reserve the up-away target for it.** Superseded once
+    already, and the correction is the interesting part: measured *production* is
+    39 % down / 31 % side / 29 % up, so this item used to ask for a down-away
+    target for long processing — which is what shipped, and what made THINKING
+    read as reading, or as dejection, at tile size. Measured *attribution* runs
+    the other way and much harder (up 58.7 % overall, 79.4 % for semantic
+    retrieval; horizontal is what gets read as attention pointed outward), and
+    attribution is the question an avatar is answering. Down-away stays as a
+    minority excursion. Costs two renderer rules: the head must carry ~40 % of an
+    up-look, and the upper lid must not retract with it, or both directions land
+    on an eye-roll. — *THINKING, IDLE* — `pupilY`, `headPitch`, `lidL/R`,
+    `squintL/R`. (§4.2, §4.4)
 
 11. **Make intimacy-modulating aversions sideways.** 57.5 % of them are lateral.
     A brief 1.1 s side-glance every ~7 s while listening is what stops Kiran
@@ -1110,6 +1163,8 @@ it touches. Ordered roughly by expected value per unit of work.
 - PLOS ONE (2025). *Structure of nods in conversation*. https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0323448
 - Rac-Lubashevsky, R. et al. (2017). *Tracking Real-Time Changes in Working Memory Updating and Gating with the Event-Based Eye-Blink Rate*. Sci Rep. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5451427/
 - Rhodes, G., Brennan, S. & Carey, S. (1987). *Identification and ratings of caricatures: implications for mental representations of faces*. Cognitive Psychology 19. https://www.harvardlds.org/wp-content/uploads/2018/05/Rhodes-Identification-and-ratings-of-caricatures-implications-for-mental-representations-of-faces..pdf
+- Servais, A., Hurter, C. & Barbeau, E.J. (2022). *Gaze direction as a facial cue of memory retrieval state*. Frontiers in Psychology. https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2022.1063228/full
+- Servais, A. et al. (2023). *Why and when do you look away when trying to remember? Gaze aversion as a marker of the attentional switch to the internal world during memory retrieval*. Acta Psychologica. https://www.sciencedirect.com/science/article/pii/S0001691823002172
 - Rhodes, G. & Tremewan, T. (1992). *Caricature and face recognition*. Memory & Cognition 20(4). https://link.springer.com/article/10.3758/BF03210927
 - Rogers, S.L. et al. (2018). *Using dual eye tracking to uncover personal gaze patterns during social interaction*. Sci Rep. https://www.nature.com/articles/s41598-018-22726-7
 - Thomas, F. & Johnston, O. — the 12 principles. Summaries: https://www.nyfa.edu/student-resources/12-principles-of-animation/ and https://www.studiobinder.com/blog/what-are-the-12-principles-of-animation/

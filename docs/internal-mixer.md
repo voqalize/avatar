@@ -44,7 +44,7 @@ overrides the bundle; `keepGaze: true` preserves whatever gaze was already set.
 
 **The state list lives in `STATES` (`packages/avatar/src/avatar.js`), and that is the only
 copy.** Each entry carries the perceptual reasoning for its own numbers in a
-comment above it — why `THINKING` averts *downward*, why `CANT_HEAR`'s brows go
+comment above it — why `THINKING` averts *upward*, why `CANT_HEAR`'s brows go
 down rather than up, why `WORKING` looks at `SCREEN_WORK` and not `NOTES`. A
 table here would be a second copy that nothing forces anyone to update, and the
 one that used to be here rotted exactly that way: it documented a `TYPING` state
@@ -69,7 +69,10 @@ one explicitly.
 ## Gaze — `setGaze(name, custom?)`
 
 Semantic directions; the client does the oculomotor work (ballistic eyes,
-lagging under-rotated head, gaze-evoked blink). Twelve names (`GAZE_NAMES`):
+lagging under-rotated head, gaze-evoked blink, and an asymmetric lid follow —
+the upper lid comes most of the way down with a downward gaze, while an upward
+one is met by the lower lid instead, because a retracted upper lid over a high
+iris is an eye-roll). Thirteen names (`GAZE_NAMES`):
 
 | target | meaning |
 |---|---|
@@ -78,9 +81,10 @@ lagging under-rotated head, gaze-evoked blink). Twelve names (`GAZE_NAMES`):
 | `SCREEN_CENTER` / `SCREEN_LEFT` / `SCREEN_RIGHT` / `SCREEN_TOP` / `SCREEN_BOTTOM` | regions of the shared screen |
 | `SCREEN_WORK` | lower-left work area of the shared screen |
 | `NOTES` | down-right glance at the agent's own notes |
-| `AWAY_THINKING` | up-left "recalling" break of eye contact — the stylized "let me think" beat |
-| `AWAY_RIGHT` | up-right variant |
-| `AWAY_DOWN` | down-left considering — measured cognitive aversion is mostly downward, so this is the one long THINKING dwells use |
+| `AWAY_THINKING` | up-left break of eye contact — the direction an observer reads as a mind turned inward, and `THINKING`'s home target |
+| `AWAY_RIGHT` | the same move mirrored: up-right |
+| `AWAY_SIDE` | off to the left at eye height, at nothing — attention directed *outward*, which is what `IDLE` is |
+| `AWAY_DOWN` | down-left considering — where measured cognitive aversion most often goes, kept as one of `THINKING`'s excursions rather than as its home |
 
 Escape hatch: `setGaze('CUSTOM', { x, y })` with normalized −1..1 screen
 coordinates, for when the server knows exactly where something is. (Any name
