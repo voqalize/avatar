@@ -20,9 +20,19 @@ entry point, so you pay for the one you import — and you can author your own.
 
 `peep` speaking, `wren` listening, `myna` thinking — rendered from this repo by
 `apps/authoring/tools/shot.mjs`, at roughly the size they ship at. They move, and a
-still frame is the one thing this README cannot show you; a call with
-[`apps/server/`](apps/server/README.md) takes about a minute and needs no API key. A
-hosted demo is planned and does not exist yet.
+still frame is the one thing this README cannot show you.
+
+### → [Talk to one](https://voqalize.com/demos/avatar)
+
+Two minutes, in the browser, nothing to install. It is the library explaining
+itself: ask how the lipsync stays in step and it puts the timeline on screen,
+ask to see it thinking and it holds the claim on its own face, ask what else it
+can look like and it swaps to another of the nine — taking the matching voice
+with it. Every gesture in that call is one of the three commands documented
+below, sent from a server — the same ones your own app would send.
+
+Running it yourself instead: a call with [`apps/server/`](apps/server/README.md)
+takes about a minute and needs no API key.
 
 **Licence: MIT.** Use it anywhere, including in closed-source products. The
 third-party attributions that travel with it are under [License](#license).
