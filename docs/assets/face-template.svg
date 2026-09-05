@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-620 10 1900 1430" width="1900" height="1430">
+  <title>Avatar face template</title>
+  <desc>Grid, camera crop and permission zones for authoring a line-art avatar.
+    Draw into head / body / features / hair. Delete the GUIDES layer before delivery.</desc>
+
+  <defs>
+    <style>
+      .h    { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 19px; font-weight: 700; }
+      .lbl  { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 16px; fill: #4b5563; }
+      .t    { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 14px; fill: #6b7280; }
+      .grid { stroke: #cbd0d8; stroke-width: 1; }
+      .key  { stroke: #6b7280; stroke-width: 1.6; }
+    </style>
+    <pattern id="noDraw" width="10" height="10" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+      <rect width="10" height="10" fill="#fdecec"/>
+      <line x1="0" y1="0" x2="0" y2="10" stroke="#e5484d" stroke-width="3" opacity=".45"/>
+    </pattern>
+    <pattern id="bend" width="10" height="10" patternTransform="rotate(-45)" patternUnits="userSpaceOnUse">
+      <rect width="10" height="10" fill="#fff5e3"/>
+      <line x1="0" y1="0" x2="0" y2="10" stroke="#f5a524" stroke-width="3" opacity=".5"/>
+    </pattern>
+  </defs>
+
+  <rect x="-620" y="10" width="1900" height="1430" fill="#ffffff"/>
+
+  <!-- ARTWORK LAYERS. Draw into these four, bottom to top. Do not rename. -->
+  <g id="head"><!-- skull, ears, neck, jaw shadow --></g>
+  <g id="body"><!-- torso, clothing, collar, creases --></g>
+  <g id="features"><!-- nose and accessories ONLY --></g>
+  <g id="hair"><!-- the whole hair mass, over the face --></g>
+
+  <!-- GUIDES. Scaffolding only. DELETE THIS WHOLE GROUP BEFORE DELIVERY. -->
+  <g id="GUIDES">
+
+    <!-- landmark lines -->
+    <line class="grid" x1="-260" y1="76"  x2="880" y2="76"/>
+    <line class="grid" x1="-260" y1="180" x2="880" y2="180"/>
+    <line stroke="#7c8798" stroke-width="1.6" x1="-260" y1="344" x2="880" y2="344"/>
+    <line stroke="#7c8798" stroke-width="1.6" x1="-260" y1="386" x2="880" y2="386"/>
+    <line class="grid" x1="-260" y1="495" x2="880" y2="495"/>
+    <line stroke="#7c8798" stroke-width="1.6" x1="-260" y1="580" x2="880" y2="580"/>
+    <line class="grid" x1="-260" y1="950" x2="880" y2="950" stroke-dasharray="7 5"/>
+    <line stroke="#7c8798" stroke-width="1.6" x1="380" y1="30" x2="380" y2="1000"/>
+
+    <!-- the camera crop -->
+    <rect x="-100" y="32.8" width="960" height="720" fill="none" stroke="#3b82f6"
+          stroke-width="1.4" stroke-dasharray="3 6" opacity=".6"/>
+    <rect x="-29.5" y="113.1" width="819" height="614.3" fill="none" stroke="#3b82f6"
+          stroke-width="2.4" stroke-dasharray="10 7"/>
+
+    <!-- indicative head envelope -->
+    <ellipse cx="380" cy="365" rx="143" ry="215" fill="none" stroke="#9aa2af"
+             stroke-width="1.2" stroke-dasharray="4 6"/>
+
+    <!-- reserved zones -->
+    <rect x="285" y="356" width="70" height="64" fill="url(#noDraw)" stroke="#e5484d" stroke-width="1.8"/>
+    <rect x="405" y="356" width="70" height="64" fill="url(#noDraw)" stroke="#e5484d" stroke-width="1.8"/>
+    <rect x="290" y="462" width="180" height="98" fill="url(#noDraw)" stroke="#e5484d" stroke-width="1.8"/>
+    <rect x="262" y="316" width="236" height="34" fill="url(#bend)" stroke="#f5a524" stroke-width="1.8"/>
+
+    <!-- leader lines from the left column to the zones -->
+    <path d="M-130 470 L 280 470 L 285 400" fill="none" stroke="#e5484d" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>
+    <path d="M-130 640 L 250 640 L 288 545" fill="none" stroke="#e5484d" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>
+    <path d="M-130 300 L 200 300 L 262 326" fill="none" stroke="#f5a524" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>
+
+    <!-- ============ left column: permissions ============ -->
+    <text class="h"   x="-610" y="120" fill="#15803d">YOURS, ENTIRELY</text>
+    <text class="t"   x="-610" y="146">Skull, hair, ears, neck, torso, clothing,</text>
+    <text class="t"   x="-610" y="166">nose, accessories. This is the character,</text>
+    <text class="t"   x="-610" y="186">and it is most of the work.</text>
+
+    <text class="h"   x="-610" y="272" fill="#b45309">DRAW IT — WE BEND IT</text>
+    <text class="t"   x="-610" y="298">The brows, and only the brows. One</text>
+    <text class="t"   x="-610" y="318">centre-line of 5-9 points each. We move</text>
+    <text class="t"   x="-610" y="338">your points to raise, lower, angle and</text>
+    <text class="t"   x="-610" y="358">knit them — never replace them, so your</text>
+    <text class="t"   x="-610" y="378">arch survives every expression.</text>
+
+    <text class="h"   x="-610" y="452" fill="#b91c1c">RESERVED — EYES</text>
+    <text class="t"   x="-610" y="478">We generate these: six eye states, plus</text>
+    <text class="t"   x="-610" y="498">blinks and gaze. Leave the boxes EMPTY.</text>
+    <text class="t"   x="-610" y="518">Draw the eyes at rest on a separate,</text>
+    <text class="t"   x="-610" y="538">clearly-named layer so we can measure</text>
+    <text class="t"   x="-610" y="558">them — then we delete yours.</text>
+
+    <text class="h"   x="-610" y="622" fill="#b91c1c">RESERVED — MOUTH</text>
+    <text class="t"   x="-610" y="648">Same, and stricter: sixteen speech shapes</text>
+    <text class="t"   x="-610" y="668">come out of this box. Never draw teeth,</text>
+    <text class="t"   x="-610" y="688">tongue, or the inside of the mouth.</text>
+    <text class="t"   x="-610" y="716" fill="#b91c1c">The nose, and the bridge between the two</text>
+    <text class="t"   x="-610" y="736" fill="#b91c1c">eye boxes, ARE yours to draw.</text>
+
+    <!-- ============ right column: the grid ============ -->
+    <text class="lbl" x="900" y="70"  fill="#374151">y 76 – 180</text>
+    <text class="t"   x="900" y="92">top of the head, hair</text>
+    <text class="t"   x="900" y="112">included. Pick one and</text>
+    <text class="t"   x="900" y="132">tell us which.</text>
+
+    <text class="lbl" x="900" y="340" fill="#b45309">y 344    BROW</text>
+    <text class="lbl" x="900" y="382" fill="#b91c1c">y 386    EYE LINE</text>
+    <text class="t"   x="900" y="404">Four of our five faces</text>
+    <text class="t"   x="900" y="424">sit on exactly this line.</text>
+
+    <text class="lbl" x="900" y="491" fill="#b91c1c">y 495    MOUTH</text>
+    <text class="t"   x="900" y="513">486 – 526 across our five.</text>
+
+    <text class="lbl" x="900" y="576" fill="#374151">y 580    CHIN</text>
+    <text class="t"   x="900" y="598">572 – 597. The lowest</text>
+    <text class="t"   x="900" y="618">point of the jaw.</text>
+
+    <text class="lbl" x="900" y="946" fill="#374151">y 950</text>
+    <text class="t"   x="900" y="968">Draw the body down to</text>
+    <text class="t"   x="900" y="988">here. See note 3.</text>
+
+    <text class="lbl" x="392" y="1022" fill="#374151">x 380 — midline. NOT an axis of symmetry (note 5).</text>
+    <text class="t"   x="-95" y="27" fill="#3b82f6">…and this is the crop when the hair is tall. It moves with the crown.</text>
+    <text class="lbl" x="-25" y="106" fill="#3b82f6">the visible crop — 4:3, derived from your crown and chin</text>
+    <text class="t"   x="-255" y="252" fill="#9aa2af">indicative head envelope: our five faces run 264–300 wide</text>
+
+    <!-- ============ key ============ -->
+    <g transform="translate(900, 680)">
+      <text class="h" x="0" y="0" fill="#111827">KEY</text>
+      <rect x="0" y="14" width="30" height="18" fill="url(#noDraw)" stroke="#e5484d" stroke-width="1.4"/>
+      <text class="t" x="42" y="28">reserved — leave empty</text>
+      <rect x="0" y="42" width="30" height="18" fill="url(#bend)" stroke="#f5a524" stroke-width="1.4"/>
+      <text class="t" x="42" y="56">draw at rest, we animate it</text>
+      <rect x="0" y="70" width="30" height="18" fill="none" stroke="#9aa2af" stroke-width="1.4" stroke-dasharray="4 4"/>
+      <text class="t" x="42" y="84">indicative only</text>
+      <line class="key" x1="0" y1="106" x2="30" y2="106" stroke="#3b82f6" stroke-width="2.4" stroke-dasharray="10 7"/>
+      <text class="t" x="42" y="111">the visible crop</text>
+      <text class="t" x="0" y="146" fill="#15803d">Everything not boxed in red is yours.</text>
+    </g>
+
+    <!-- ============ the shipping size ============ -->
+    <g transform="translate(-610, 820)">
+      <rect x="0" y="0" width="130" height="97.5" fill="none" stroke="#111827" stroke-width="1.6"/>
+      <text class="h" x="0" y="-10" fill="#111827">130 × 97.5</text>
+      <text class="t" x="0" y="118">This box is the size the</text>
+      <text class="t" x="0" y="138">whole avatar ships at, in</text>
+      <text class="t" x="0" y="158">a video-call tile. (True at</text>
+      <text class="t" x="0" y="178">1:1 zoom.) Draw close up —</text>
+      <text class="t" x="0" y="198">judge at this size.</text>
+    </g>
+
+    <!-- ============ notes, below the drawing area ============ -->
+    <line class="grid" x1="-620" y1="1055" x2="1280" y2="1055"/>
+    <text class="h" x="-610" y="1096" fill="#111827">BEFORE YOU START</text>
+
+    <text class="lbl" x="-610" y="1136" fill="#111827">1.  No strokes anywhere.</text>
+    <text class="t"   x="-610" y="1158">Every mark is a filled shape that swells in the middle and</text>
+    <text class="t"   x="-610" y="1178">tapers to a point. Give us the CENTRE-LINE as a live</text>
+    <text class="t"   x="-610" y="1198">variable-width stroke — Illustrator's Width Tool. Do NOT</text>
+    <text class="t"   x="-610" y="1218">expand or outline it: a centre-line cannot be recovered from</text>
+    <text class="t"   x="-610" y="1238">a filled blob, and that is the one delivery mistake that</text>
+    <text class="t"   x="-610" y="1258">forces a redraw instead of a conversion.</text>
+
+    <text class="lbl" x="-610" y="1292" fill="#111827">2.  The four layers move at different speeds.</text>
+    <text class="t"   x="-610" y="1314">So overlap every seam generously — hair over scalp, neck into</text>
+    <text class="t"   x="-610" y="1334">collar, ear into head. An edge that merely abuts opens a white</text>
+    <text class="t"   x="-610" y="1354">gap in motion. And no single shape may straddle two layers.</text>
+
+    <text class="lbl" x="220" y="1136" fill="#111827">3.  Draw past the crop.</text>
+    <text class="t"   x="220" y="1158">Body down to y 950, neck to about y 790. Layers slide;</text>
+    <text class="t"   x="220" y="1178">a shape that stops at the crop edge slides into frame</text>
+    <text class="t"   x="220" y="1198">and shows its end.</text>
+
+    <text class="lbl" x="220" y="1232" fill="#111827">4.  Two colours, plus at most one accent.</text>
+    <text class="t"   x="220" y="1254">Black ink, white paper, and one small saturated thing —</text>
+    <text class="t"   x="220" y="1274">a collar trim, a spectacle frame, an earring, a zip pull.</text>
+    <text class="t"   x="220" y="1294">No grey, no gradients, no filters, no opacity, no masks,</text>
+    <text class="t"   x="220" y="1314">no text, no dark mode.</text>
+
+    <text class="lbl" x="1000" y="1136" fill="#111827">5.  Do not mirror the face.</text>
+    <text class="t"   x="1000" y="1158">Offset the chin a few units off</text>
+    <text class="t"   x="1000" y="1178">the midline; set one brow a</text>
+    <text class="t"   x="1000" y="1198">little higher. A symmetric face</text>
+    <text class="t"   x="1000" y="1218">reads as machine output.</text>
+
+    <text class="lbl" x="1000" y="1252" fill="#111827">6.  Two proportions we</text>
+    <text class="lbl" x="1000" y="1272" fill="#111827">    keep getting wrong.</text>
+    <text class="t"   x="1000" y="1294">The eye is SMALL — about 33</text>
+    <text class="t"   x="1000" y="1314">units wide on a head 430 tall —</text>
+    <text class="t"   x="1000" y="1334">larger reads as a mascot at tile</text>
+    <text class="t"   x="1000" y="1354">size. And leave at least 70 units</text>
+    <text class="t"   x="1000" y="1374">of chin below the mouth: it opens</text>
+    <text class="t"   x="1000" y="1394">downward about 3:1.</text>
+
+    <text class="h" x="-610" y="60" fill="#b91c1c">DELETE THE &lt;g id="GUIDES"&gt; LAYER BEFORE YOU SEND THE FILE.</text>
+  </g>
+</svg>

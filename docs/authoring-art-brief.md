@@ -6,6 +6,11 @@ this project's rig without being redrawn. Pair it with
 same seam — this page is the half an illustrator needs and none of the half they
 do not.
 
+**Start from [`assets/face-template.svg`](assets/face-template.svg).** It is
+this page as a drawable file: the grid, the camera crop, the zones you may and
+may not touch, and the four artwork layers already named and empty. Open it,
+draw into the four layers, delete the layer called `GUIDES`, send it back.
+
 *The short version: draw a head-and-shoulders portrait in flat black line art on
 a fixed grid, in four named layers, with centre-lines rather than filled
 outlines — and do not draw the eyes, the mouth, or anything you expect to move.*
@@ -58,6 +63,10 @@ The teeth, tongue and the inside of the mouth are entirely ours. Do not draw
 them.
 
 ## 3. The grid
+
+All of this is drawn for you in
+[`assets/face-template.svg`](assets/face-template.svg) — the table below is the
+same information in numbers, for when you want to check one.
 
 Work in a **fixed coordinate space shared by every face in this project**, so
 your drawing can be compared against the others without rescaling. Units are
@@ -168,8 +177,9 @@ character a decade.
 
 ## 8. Deliverables
 
-1. **One layered SVG** on the grid in §3, groups named `head`, `body`,
-   `features`, `hair`, marks as live centre-lines with variable width (§6).
+1. **One layered SVG**, started from the template, groups named `head`, `body`,
+   `features`, `hair`, marks as live centre-lines with variable width (§6) —
+   **with the `GUIDES` layer deleted.**
 2. **A rest drawing of the eyes and mouth** (category C), in place, so we can
    measure them — plus a sentence on what you intended by each.
 3. **A note of your three landmarks**: midline x, visible crown y, chin y.
