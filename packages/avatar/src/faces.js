@@ -43,10 +43,11 @@ import { peep } from './face-peep.js';
 import { wren } from './face-wren.js';
 import { myna } from './face-myna.js';
 import { lark } from './face-lark.js';
+import { egret } from './face-egret.js';
 
-export { peep, wren, myna, lark };
+export { peep, wren, myna, lark, egret };
 
-export const FACES = { peep, wren, myna, lark };
+export const FACES = { peep, wren, myna, lark, egret };
 
 export const FACE_NAMES = Object.keys(FACES);
 

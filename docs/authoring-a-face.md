@@ -705,6 +705,16 @@ stages, with different acceptance bars, is what kept the myna run converging.
   is nothing — it rendered every channel on the first run — and the four
   passes it then took to draw one collar are the actual answer to how much of
   a face the kit can do for you.
+
+  `egret` (2026-09-05) is the same day's controlled comparison, and it is the
+  one worth reading: same kit, same author, same afternoon, the only variable
+  being a reference image. Brief-first `lark` needed four passes below the
+  chin and its face is nobody in particular. Reference-first `egret` took two
+  corrections, and both were caught by *measuring against the bitmap* rather
+  than by taste — a mouth built at 0.25 of face width when the reference says
+  0.325, and one arc too many under the jaw. The reference does not make the
+  drawing easier; it makes being wrong **checkable**, which is a different and
+  larger thing. Do not read stage 0 as a formality.
 - **Stage 1 — distill, then match.** Extract from the reference: the
   silhouette, the 3–5 identity marks, and the palette structure (where the
   one accent sits). That distillate — not the pixels — is what gets matched
