@@ -699,7 +699,12 @@ stages, with different acceptance bars, is what kept the myna run converging.
   passed every rig check): character identity is judged against a concrete
   image, not against adjectives — a brief-first avatar optimizes the wrong
   target however well it verifies. If there is no reference, get one agreed
-  before authoring.
+  before authoring. `lark` (2026-09-05) is the second data point and it is
+  *only* a kit measurement, not a character: brief-first again, deliberately,
+  to find out what the shared feature modules cost a new face. What they cost
+  is nothing — it rendered every channel on the first run — and the four
+  passes it then took to draw one collar are the actual answer to how much of
+  a face the kit can do for you.
 - **Stage 1 — distill, then match.** Extract from the reference: the
   silhouette, the 3–5 identity marks, and the palette structure (where the
   one accent sits). That distillate — not the pixels — is what gets matched
