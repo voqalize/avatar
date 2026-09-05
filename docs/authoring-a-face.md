@@ -15,6 +15,11 @@ face *good*, which is a much longer job than making one *work* — the plumbing
 took an afternoon on both of the faces added since this document existed, and
 the drawing took days.
 
+If the drawing is coming from an illustrator rather than from you, hand them
+[authoring-art-brief.md](authoring-art-brief.md) — the same seam described from
+the art side, with the shared grid, the layer rules and the centre-line-plus-width
+delivery format, and none of the engineering.
+
 *Living document. Describes the code as of `packages/avatar/src/face*.js` on `main`;
 [Adding a new avatar](#adding-a-new-avatar) is the staged process, and CLAUDE.md
 § In flight flags what is about to change.*
