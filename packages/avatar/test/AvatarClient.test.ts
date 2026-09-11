@@ -154,6 +154,71 @@ describe("AvatarClient Pipecat-bound cue lifecycle", () => {
   });
 });
 
+describe("AvatarClient playout anchor", () => {
+  // The event and the sound reach the browser by different roads, measured on
+  // both sides of each other. These pin that the sound wins when it can be
+  // heard, and that the event still anchors the turn when it cannot.
+  function setup(onset: () => number | null | undefined) {
+    vi.useFakeTimers({ now: 10_000 });
+    const probe = { onset: vi.fn(onset), dispose: vi.fn() };
+    const { api, calls } = createFakeAvatar();
+    const client = new AvatarClient(api, { now: () => Date.now(), playoutProbe: probe });
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [{ t: 0, v: "X" }, { t: 60, v: "B" }] });
+    (client as any).onBotStartedSpeaking();
+    return { client, calls, probe, clock: calls.speak[0]!.o!.clock! };
+  }
+
+  it("backdates the turn's zero to audio that began before the event", () => {
+    const { clock } = setup(() => 9_943);
+    expect(clock()).toBe(57);
+    vi.useRealTimers();
+  });
+
+  it("holds the mouth before the first cue until the sound begins", () => {
+    let heard: number | null = null;
+    const { clock } = setup(() => heard);
+    expect(clock()).toBeLessThan(0);
+    vi.advanceTimersByTime(150);
+    expect(clock()).toBeLessThan(0);
+
+    heard = 10_160;
+    vi.advanceTimersByTime(20);
+    expect(clock()).toBe(10);
+    vi.useRealTimers();
+  });
+
+  it("anchors at the event when the probe cannot say", () => {
+    const { clock } = setup(() => undefined);
+    expect(clock()).toBe(0);
+    vi.useRealTimers();
+  });
+
+  it("falls back to the event, and stops asking a probe that has never heard the track", () => {
+    const { client, calls, probe, clock } = setup(() => null);
+    vi.advanceTimersByTime(400);
+    expect(clock()).toBe(400); // zero is the event, not the timeout
+    expect(probe.dispose).toHaveBeenCalledOnce();
+
+    const asked = probe.onset.mock.calls.length;
+    (client as any).onBotStoppedSpeaking();
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-2", from_ms: 0, cues: [] });
+    (client as any).onBotStartedSpeaking();
+    expect(calls.speak.at(-1)!.o!.clock!()).toBe(0);
+    expect(probe.onset.mock.calls.length).toBe(asked);
+    vi.useRealTimers();
+  });
+
+  it("stops listening for a turn that ends before its sound arrives", () => {
+    const { client, probe } = setup(() => null);
+    vi.advanceTimersByTime(30);
+    (client as any).onBotStoppedSpeaking();
+    const asked = probe.onset.mock.calls.length;
+    vi.advanceTimersByTime(400);
+    expect(probe.onset.mock.calls.length).toBe(asked);
+    vi.useRealTimers();
+  });
+});
+
 describe("AvatarClient cue splice", () => {
   it("appends via the cheap pushCues path when from_ms doesn't reach into the queued track", () => {
     const { api, calls } = createFakeAvatar();
@@ -263,6 +328,7 @@ describe("RTVI_EVENTS", () => {
     expect(RTVI_EVENTS.userStoppedSpeaking).toBe(RTVIEvent.UserStoppedSpeaking);
     expect(RTVI_EVENTS.botStartedSpeaking).toBe(RTVIEvent.BotStartedSpeaking);
     expect(RTVI_EVENTS.botStoppedSpeaking).toBe(RTVIEvent.BotStoppedSpeaking);
+    expect(RTVI_EVENTS.trackStarted).toBe(RTVIEvent.TrackStarted);
     expect(RTVI_EVENTS.userMuteStarted).toBe(RTVIEvent.UserMuteStarted);
     expect(RTVI_EVENTS.userMuteStopped).toBe(RTVIEvent.UserMuteStopped);
   });

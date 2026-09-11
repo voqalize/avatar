@@ -31,10 +31,13 @@ accurate correction primitive; arrival time has no meaning.
 `ctx` is Pipecat's opaque TTS `context_id`. Cue patches commonly arrive before
 audio because the text-predicted track exists first. Since Pipecat's browser
 speaking events do not carry a context, the client buffers contexts FIFO. At
-`BotStartedSpeaking` it claims the next one, maps timeline position zero to
-that Pipecat output-lifecycle event, and starts sampling the already-buffered
-track. This epoch is not a claim that the browser's audio device has made a
-sample audible; the public `PipecatClient` seam exposes no device-playout clock.
+`BotStartedSpeaking` it claims the next one and starts sampling the
+already-buffered track. Timeline position zero is the first sample of the TTS
+audio — lead-in included — and the client places it where the bot's audio
+track, as the browser receives it, leaves digital silence. When that cannot be
+heard it falls back to the `BotStartedSpeaking` event itself. Neither is the
+audio device's playout clock, which the public `PipecatClient` seam does not
+expose.
 
 `final: true` means no more cue patches will be generated for this context. It
 does not mean the audio has finished; `BotStoppedSpeaking` remains the hard

@@ -7,9 +7,16 @@
  * Base Pipecat TTS gives each serialized TTS context an opaque `context_id`.
  * The server uses it only to group and splice cue chunks. `botStartedSpeaking`
  * has no context payload, so the browser FIFO-claims the next buffered context
- * at that Pipecat output-lifecycle event and anchors its clock there.
- * `botStoppedSpeaking` closes the active context. Neither event observes the
- * browser's audio device, and no avatar-specific speech marker exists.
+ * at that Pipecat output-lifecycle event. `botStoppedSpeaking` closes it. No
+ * avatar-specific speech marker exists.
+ *
+ * The event says *which* audio is starting, not *when* it is heard, and the
+ * turn clock is anchored to the sound itself (`playout.ts` has the
+ * measurements that forced it). `attach()` listens to the bot's audio track;
+ * at the event, the turn's zero is backdated to a sound that has already begun,
+ * or the mouth is held shut until one does. When the track cannot be heard —
+ * no `attach()`, no track, a suspended audio graph, or a sound that never
+ * arrives within `ONSET_WAIT_MS` — the event is the anchor, as it always was.
  *
  * `attach()` subscribes to the avatar server-message channel *and* Pipecat's
  * standard lifecycle events. Server messages carry only what Pipecat cannot:
@@ -54,6 +61,7 @@
 import type { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
 import type { AvatarActionId, AvatarApi } from "../src/avatar.js";
 import { BehaviorController } from "../src/behavior.js";
+import { createPlayoutProbe, type PlayoutProbe } from "./playout.js";
 import {
   isAvatarMessage,
   parseAvatarCommand,
@@ -70,7 +78,19 @@ interface Turn {
   /** Whether Pipecat output has anchored a clock and issued `speak()`. */
   started: boolean;
   clock: (() => number) | null;
+  /** Timeline zero on the `now()` clock; `null` while waiting to hear the
+   * audio begin, during which the clock reads before the first cue. */
+  t0: number | null;
 }
+
+/**
+ * Longest the mouth is held for audio `botStartedSpeaking` has announced but
+ * the track has not yet carried. The event has been measured leading the first
+ * sample by ~160 ms on a local stack; twice that is a stall, and a mouth that
+ * starts without its sound is better than one that waits indefinitely.
+ */
+const ONSET_WAIT_MS = 350;
+const ONSET_POLL_MS = 10;
 
 /**
  * Internal. Not exported from the package — the public surface is
@@ -89,6 +109,9 @@ export interface AvatarClientOptions {
   onError?: (err: unknown, msg: AvatarCommand) => void;
   /** Override for tests. Defaults to `performance.now`. */
   now?: () => number;
+  /** Override for tests. Defaults to listening to the bot's audio track, once
+   * `attach()` has found one. */
+  playoutProbe?: PlayoutProbe;
   /** Quiet time in listening before the client-owned idle loop begins. */
   idleDelayMs?: number;
   /** Timer seams keep lifecycle behavior deterministic in tests. */
@@ -130,6 +153,9 @@ export const RTVI_EVENTS = {
   userStoppedSpeaking: "userStoppedSpeaking",
   botStartedSpeaking: "botStartedSpeaking",
   botStoppedSpeaking: "botStoppedSpeaking",
+  // Only to find the bot's audio track once the transport has it; which track
+  // is re-read from `tracks()`, the one authority for whose it is.
+  trackStarted: "trackStarted",
   // Mute is a Pipecat fact, not a claim: the server's mute strategy emits
   // `UserMuteStarted/StoppedFrame`, the RTVI observer forwards them, and the
   // browser client raises these. So "has muted you" costs no wire verb —
@@ -179,6 +205,12 @@ export class AvatarClient {
   private readonly idleDelayMs: number;
   private readonly setTimer: typeof setTimeout;
   private readonly clearTimer: typeof clearTimeout;
+  private probe: PlayoutProbe | null;
+  private probeTrack: MediaStreamTrack | null = null;
+  /** Whether the probe has ever heard an onset. One that has not, and times
+   * out, is deaf to this track rather than early to it. */
+  private probeHeard = false;
+  private onsetTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(avatar: AvatarApi, opts: AvatarClientOptions = {}) {
     this.avatar = avatar;
@@ -188,6 +220,7 @@ export class AvatarClient {
     this.idleDelayMs = opts.idleDelayMs ?? 12_000;
     this.setTimer = opts.setTimeout ?? globalThis.setTimeout.bind(globalThis);
     this.clearTimer = opts.clearTimeout ?? globalThis.clearTimeout.bind(globalThis);
+    this.probe = opts.playoutProbe ?? null;
   }
 
   /** The active turn's ctx, or `null` between turns. For tests and telemetry. */
@@ -271,7 +304,7 @@ export class AvatarClient {
   private ensureTurn(ctx: string): Turn {
     const existing = this.turns.get(ctx);
     if (existing) return existing;
-    const turn = { ctx, cues: [], started: false, clock: null };
+    const turn: Turn = { ctx, cues: [], started: false, clock: null, t0: null };
     this.turns.set(ctx, turn);
     this.pendingCtxs.push(ctx);
     return turn;
@@ -303,11 +336,71 @@ export class AvatarClient {
       turn = this.turns.get(this.pendingCtxs.shift()!);
     }
     if (!turn) return;
-    const t0 = this.now();
-    turn.clock = () => this.now() - t0;
-    turn.started = true;
-    this.turn = turn;
-    this.avatar.speak({ cues: turn.cues, clock: turn.clock });
+    const active = turn;
+    active.clock = () => (active.t0 === null ? -1 : this.now() - active.t0);
+    active.started = true;
+    this.turn = active;
+    this.anchor(active);
+    this.avatar.speak({ cues: active.cues, clock: active.clock });
+  }
+
+  /** Put the turn's zero where its sound began — see the header. */
+  private anchor(turn: Turn): void {
+    const event = this.now();
+    const heard = this.probe?.onset();
+    if (typeof heard === "number") {
+      this.probeHeard = true;
+      turn.t0 = heard;
+      return;
+    }
+    if (heard !== null) {
+      turn.t0 = event;
+      return;
+    }
+    const poll = () => {
+      this.onsetTimer = null;
+      if (this.turn !== turn) return;
+      const onset = this.probe?.onset();
+      if (typeof onset === "number") {
+        this.probeHeard = true;
+        turn.t0 = onset;
+      } else if (onset === null && this.now() - event < ONSET_WAIT_MS) {
+        this.onsetTimer = this.setTimer(poll, ONSET_POLL_MS);
+      } else {
+        if (!this.probeHeard) this.dropProbe();
+        turn.t0 = event;
+      }
+    };
+    this.onsetTimer = this.setTimer(poll, ONSET_POLL_MS);
+  }
+
+  private clearOnsetTimer(): void {
+    if (this.onsetTimer !== null) {
+      this.clearTimer(this.onsetTimer);
+      this.onsetTimer = null;
+    }
+  }
+
+  private dropProbe(): void {
+    this.probe?.dispose();
+    this.probe = null;
+    this.probeTrack = null;
+    this.probeHeard = false;
+  }
+
+  /** Listen to the bot's audio track, if the transport has one yet. */
+  private listenTo(client: PipecatClient): void {
+    if (this.opts.playoutProbe) return;
+    let track: MediaStreamTrack | undefined;
+    try {
+      track = client.tracks().bot?.audio;
+    } catch {
+      return;
+    }
+    if (!track || track === this.probeTrack) return;
+    this.dropProbe();
+    this.probe = createPlayoutProbe(track, this.now);
+    this.probeTrack = this.probe ? track : null;
   }
 
   private discardQueuedTurns(): void {
@@ -432,6 +525,7 @@ export class AvatarClient {
 
   private onBotStoppedSpeaking = (): void => {
     this.botSpeaking = false;
+    this.clearOnsetTimer();
     // Playout truth releases the only active mouth track. A late cue chunk for
     // this context is ignored rather than reviving a silent mouth.
     if (this.turn) {
@@ -495,6 +589,7 @@ export class AvatarClient {
    */
   attach(client: PipecatClient): () => void {
     const onServerMessage = (raw: unknown) => this.dispatch(unwrapServerMessage(raw));
+    const onTrackStarted = () => this.listenTo(client);
     const subscriptions: Array<[string, (...args: any[]) => void]> = [
       [RTVI_EVENTS.serverMessage, onServerMessage],
       [RTVI_EVENTS.connected, this.onConnectedOrReady],
@@ -507,10 +602,14 @@ export class AvatarClient {
       [RTVI_EVENTS.botStoppedSpeaking, this.onBotStoppedSpeaking],
       [RTVI_EVENTS.userMuteStarted, this.onUserMuteStarted],
       [RTVI_EVENTS.userMuteStopped, this.onUserMuteStopped],
+      [RTVI_EVENTS.trackStarted, onTrackStarted],
     ];
     for (const [event, listener] of subscriptions) client.on(event as RTVIEvent, listener as never);
+    this.listenTo(client);
     return () => {
       this.clearIdleTimer();
+      this.clearOnsetTimer();
+      if (!this.opts.playoutProbe) this.dropProbe();
       for (const [event, listener] of subscriptions) client.off(event as RTVIEvent, listener as never);
     };
   }
@@ -518,6 +617,8 @@ export class AvatarClient {
   /** Dispose controller-owned timers when its mounted avatar is destroyed. */
   destroy(): void {
     this.clearIdleTimer();
+    this.clearOnsetTimer();
+    this.dropProbe();
     this.behavior.destroy();
   }
 }

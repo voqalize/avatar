@@ -248,10 +248,14 @@ races and obscured ownership.
 **`AvatarProcessor` deliberately does not mirror Pipecat lifecycle.** Its
 `cues.ctx` is the stock base-TTS `context_id`; it does not make up a fallback.
 Because browser speaking events carry no context, the client FIFO-binds the
-next buffered `ctx` when `BotStartedSpeaking` arrives, anchors the cue clock
-then, and closes it at `BotStoppedSpeaking`. This is Pipecat output lifecycle,
-not observation of the browser audio device. It passes `AvatarControlFrame`
-claims/actions through for explicit application intent.
+next buffered `ctx` when `BotStartedSpeaking` arrives and closes it at
+`BotStoppedSpeaking`. The event decides *which* context plays; the cue clock's
+zero is where the bot's audio track goes off digital silence, heard in the
+browser — backdated if the sound came first, held until it does if the event
+did. The two reach the browser on different channels and have been measured
+57 ms apart one way and 160 ms the other, so no constant offset is right. Where
+the track cannot be heard, the event is the anchor. `AvatarProcessor` passes
+`AvatarControlFrame` claims/actions through for explicit application intent.
 
 **Actions are layered over the effective state** resolved by the Authority
 model above, and finish their natural landing; they never create a durable
