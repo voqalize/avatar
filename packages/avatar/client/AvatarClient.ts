@@ -17,6 +17,16 @@
  * or the mouth is held shut until one does. When the track cannot be heard —
  * no `attach()`, no track, a suspended audio graph, or a sound that never
  * arrives within `ONSET_WAIT_MS` — the event is the anchor, as it always was.
+ * Which one won is logged once per turn, at `info`, because a desync report is
+ * unanswerable without it.
+ *
+ * The clock then runs `VISUAL_LEAD_MS` ahead of the sound, since the mixer's
+ * smoothing makes every mouth shape late by about that much. It is pulled back
+ * by any output-device latency beyond what the display already matches (a
+ * Bluetooth headset). Within a turn, each resumption after a pause in the
+ * track is a second chance to hear where the sound really is. A disagreement
+ * is slewed out at no more than 10 % of clock rate, never jumped, because a
+ * mouth that skips is seen and one that runs briefly fast is not.
  *
  * `attach()` subscribes to the avatar server-message channel *and* Pipecat's
  * standard lifecycle events. Server messages carry only what Pipecat cannot:
@@ -81,6 +91,14 @@ interface Turn {
   /** Timeline zero on the `now()` clock; `null` while waiting to hear the
    * audio begin, during which the clock reads before the first cue. */
   t0: number | null;
+  /** Where a re-anchor has placed zero; `t0` slews toward it. */
+  target: number | null;
+  /** `now()` at the clock's last read, which bounds how far a slew may move. */
+  read: number;
+  /** How far the clock runs ahead of the sound, fixed for the turn. */
+  lead: number;
+  /** The last resumption (track ms) already listened for. */
+  checked: number;
 }
 
 /**
@@ -91,6 +109,30 @@ interface Turn {
  */
 const ONSET_WAIT_MS = 350;
 const ONSET_POLL_MS = 10;
+
+/**
+ * How far the cue clock runs ahead of the sound. The mixer eases every mouth
+ * channel toward its target with a 42 ms time constant
+ * (`MOUTH_RESPONSE_TAU_S`), which delays a shape by about that much, and a
+ * frame is drawn on average half a frame after its time. Picture ahead of sound
+ * is the side people forgive (ITU-R BT.1359: sound leading is noticed at about
+ * 45 ms, picture leading at about 125 ms), so a small surplus is the safe error.
+ */
+export const VISUAL_LEAD_MS = 50;
+/** Output latency the display already matches: a compositor and a screen are
+ * late by about as much as a wired speaker, so only the excess counts. */
+const DISPLAY_LATENCY_MS = 40;
+/** A reported latency beyond this is a broken report, not a device. */
+const MAX_OUTPUT_LATENCY_MS = 250;
+/** A pause in the track at least this long is one the audio can be heard to
+ * resume after — shorter ones are usually not digital silence on the wire. */
+const REANCHOR_GAP_MS = 250;
+/** When to look, after the resumption is due, and for how long. The probe
+ * sees 170 ms back, so one look catches an early sound as well as a late one. */
+const REANCHOR_LOOK_MS = 100;
+const REANCHOR_WINDOW_MS = 150;
+/** The most a re-anchor may speed or slow the clock, as a fraction of real time. */
+const MAX_SLEW = 0.1;
 
 /**
  * Internal. Not exported from the package — the public surface is
@@ -211,6 +253,7 @@ export class AvatarClient {
    * out, is deaf to this track rather than early to it. */
   private probeHeard = false;
   private onsetTimer: ReturnType<typeof setTimeout> | null = null;
+  private reanchorTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(avatar: AvatarApi, opts: AvatarClientOptions = {}) {
     this.avatar = avatar;
@@ -304,7 +347,10 @@ export class AvatarClient {
   private ensureTurn(ctx: string): Turn {
     const existing = this.turns.get(ctx);
     if (existing) return existing;
-    const turn: Turn = { ctx, cues: [], started: false, clock: null, t0: null };
+    const turn: Turn = {
+      ctx, cues: [], started: false, clock: null, t0: null,
+      target: null, read: 0, lead: 0, checked: -Infinity,
+    };
     this.turns.set(ctx, turn);
     this.pendingCtxs.push(ctx);
     return turn;
@@ -327,6 +373,8 @@ export class AvatarClient {
     } else {
       this.avatar.speak({ cues: turn.cues, clock: turn.clock! });
     }
+    // A resumption this chunk added may be the next one worth listening for.
+    this.scheduleReanchor(turn);
   }
 
   private activateNextTurn(): void {
@@ -337,7 +385,23 @@ export class AvatarClient {
     }
     if (!turn) return;
     const active = turn;
-    active.clock = () => (active.t0 === null ? -1 : this.now() - active.t0);
+    active.lead = this.leadMs();
+    active.clock = () => {
+      if (active.t0 === null) return -1;
+      const now = this.now();
+      if (active.target !== null) {
+        const room = MAX_SLEW * Math.max(0, now - active.read);
+        const off = active.target - active.t0;
+        if (Math.abs(off) <= room) {
+          active.t0 = active.target;
+          active.target = null;
+        } else {
+          active.t0 += Math.sign(off) * room;
+        }
+      }
+      active.read = now;
+      return now - active.t0 + active.lead;
+    };
     active.started = true;
     this.turn = active;
     this.anchor(active);
@@ -347,14 +411,16 @@ export class AvatarClient {
   /** Put the turn's zero where its sound began — see the header. */
   private anchor(turn: Turn): void {
     const event = this.now();
+    // A context made before any gesture can sit suspended; every turn asks again.
+    this.probe?.resume?.();
     const heard = this.probe?.onset();
     if (typeof heard === "number") {
       this.probeHeard = true;
-      turn.t0 = heard;
+      this.anchored(turn, heard, "the sound", event);
       return;
     }
     if (heard !== null) {
-      turn.t0 = event;
+      this.anchored(turn, event, this.probe ? "the event (probe cannot say)" : "the event (no probe)", event);
       return;
     }
     const poll = () => {
@@ -363,15 +429,82 @@ export class AvatarClient {
       const onset = this.probe?.onset();
       if (typeof onset === "number") {
         this.probeHeard = true;
-        turn.t0 = onset;
+        this.anchored(turn, onset, "the sound", event);
       } else if (onset === null && this.now() - event < ONSET_WAIT_MS) {
         this.onsetTimer = this.setTimer(poll, ONSET_POLL_MS);
       } else {
         if (!this.probeHeard) this.dropProbe();
-        turn.t0 = event;
+        this.anchored(turn, event, onset === null ? "the event (no sound in time)" : "the event (probe cannot say)", event);
       }
     };
     this.onsetTimer = this.setTimer(poll, ONSET_POLL_MS);
+  }
+
+  private anchored(turn: Turn, t0: number, how: string, event: number): void {
+    turn.t0 = t0;
+    turn.read = this.now();
+    console.info(
+      `[avatar] ${turn.ctx} anchored on ${how}: sound ${Math.round(event - t0)} ms before the event, `
+        + `mouth ${Math.round(turn.lead)} ms ahead`,
+    );
+    this.scheduleReanchor(turn);
+  }
+
+  /** The lead for a turn starting now — see `VISUAL_LEAD_MS`. */
+  private leadMs(): number {
+    const out = this.probe?.outputLatencyMs?.() ?? 0;
+    const excess = Math.min(MAX_OUTPUT_LATENCY_MS, Math.max(0, out - DISPLAY_LATENCY_MS));
+    return VISUAL_LEAD_MS - excess;
+  }
+
+  /** The first resumption after `after` (track ms) that follows a pause long
+   * enough to be heard as one. */
+  private nextResumption(turn: Turn, after: number): number | null {
+    let silentFrom: number | null = null;
+    for (const c of turn.cues) {
+      if (c.v === "X") {
+        silentFrom ??= c.t;
+        continue;
+      }
+      if (silentFrom !== null && c.t - silentFrom >= REANCHOR_GAP_MS && c.t > after) return c.t;
+      silentFrom = null;
+    }
+    return null;
+  }
+
+  /** Listen for the sound at the turn's next resumption, once. */
+  private scheduleReanchor(turn: Turn): void {
+    if (this.reanchorTimer !== null || !this.probe || turn.t0 === null || this.turn !== turn) return;
+    const zero = turn.target ?? turn.t0;
+    const at = this.nextResumption(turn, Math.max(turn.checked, this.now() - zero - REANCHOR_WINDOW_MS));
+    if (at === null) return;
+    const poll = () => {
+      this.reanchorTimer = null;
+      if (this.turn !== turn || !this.probe || turn.t0 === null) return;
+      const due = (turn.target ?? turn.t0) + at;
+      const onset = this.probe.onset();
+      if (onset === null && this.now() < due + REANCHOR_WINDOW_MS) {
+        this.reanchorTimer = this.setTimer(poll, ONSET_POLL_MS);
+        return;
+      }
+      turn.checked = at;
+      // `undefined` is sound all the way back: the pause was not silence on
+      // the wire, or it resumed long before the track says. Either way there
+      // is nothing to measure.
+      if (typeof onset === "number" && Math.abs(onset - due) <= REANCHOR_WINDOW_MS) {
+        turn.target = onset - at;
+      }
+      this.scheduleReanchor(turn);
+    };
+    const zeroNow = turn.target ?? turn.t0;
+    this.reanchorTimer = this.setTimer(poll, Math.max(0, zeroNow + at + REANCHOR_LOOK_MS - this.now()));
+  }
+
+  private clearReanchorTimer(): void {
+    if (this.reanchorTimer !== null) {
+      this.clearTimer(this.reanchorTimer);
+      this.reanchorTimer = null;
+    }
   }
 
   private clearOnsetTimer(): void {
@@ -526,6 +659,7 @@ export class AvatarClient {
   private onBotStoppedSpeaking = (): void => {
     this.botSpeaking = false;
     this.clearOnsetTimer();
+    this.clearReanchorTimer();
     // Playout truth releases the only active mouth track. A late cue chunk for
     // this context is ignored rather than reviving a silent mouth.
     if (this.turn) {
@@ -606,9 +740,19 @@ export class AvatarClient {
     ];
     for (const [event, listener] of subscriptions) client.on(event as RTVIEvent, listener as never);
     this.listenTo(client);
+    // Some browsers keep an audio context suspended until it is resumed inside
+    // a gesture, and the connect click usually lands before the bot's track
+    // exists. Any later click or key is the next chance.
+    const wake = () => this.probe?.resume?.();
+    const doc = typeof document === "undefined" ? null : document;
+    doc?.addEventListener("pointerdown", wake, true);
+    doc?.addEventListener("keydown", wake, true);
     return () => {
+      doc?.removeEventListener("pointerdown", wake, true);
+      doc?.removeEventListener("keydown", wake, true);
       this.clearIdleTimer();
       this.clearOnsetTimer();
+      this.clearReanchorTimer();
       if (!this.opts.playoutProbe) this.dropProbe();
       for (const [event, listener] of subscriptions) client.off(event as RTVIEvent, listener as never);
     };
@@ -618,6 +762,7 @@ export class AvatarClient {
   destroy(): void {
     this.clearIdleTimer();
     this.clearOnsetTimer();
+    this.clearReanchorTimer();
     this.dropProbe();
     this.behavior.destroy();
   }

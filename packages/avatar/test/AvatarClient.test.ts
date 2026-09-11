@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AvatarClient, RTVI_EVENTS } from "../client/AvatarClient.js";
+import { AvatarClient, RTVI_EVENTS, VISUAL_LEAD_MS as LEAD } from "../client/AvatarClient.js";
 import { createFakeAvatar } from "./fakeAvatar.js";
 
 describe("AvatarClient dispatch", () => {
@@ -118,9 +118,9 @@ describe("AvatarClient Pipecat-bound cue lifecycle", () => {
     (client as any).onBotStartedSpeaking();
     const clock = calls.speak[0].o!.clock!;
 
-    expect(clock()).toBe(0); // t0 == 5000, now() == 5000
+    expect(clock()).toBe(LEAD); // t0 == 5000, now() == 5000
     t = 5250;
-    expect(clock()).toBe(250);
+    expect(clock()).toBe(250 + LEAD);
   });
 
   it("bot stop ends the active FIFO context and rejects a late cue", () => {
@@ -170,7 +170,7 @@ describe("AvatarClient playout anchor", () => {
 
   it("backdates the turn's zero to audio that began before the event", () => {
     const { clock } = setup(() => 9_943);
-    expect(clock()).toBe(57);
+    expect(clock()).toBe(57 + LEAD);
     vi.useRealTimers();
   });
 
@@ -183,27 +183,27 @@ describe("AvatarClient playout anchor", () => {
 
     heard = 10_160;
     vi.advanceTimersByTime(20);
-    expect(clock()).toBe(10);
+    expect(clock()).toBe(10 + LEAD);
     vi.useRealTimers();
   });
 
   it("anchors at the event when the probe cannot say", () => {
     const { clock } = setup(() => undefined);
-    expect(clock()).toBe(0);
+    expect(clock()).toBe(LEAD);
     vi.useRealTimers();
   });
 
   it("falls back to the event, and stops asking a probe that has never heard the track", () => {
     const { client, calls, probe, clock } = setup(() => null);
     vi.advanceTimersByTime(400);
-    expect(clock()).toBe(400); // zero is the event, not the timeout
+    expect(clock()).toBe(400 + LEAD); // zero is the event, not the timeout
     expect(probe.dispose).toHaveBeenCalledOnce();
 
     const asked = probe.onset.mock.calls.length;
     (client as any).onBotStoppedSpeaking();
     client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-2", from_ms: 0, cues: [] });
     (client as any).onBotStartedSpeaking();
-    expect(calls.speak.at(-1)!.o!.clock!()).toBe(0);
+    expect(calls.speak.at(-1)!.o!.clock!()).toBe(LEAD);
     expect(probe.onset.mock.calls.length).toBe(asked);
     vi.useRealTimers();
   });
@@ -215,6 +215,96 @@ describe("AvatarClient playout anchor", () => {
     const asked = probe.onset.mock.calls.length;
     vi.advanceTimersByTime(400);
     expect(probe.onset.mock.calls.length).toBe(asked);
+    vi.useRealTimers();
+  });
+});
+
+describe("AvatarClient mouth lead and re-anchor", () => {
+  type Probe = { onset: () => number | null | undefined; outputLatencyMs?: () => number };
+  function start(probe: Probe, cues = [{ t: 0, v: "X" }, { t: 60, v: "B" }]) {
+    vi.useFakeTimers({ now: 10_000 });
+    const full = { dispose: vi.fn(), resume: vi.fn(), ...probe, onset: vi.fn(probe.onset) };
+    const { api, calls } = createFakeAvatar();
+    const client = new AvatarClient(api, { now: () => Date.now(), playoutProbe: full });
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues });
+    (client as any).onBotStartedSpeaking();
+    return { client, calls, probe: full, clock: calls.speak[0]!.o!.clock! };
+  }
+
+  it("runs the mouth ahead of the sound by what the smoothing will cost it", () => {
+    const { clock } = start({ onset: () => 9_943, outputLatencyMs: () => 20 });
+    expect(clock()).toBe(57 + LEAD);
+    vi.useRealTimers();
+  });
+
+  it("holds the mouth back for an output device slower than the display", () => {
+    // 200 ms reported, 40 of which the display matches.
+    const { clock } = start({ onset: () => 9_943, outputLatencyMs: () => 200 });
+    expect(clock()).toBe(57 + LEAD - 160);
+    vi.useRealTimers();
+  });
+
+  it("does not trust an absurd latency report", () => {
+    const { clock } = start({ onset: () => 9_943, outputLatencyMs: () => 5_000 });
+    expect(clock()).toBe(57 + LEAD - 250);
+    vi.useRealTimers();
+  });
+
+  it("asks a suspended audio graph to run at every turn", () => {
+    const { client, probe } = start({ onset: () => undefined });
+    (client as any).onBotStoppedSpeaking();
+    client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-2", from_ms: 0, cues: [] });
+    (client as any).onBotStartedSpeaking();
+    expect(probe.resume).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
+  // Speech at 0, a pause from 400 to 900, speech again at 900.
+  const PAUSED = [{ t: 0, v: "B" }, { t: 400, v: "X" }, { t: 900, v: "C" }, { t: 1300, v: "X" }];
+
+  it("re-anchors where the sound resumes after a pause, slewing instead of jumping", () => {
+    let heard: number | null | undefined = 10_000;
+    const { clock } = start({ onset: () => heard }, PAUSED);
+    expect(clock()).toBe(LEAD);
+
+    // The track says speech resumes at 10_900; it is heard 80 ms late.
+    heard = null;
+    vi.advanceTimersByTime(890);
+    clock();
+    heard = 10_980;
+    vi.advanceTimersByTime(120);
+    const before = clock();
+    vi.advanceTimersByTime(100);
+    const step = clock() - before;
+    // Slowed, not stopped: at most 10% off real time.
+    expect(step).toBeGreaterThanOrEqual(90);
+    expect(step).toBeLessThan(100);
+
+    vi.advanceTimersByTime(1_000);
+    clock();
+    vi.advanceTimersByTime(10);
+    // Fully absorbed: the track's 900 now sits on the sound at 10_980.
+    expect(clock()).toBe(Date.now() - 10_080 + LEAD);
+    vi.useRealTimers();
+  });
+
+  it("leaves the clock alone where the pause was not silence on the wire", () => {
+    let heard: number | null | undefined = 10_000;
+    const { clock } = start({ onset: () => heard }, PAUSED);
+    heard = undefined;
+    vi.advanceTimersByTime(2_000);
+    expect(clock()).toBe(2_000 + LEAD);
+    vi.useRealTimers();
+  });
+
+  it("ignores a sound too far from where the track expects it", () => {
+    let heard: number | null | undefined = 10_000;
+    const { clock } = start({ onset: () => heard }, PAUSED);
+    heard = null;
+    vi.advanceTimersByTime(990);
+    heard = 10_600; // 300 ms early: some other sound, not this resumption
+    vi.advanceTimersByTime(1_000);
+    expect(clock()).toBe(1_990 + LEAD);
     vi.useRealTimers();
   });
 });

@@ -254,7 +254,13 @@ zero is where the bot's audio track goes off digital silence, heard in the
 browser — backdated if the sound came first, held until it does if the event
 did. The two reach the browser on different channels and have been measured
 57 ms apart one way and 160 ms the other, so no constant offset is right. Where
-the track cannot be heard, the event is the anchor. `AvatarProcessor` passes
+the track cannot be heard, the event is the anchor. The clock runs a little ahead
+of that zero, by what the mixer's mouth smoothing will cost the picture, less any
+output-device latency the display does not match. Each resumption after a pause
+in the track is listened for again, and a disagreement is slewed out rather than
+jumped. The FIFO holds only because `AvatarProcessor` never sends a context the
+browser will not hear: cues wait for their context's first audio and are dropped
+if an interruption lands first. `AvatarProcessor` passes
 `AvatarControlFrame` claims/actions through for explicit application intent.
 
 **Actions are layered over the effective state** resolved by the Authority

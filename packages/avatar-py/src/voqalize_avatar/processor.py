@@ -112,6 +112,11 @@ _PRESTART_BUFFER = 8
 #: worse than the IDLE this replaced.
 _REPLY_GRACE_S = 2.0
 
+#: How many interrupted-before-audio contexts to remember, so that a decode in
+#: flight at the cut is dropped rather than sent. One per interruption; a few
+#: dozen covers a call of barge-ins over replies that never started.
+_CUT_MEMORY = 32
+
 
 def _is_sentence_announcement(frame: Frame) -> bool:
     """The "this sentence is about to be spoken" frame, and not a karaoke word.
@@ -169,6 +174,18 @@ class AvatarProcessor(FrameProcessor):
         # Contexts with audio in flight. Usually one; more when a brain runs
         # several inferences inside a single stretch of bot speech.
         self._open_ctxs: list[str] = []
+        # Cue chunks for contexts announced to the TTS and not yet heard from.
+        # The browser binds contexts to its speaking events in arrival order, so
+        # a context that dies before its first sample — a barge-in over the
+        # greeting — must never reach it: it would sit at the head of that queue
+        # and every later reply would play the cues of the one before it, for
+        # the rest of the call. Held until the context's first audio passes,
+        # dropped if an interruption comes first. The audio reaches the
+        # transport, and so `BotStartedSpeaking`, after the flush.
+        self._unheard: dict[str, list[AvatarMessage]] = {}
+        # Contexts dropped that way. A decode already in flight when the cut
+        # landed can still emit once; it is discarded here, not sent.
+        self._cut: deque[str] = deque(maxlen=_CUT_MEMORY)
         # Everything said before this processor saw its own StartFrame.
         # `push_frame()` drops frames until then — silently for the caller, and
         # noisily in the log — and the browser's `client-ready` genuinely does
@@ -229,6 +246,10 @@ class AvatarProcessor(FrameProcessor):
             # A turn ends at playout, cleanly or cut. Either way its remaining
             # cues describe audio that will never be heard.
             await self._end_turns()
+            if not isinstance(frame, BotStoppedSpeakingFrame):
+                # Not at a plain stop: a context queued behind the reply that
+                # just finished is still going to play.
+                await self._drop_unheard()
 
         # Decide before forwarding (the decision is pure and cheap), forward,
         # then emit — so the avatar never sits between a frame and its
@@ -297,9 +318,14 @@ class AvatarProcessor(FrameProcessor):
         the accurate (rhubarb) leg overwrite the fast (textsync) leg's
         not-yet-played tail invisibly.
         """
-        await self._emit(
-            [AvatarMessage.cues(ctx=ctx, from_ms=from_ms, cues=cues_to_wire(cues), final=final)]
-        )
+        message = AvatarMessage.cues(ctx=ctx, from_ms=from_ms, cues=cues_to_wire(cues), final=final)
+        if ctx in self._cut:
+            return
+        held = self._unheard.get(ctx)
+        if held is not None:
+            held.append(message)
+            return
+        await self._emit([message])
 
     async def _sentence_queued(self, frame: AggregatedTextFrame) -> None:
         """A sentence's text reached the TTS. Predict its cues now.
@@ -312,6 +338,8 @@ class AvatarProcessor(FrameProcessor):
         ctx = self._context_id(frame.context_id, "sentence")
         if ctx is None:
             return
+        if ctx not in self._open_ctxs:
+            self._unheard.setdefault(ctx, [])
         await self._engine.on_sentence_queued(ctx, frame.text)
 
     async def _audio(self, frame: TTSAudioRawFrame) -> None:
@@ -330,6 +358,9 @@ class AvatarProcessor(FrameProcessor):
             return
         if ctx not in self._open_ctxs:
             self._open_ctxs.append(ctx)
+        held = self._unheard.pop(ctx, None)
+        if held:
+            await self._emit(held)
         await self._engine.on_audio(ctx, frame.audio, sample_rate=frame.sample_rate)
 
     async def _sentence_spoken(
@@ -376,6 +407,15 @@ class AvatarProcessor(FrameProcessor):
         if self._engine is None:
             return
         for ctx in ctxs:
+            await self._engine.end_turn(ctx)
+
+    async def _drop_unheard(self) -> None:
+        """Forget every context that was cut before any of its audio played."""
+        unheard, self._unheard = self._unheard, {}
+        self._cut.extend(unheard)
+        if self._engine is None:
+            return
+        for ctx in unheard:
             await self._engine.end_turn(ctx)
 
     # ─── Seams for the rest of the session ──────────────────────────────

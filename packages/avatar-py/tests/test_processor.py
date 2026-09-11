@@ -247,6 +247,7 @@ def engine(monkeypatch: pytest.MonkeyPatch) -> RecordingEngine:
 
     def build(emit: Any, *, sample_rate: int) -> RecordingEngine:
         recorder.sample_rate = sample_rate  # type: ignore[attr-defined]
+        recorder.emit = emit  # type: ignore[attr-defined]
         return recorder
 
     monkeypatch.setattr("voqalize_avatar.processor.build_viseme_engine", build)
@@ -449,6 +450,70 @@ async def test_a_finished_turn_is_closed_out(engine: RecordingEngine) -> None:
         await pipe.queue(pcm(b"a", 20))
         await pipe.settle()
         await pipe.push(BotStoppedSpeakingFrame())
+        assert engine.ended == ["1.1"]
+
+
+def _cue_frames(pipe: AvatarPipe) -> list[tuple[int, str]]:
+    """(position downstream, ctx) of every cue chunk the browser was sent."""
+    return [
+        (i, f.data["ctx"])
+        for i, f in enumerate(pipe.downstream.frames)
+        if isinstance(f, RTVIServerMessageFrame) and f.data.get("cmd") == "cues"
+    ]
+
+
+async def test_cues_wait_for_their_context_to_be_heard(engine: RecordingEngine) -> None:
+    """The text-predicted track exists before any audio does, and is held until
+    that context's first sample passes — then goes out ahead of it, so it is
+    still buffered in the browser before the transport can say the bot started."""
+    async with AvatarPipe() as pipe:
+        await pipe.push(sentence("Hello there.", "1.1"))
+        await engine.emit("1.1", 0, [], False)  # type: ignore[attr-defined]
+        assert _cue_frames(pipe) == []
+        await pipe.push(pcm(b"a", 100, "1.1"))
+        cues = _cue_frames(pipe)
+        assert [ctx for _, ctx in cues] == ["1.1"]
+        audio_at = next(
+            i for i, f in enumerate(pipe.downstream.frames) if isinstance(f, TTSAudioRawFrame)
+        )
+        assert cues[0][0] < audio_at
+        await engine.emit("1.1", 0, [], False)  # type: ignore[attr-defined]
+        assert len(_cue_frames(pipe)) == 2, "a heard context streams from then on"
+
+
+async def test_a_context_cut_before_its_first_sample_never_reaches_the_browser(
+    engine: RecordingEngine,
+) -> None:
+    """The P0: a barge-in over a greeting that has not started playing. The
+    browser binds contexts to speaking events in order, so if the dead greeting
+    reached it, every later reply would play the cues of the one before."""
+    async with AvatarPipe() as pipe:
+        await pipe.push(sentence("Hi, I'm here to help.", "1.1"))
+        await engine.emit("1.1", 0, [], False)  # type: ignore[attr-defined]
+        await pipe.push(InterruptionFrame())
+        # A decode already in flight when the cut landed.
+        await engine.emit("1.1", 0, [], True)  # type: ignore[attr-defined]
+        assert engine.ended == ["1.1"]
+
+        await pipe.push(sentence("Sure.", "2.1"))
+        await engine.emit("2.1", 0, [], False)  # type: ignore[attr-defined]
+        await pipe.push(pcm(b"b", 100, "2.1"))
+        assert [ctx for _, ctx in _cue_frames(pipe)] == ["2.1"]
+
+
+async def test_a_context_queued_behind_a_finished_reply_survives_the_stop(
+    engine: RecordingEngine,
+) -> None:
+    """A plain stop is not a cut. Text runs ahead of audio, so the next reply
+    can be announced while this one is still playing; it plays next."""
+    async with AvatarPipe() as pipe:
+        await pipe.push(pcm(b"a", 100, "1.1"))
+        await pipe.push(sentence("And another thing.", "2.1"))
+        await engine.emit("2.1", 0, [], False)  # type: ignore[attr-defined]
+        await pipe.push(BotStoppedSpeakingFrame())
+        assert [ctx for _, ctx in _cue_frames(pipe)] == []
+        await pipe.push(pcm(b"b", 100, "2.1"))
+        assert [ctx for _, ctx in _cue_frames(pipe)] == ["2.1"]
         assert engine.ended == ["1.1"]
 
 

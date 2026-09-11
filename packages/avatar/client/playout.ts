@@ -15,10 +15,12 @@
  * matters: cue `t: 0` is the first sample the TTS produced, lead-in included,
  * and a detector keyed to *speech* would anchor 20-50 ms into the lead-in.
  *
- * No output-device latency is added. The mouth reaches the viewer through a
- * compositor and a display that are late by about as much as the speaker is,
- * and when they do not cancel, a mouth early by a frame is the forgiving side:
- * sound leading picture is noticed at ~45 ms, picture leading sound at ~125 ms.
+ * What this probe hears is the sound entering the page's audio graph, not
+ * leaving the speaker. For a wired speaker the difference is about what the
+ * compositor and display add to the picture, and the two cancel. A Bluetooth
+ * headset adds 150-250 ms that nothing on the picture side matches, so the
+ * probe also reports the device latency the browser admits to, and the
+ * client delays the mouth by the excess (`AvatarClient.ts`).
  */
 
 export interface PlayoutProbe {
@@ -29,6 +31,12 @@ export interface PlayoutProbe {
    * audio graph is not running.
    */
   onset(): number | null | undefined;
+  /** The output device's latency as this context reports it, in ms; 0 when it
+   * will not say. The probe shares the device the call's audio plays on. */
+  outputLatencyMs?(): number;
+  /** Ask a suspended graph to run. A browser that needs a gesture for it
+   * ignores the request outside one, so this is safe to call at any time. */
+  resume?(): void;
   dispose(): void;
 }
 
@@ -71,6 +79,13 @@ export function createPlayoutProbe(track: MediaStreamTrack, now: () => number): 
       if (first < 0) return null;
       if (first === 0) return undefined;
       return t - ((buf.length - first) / ctx.sampleRate) * 1000;
+    },
+    outputLatencyMs() {
+      const s = ctx.outputLatency;
+      return typeof s === "number" && Number.isFinite(s) ? s * 1000 : 0;
+    },
+    resume() {
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
     },
     dispose() {
       source.disconnect();

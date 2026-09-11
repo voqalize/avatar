@@ -28,9 +28,13 @@ sample, `v` is a Rhubarb A–H/X mouth shape, and optional `i` is intensity.
 track at and after that offset, then append `cues`. That is the whole fast-to-
 accurate correction primitive; arrival time has no meaning.
 
-`ctx` is Pipecat's opaque TTS `context_id`. Cue patches commonly arrive before
-audio because the text-predicted track exists first. Since Pipecat's browser
-speaking events do not carry a context, the client buffers contexts FIFO. At
+`ctx` is Pipecat's opaque TTS `context_id`. Since Pipecat's browser speaking
+events do not carry a context, the client buffers contexts FIFO. So the server
+sends a context's first patch only once that context's first audio sample has
+passed it: the text-predicted track exists sooner, but a context interrupted
+before any of its audio plays must never enter the queue, or every later reply
+plays the cues of the one before it. Patches still arrive ahead of that audio,
+and so ahead of `BotStartedSpeaking`. At
 `BotStartedSpeaking` it claims the next one and starts sampling the
 already-buffered track. Timeline position zero is the first sample of the TTS
 audio — lead-in included — and the client places it where the bot's audio
