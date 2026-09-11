@@ -8,7 +8,8 @@ rig only renders** — that precedence is the design
 Library, not product; two live consumers, both pipecat voice agents. Public at
 `voqalize/avatar` under MIT — **everything committed here is public**.
 `@voqalize/avatar` (npm) and `voqalize-avatar` (PyPI) are two ends of one wire
-format and publish in lockstep from one `v<semver>` tag ([RELEASING.md](RELEASING.md)).
+format and release independently, from `npm-v<semver>` and `py-v<semver>` tags —
+the wire keeps them compatible, not a shared version ([RELEASING.md](RELEASING.md)).
 Both of those are reframings of a narrower original brief — a talking head for
 one AI voice interviewer — and the requester's words are the authority if either
 reopens: *"This is an avatar for online AI based calls. The avatar can take

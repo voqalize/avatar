@@ -5,8 +5,8 @@ looked for a payload file named `avatarsync` — correct when the aligner was a
 subprocess executable, dead the moment it became `libavatarsync.so`/`.dylib`.
 Every build after that quietly took the pure branch while `artifacts` still
 packed 44 MB of payload in, and the only thing that would ever have noticed is
-`wheels.yml`, which refuses a `py3-none-any` wheel — i.e. a tag push, after npm
-had already published its half.
+`wheels.yml`, which refuses a `py3-none-any` wheel — i.e. a release tag, the
+latest and most expensive place to find out.
 
 So the predicate is tested against a *faked* bundle rather than a real one: the
 point is the naming contract between `stage_native.py` and this hook, and that

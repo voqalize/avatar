@@ -185,7 +185,7 @@ macOS-specific — a linux library needs a linux *builder*, not a code change.
 A machine with no library at all is not an error: `AvatarsyncPaths.check()` names
 the missing file and the Python tests skip rather than fail. That is a
 comfortable failure mode and therefore a dangerous one — a CI leg with no library
-went green having tested none of this, which is why `.github/workflows/ci.yml`
+went green having tested none of this, which is why `.github/workflows/ci-py.yml`
 builds the aligner itself, caches it on `build.sh --recipe-id`, and turns a
 missing one from a skip into a failure. Locally you have no such guard: check the
 skip count, not just the exit code.

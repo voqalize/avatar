@@ -67,9 +67,9 @@ npm install @voqalize/avatar      # the browser half
 pip install voqalize-avatar       # the pipecat half
 ```
 
-They are the two ends of one wire format and publish in lockstep from one tag,
-because a version pair that can drift is a protocol mismatch waiting to be
-debugged in production ([RELEASING.md](RELEASING.md)).
+They are the two ends of one wire format and release independently; what keeps
+them compatible is the wire contract, not a shared version number
+([RELEASING.md § Compatibility](RELEASING.md#compatibility)).
 
 ## Getting started
 
@@ -379,7 +379,7 @@ The conformance sweep passing is not evidence a change looks good: it catches
 dead avatars, NaN leaks and detached SVGs, and nothing else. Every defect this
 project has found was found by looking at a rendered page.
 
-Releasing both packages from one tag: [RELEASING.md](RELEASING.md).
+Releasing either package: [RELEASING.md](RELEASING.md).
 
 ## Design
 

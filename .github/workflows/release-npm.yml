@@ -1,0 +1,116 @@
+# Publish `@voqalize/avatar` to npm from an `npm-v<semver>` tag.
+#
+# The JS package releases on its own, independent of `voqalize-avatar`
+# (release-pypi.yml). What keeps the two compatible is the wire contract, not a
+# shared version number — see RELEASING.md § Compatibility.
+#
+#   git tag -a npm-v0.3.1 -m "@voqalize/avatar 0.3.1" && git push origin npm-v0.3.1
+#
+# No long-lived credential: npm accepts an OIDC token minted by this workflow
+# for this repository — see RELEASING.md for the one-time setup.
+name: release-npm
+
+on:
+  push:
+    tags: ["npm-v[0-9]+.[0-9]+.[0-9]+", "npm-v[0-9]+.[0-9]+.[0-9]+-*"]
+  workflow_dispatch: # re-run a failed publish without re-tagging; pick the tag as the ref
+
+# One release at a time per tag. Never `cancel-in-progress`: a published npm
+# version number is gone for good, so a run is never killed mid-publish.
+concurrency:
+  group: release-npm-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: tag matches package.json
+    runs-on: ubuntu-latest
+    outputs:
+      dist-tag: ${{ steps.check.outputs.dist-tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          set -euo pipefail
+          case "$GITHUB_REF_NAME" in
+            npm-v*) ;;
+            *) echo "::error::$GITHUB_REF_NAME is not an npm-v tag — run this workflow on the tag"; exit 1 ;;
+          esac
+          tag="${GITHUB_REF_NAME#npm-v}"
+          # The published manifest, not the workspace root — the root
+          # package.json is private and its version means nothing.
+          npm_version=$(node -p "require('./packages/avatar/package.json').version")
+          echo "tag=$tag  npm=$npm_version"
+          if [ "$tag" != "$npm_version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME disagrees with packages/avatar/package.json ($npm_version)"
+            exit 1
+          fi
+          # npm tags whatever is published `latest` unless told otherwise, so a
+          # pre-release would become what `npm install` hands everyone.
+          case "$tag" in
+            *-*) echo "dist-tag=next" >> "$GITHUB_OUTPUT" ;;
+            *) echo "dist-tag=latest" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  ci:
+    name: ci
+    needs: guard
+    uses: ./.github/workflows/ci-js.yml
+
+  npm:
+    name: publish @voqalize/avatar
+    needs: [guard, ci]
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # mints the OIDC token npm exchanges for a publish grant
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      # Trusted publishing landed in npm 11.5.1; the runner's bundled npm is
+      # usually newer, but pinning the floor makes the failure legible. The
+      # workspace installs with pnpm and publishes with npm on purpose: the
+      # OIDC trusted-publishing exchange below is npm's, and `npm publish` reads
+      # the manifest, not the store.
+      - run: npm install -g npm@latest
+      # Runs `prepare`, which compiles packages/avatar/dist — the tarball's
+      # entrypoint.
+      - run: pnpm install --frozen-lockfile
+      # --provenance signs an attestation linking the tarball to this workflow
+      # run and this commit. Free on a public repo, and the only way a consumer
+      # can check that what they installed came from what they can read. Run in
+      # the package: `npm publish` reads the manifest in its working directory,
+      # and the root one is the private workspace manifest.
+      - run: npm publish --provenance --access public --tag "${{ needs.guard.outputs.dist-tag }}"
+        working-directory: packages/avatar
+
+  github-release:
+    name: github release
+    needs: [guard, npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the notes diff against the previous npm-v tag
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && exit 0
+          # The previous release of THIS package. Left to itself gh picks the
+          # nearest tag of any family, and the notes would then be diffed
+          # against a PyPI release.
+          prev=$(git tag --list 'npm-v*' --sort=-v:refname | awk -v cur="$GITHUB_REF_NAME" 'found {print; exit} $0 == cur {found=1}')
+          gh release create "$GITHUB_REF_NAME" \
+            --title "@voqalize/avatar ${GITHUB_REF_NAME#npm-v}" \
+            --generate-notes ${prev:+--notes-start-tag "$prev"}

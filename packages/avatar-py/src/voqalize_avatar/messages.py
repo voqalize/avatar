@@ -9,8 +9,8 @@ opaquely, so a version would have been ours to invent and ours to check, and
 neither end ever checked it. The compatibility rule it stood for is real and
 survives it — the client ignores a `cmd` it does not know, so adding a verb is
 backward compatible and changing the meaning of one is not. The two packages
-version in lockstep from one git tag (`RELEASING.md`), which is the mechanism
-that actually keeps the ends together.
+release independently, so that rule is what keeps the ends together
+(`RELEASING.md` § Compatibility).
 """
 
 from __future__ import annotations

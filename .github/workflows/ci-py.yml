@@ -1,0 +1,123 @@
+# The backend gate: `voqalize-avatar` judged by test at both ends of its
+# declared pipecat range, with the real aligner in the loop. Its own workflow
+# because it is its own release — release-pypi.yml runs this and nothing from
+# the JS side before it publishes.
+name: ci-py
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call: # release-pypi.yml runs this before it publishes anything
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-py-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (pipecat ${{ matrix.pipecat }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of the declared range. The floor is a real claim — pipecat
+        # moved a constructor and where a processor's input task starts inside
+        # it, and packages/avatar-py/tests/helpers.py spans both — so "we
+        # support 1.4" is checked, not asserted. The tests step says how.
+        pipecat: [floor, resolved]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # The library AND its 56 MB model tree, both from the same script. No
+      # library is committed for any platform, so without this compile every
+      # decoder test skips — which is exactly what happened, silently, behind a
+      # green check, back when a mac library was committed and this runner was
+      # Linux. `--recipe-id` is the compile's
+      # own input hash, so the cache moves when the patch or the pinned upstream
+      # does and not when an unrelated line of build.sh does.
+      - name: aligner cache key
+        id: recipe
+        run: echo "id=$(packages/avatar-py/native/avatarsync/build.sh --recipe-id)" >> "$GITHUB_OUTPUT"
+
+      - name: cache the aligner library and model tree
+        id: aligner-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            packages/avatar-py/native/avatarsync/bin
+            packages/avatar-py/native/avatarsync/res
+            packages/avatar-py/native/avatarsync/.cache
+          key: avatarsync-${{ runner.os }}-${{ steps.recipe.outputs.id }}
+
+      - name: install build dependencies
+        if: steps.aligner-cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y libboost-all-dev
+
+      - name: build the aligner
+        if: steps.aligner-cache.outputs.cache-hit != 'true'
+        run: packages/avatar-py/native/avatarsync/build.sh
+
+      - name: tests
+        working-directory: packages/avatar-py
+        env:
+          PIPECAT: ${{ matrix.pipecat }}
+          # Turns "the aligner is missing" from a skip into a failure. Without
+          # it a green backend job proves only that the pure-Python half works;
+          # the decoder, the pool ceiling and both viseme legs go untested. See
+          # packages/avatar-py/tests/conftest.py.
+          AVATAR_REQUIRE_ALIGNER: "1"
+        # Neither leg may replay the lockfile, and neither `--resolution` flag
+        # alone avoids it — both legs did, silently, for as long as this matrix
+        # existed:
+        #
+        # `--resolution highest` is uv's default, so it matches the options the
+        # lock was written with and uv takes the lock as it stands: the
+        # "resolved" leg tested whatever was locked (pipecat 1.7) while 1.8 and
+        # 1.9 broke the test harness unseen. `--upgrade` is what re-resolves.
+        #
+        # `lowest-direct` does re-resolve, but the lock is universal across
+        # dependency groups and the `server` groups need pipecat 1.7, so it
+        # settles on 1.7 — never the 1.4 this package declares. The floor leg
+        # installs the declared floor over it, read from pyproject.toml rather
+        # than restated here.
+        #
+        # Both legs print what they actually tested; that line is the evidence.
+        run: |
+          if [ "$PIPECAT" = floor ]; then
+            uv sync --resolution lowest-direct
+            uv pip install --resolution lowest-direct --upgrade-package pipecat-ai -r pyproject.toml
+          else
+            uv sync --upgrade
+          fi
+          uv run --no-sync python -c "import importlib.metadata as m; print('pipecat under test:', m.version('pipecat-ai'))"
+          uv run --no-sync pytest -q
+
+      # The local server is not part of the package, so it rides the resolved
+      # leg only — what it checks is the frame contract between our two canned
+      # services and pipecat's, and that contract does not vary with the
+      # dependency floor. It runs against the lock the tests step just upgraded.
+      # It does have the aligner in the loop: the boundary tests read the
+      # accurate leg's cues, so they are held to the same rule.
+      - name: server frame contract
+        if: matrix.pipecat == 'resolved'
+        working-directory: apps/server
+        env:
+          AVATAR_REQUIRE_ALIGNER: "1"
+        run: |
+          uv run --project ../../packages/avatar-py --group server --group dev python -c "import importlib.metadata as m; print('pipecat under test:', m.version('pipecat-ai'))"
+          uv run --project ../../packages/avatar-py --group server --group dev python -m pytest -q
+
+      - name: distributions build and validate
+        if: matrix.pipecat == 'resolved'
+        working-directory: packages/avatar-py
+        run: |
+          uv build
+          uvx twine check dist/*

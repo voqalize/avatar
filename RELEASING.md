@@ -1,16 +1,20 @@
 # Releasing
 
-Two packages, one tag, no long-lived credentials.
+Two packages, two pipelines, no long-lived credentials.
 
-| package | registry | what's in it |
-|---|---|---|
-| [`@voqalize/avatar`](https://www.npmjs.com/package/@voqalize/avatar) | npm | `createAvatar` (`.`), `<Avatar>` (`./react`), the widget (`./internal`) |
-| [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) | PyPI | the pipecat processor, state machine, wire and viseme engine |
+| package | registry | tag | workflow | what's in it |
+|---|---|---|---|---|
+| [`@voqalize/avatar`](https://www.npmjs.com/package/@voqalize/avatar) | npm | `npm-v<semver>` | `release-npm.yml` | `createAvatar` (`.`), `<Avatar>` (`./react`), the widget (`./internal`) |
+| [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) | PyPI | `py-v<semver>` | `release-pypi.yml` | the pipecat processor, state machine, wire and viseme engine |
 
-They version in lockstep and ship together. They are two ends of one wire
-format — the widget renders what the backend sends — so a version pair that can
-drift is a protocol mismatch waiting to be debugged in production. `.github/workflows/release.yml`
-refuses to publish either half if the tag disagrees with either manifest.
+Each package releases on its own schedule with its own version number: a
+backend fix neither waits on a client release nor drags one along. Each
+workflow refuses to publish if its tag disagrees with its manifest, and gates
+on its own package's CI (`ci-py.yml`, `ci-js.yml`) and nothing else.
+
+Up to 0.3.0 both shipped together from one `v<semver>` tag. Those tags stay,
+and each release also carries a `py-v`/`npm-v` pair on the same commit, so
+either package's history reads from one tag family.
 
 **The npm tarball's layout changed in 0.3.0.** The published manifest moved to
 `packages/avatar/package.json`, the compiled client is `dist/` rather than
@@ -19,48 +23,60 @@ documents no longer ship inside the package, because a second copy of `docs/`
 going stale on npm is worse than a link to a public repository that is current.
 The export map is unchanged, so nothing a consumer imports moved.
 
+## Compatibility
+
+The version numbers do not say which halves work together; the wire does. It
+has no version field (`packages/avatar-py/src/voqalize_avatar/messages.py` says
+why), and the client ignores a `cmd` it does not know. So:
+
+- **Adding** a command, or an optional field, is backward compatible and ships
+  in either package alone. An older client ignores it; a newer client must not
+  depend on receiving it from an older server.
+- **Changing or removing** one is a breaking wire change. It ships as a new
+  minor (a major after 1.0) of *both* packages, released together, and both
+  release notes name the pairing.
+
+The wire itself is [docs/contract-wire.md](docs/contract-wire.md). A consumer
+picks its pair with its own pins.
+
 ## Cutting a release
 
 ```sh
-# 1. bump both manifests to the same version
-#      packages/avatar/package.json      "version": "0.3.0"
-#      packages/avatar-py/pyproject.toml version = "0.3.0"
-# 2. commit, then
-git tag v0.3.0
-git push origin main --follow-tags
+# voqalize-avatar: bump packages/avatar-py/pyproject.toml, commit, then
+git tag -a py-v0.3.1 -m "voqalize-avatar 0.3.1"
+git push origin main py-v0.3.1
+
+# @voqalize/avatar: bump packages/avatar/package.json, commit, then
+git tag -a npm-v0.3.1 -m "@voqalize/avatar 0.3.1"
+git push origin main npm-v0.3.1
 ```
 
-The root `package.json` is the workspace manifest and publishes nothing; its
-version is not read by anything and the guard ignores it.
+Push the tag by name. The root `package.json` is the workspace manifest and
+publishes nothing; its version is not read by anything and neither guard reads
+it.
 
-That is all. The workflow runs the full CI gate first (widget sweep, client
-tests, backend tests at both ends of the pipecat range), then **builds every
-wheel before it publishes anything**, then publishes npm and PyPI, then opens a
-GitHub release with generated notes.
+Each workflow runs its own package's CI gate first — `ci-py.yml` is the backend
+tests at both ends of the pipecat range plus the local server's frame contract,
+`ci-js.yml` is the widget sweep, the client tests and the client-js floor —
+then publishes, then opens a GitHub release whose notes diff against that
+package's previous tag.
 
-The build-before-publish order is what makes "publishes both or neither" true
-rather than aspirational. Compiling the wheels is the only step that fails for
-reasons outside this repository — a manylinux image, a brew formula, the
-upstream tarball — and npm is the step that cannot be undone, because a
-published version number never comes back. So npm waits behind the wheels.
+The PyPI pipeline **builds every wheel before it uploads anything.** Compiling
+them is the only step that fails for reasons outside this repository — a
+manylinux image, a brew formula, the upstream tarball — and PyPI takes the set
+whole, so a platform that fails to build publishes nothing rather than a
+release whose macOS users silently have no lipsync.
 
-If one half fails and the other succeeded, fix the cause and re-run: **Actions →
-release → Run workflow**, and pick the *tag* as the ref. The successful half
-will fail with "already published", which is the correct and harmless outcome.
+If a publish fails, fix the cause and re-run: **Actions → release-pypi (or
+release-npm) → Run workflow**, and pick the *tag* as the ref.
 
-Pre-release tags work too, with one wrinkle that is not ours to fix: **the two
-manifests spell a pre-release differently.** For the tag `v0.3.0-rc.1`,
-`packages/avatar/package.json` says `0.3.0-rc.1` (semver) and
-`packages/avatar-py/pyproject.toml` says `0.3.0rc1` (PEP 440, which is what
-PyPI stores whatever you type). Neither registry accepts the other's spelling,
-so this is the one place the lockstep rule is about the same *version* rather
-than the same *string*. The guard knows both spellings and derives the second
-from the tag, so a wrong one fails before anything is published. Only
-`-alpha.N`, `-beta.N` and `-rc.N` are accepted; anything else is rejected at the
-guard rather than at upload.
-
-npm will also tag a pre-release `latest` unless you add `--tag next` to the
-publish step, so use them deliberately.
+Pre-release tags work too. `npm-v0.4.0-rc.1` publishes under npm's `next`
+dist-tag, never `latest`, so `npm install` does not hand it to everyone. On the
+PyPI side the manifest spells a pre-release the PEP 440 way: for
+`py-v0.4.0-rc.1`, `pyproject.toml` says `0.4.0rc1`, which is what PyPI stores
+whatever you type. The guard derives that spelling from the tag, so a wrong one
+fails before anything is uploaded. Only `-alpha.N`, `-beta.N` and `-rc.N` are
+accepted; anything else is rejected at the guard rather than at upload.
 
 ## One-time setup
 
@@ -91,9 +107,15 @@ exists.
    - PyPI Project Name: `voqalize-avatar`
    - Owner: `voqalize`
    - Repository name: `avatar`
-   - Workflow name: `release.yml`
+   - Workflow name: `release-pypi.yml`
    - Environment name: `pypi`
 3. Save. The first tagged release creates the project and claims the name.
+
+The project already exists, with a publisher registered for the old combined
+`release.yml`. PyPI allows several trusted publishers per project, so add one
+for `release-pypi.yml` (**Your projects → voqalize-avatar → Manage →
+Publishing**) before the first `py-v` tag, and delete the `release.yml` one
+once a release has gone through.
 
 Move the project into a PyPI **organization** afterwards if you want the
 `voqalize` name held there too — PyPI has no scopes, so `voqalize-` is the
@@ -117,8 +139,12 @@ Then, on the package page: **Settings → Trusted publisher → GitHub Actions**
 
 - Organization or user: `voqalize`
 - Repository: `avatar`
-- Workflow filename: `release.yml`
+- Workflow filename: `release-npm.yml`
 - Environment: `npm`
+
+The package's existing trusted publisher names the old combined `release.yml`;
+edit it to `release-npm.yml` before the first `npm-v` tag, or that publish is
+refused.
 
 From the next tag on, the workflow publishes with no credential and attaches a
 **provenance attestation** — a signed statement linking the tarball to this
@@ -134,14 +160,14 @@ classic tokens with a two-line change each. Prefer OIDC — a token in `secrets`
 is a credential that outlives the person who created it.
 
 ```yaml
-# .github/workflows/release.yml, npm job
-      - run: npm publish --provenance --access public
+# .github/workflows/release-npm.yml, npm job
+      - run: npm publish --provenance --access public --tag "${{ needs.guard.outputs.dist-tag }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}      # granular access token, "publish"
 ```
 
 ```yaml
-# .github/workflows/release.yml, pypi job
+# .github/workflows/release-pypi.yml, pypi job
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/avatar-py/dist

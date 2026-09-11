@@ -148,13 +148,15 @@ separate distributions, so there is no third-party convention to join) and
 `voqalize-avatar-pipecat` (the dependency is already declared in metadata, and
 the suffix forecloses a non-pipecat backend).
 
-**One version, one tag, both packages.** They are two ends of one wire format,
-so a version pair that can drift is a protocol mismatch waiting to be debugged
-in production. `.github/workflows/release.yml` refuses to publish either half
-if the tag disagrees with either manifest, and publishes both or neither.
-Neither registry holds a long-lived credential — both accept an OIDC token
-minted for this repository running this workflow. Setup and the token fallback
-are in `RELEASING.md`.
+**Two versions, two tags, two pipelines.** Each package releases on its own —
+`py-v<semver>` through `release-pypi.yml`, `npm-v<semver>` through
+`release-npm.yml` — because a backend fix should neither wait on a client
+release nor drag one along. They are still two ends of one wire format, and
+what keeps them together is the wire rule in `RELEASING.md` § Compatibility:
+adding a command is backward compatible, changing one is a coordinated release
+of both. Neither registry holds a long-lived credential — both accept an OIDC
+token minted for this repository running that workflow. Setup and the token
+fallback are in `RELEASING.md`.
 
 The native aligner is not a package of its own either — it ships inside the
 pypi wheel; see the `packages/avatar-py/native/avatarsync` note in decision 2.

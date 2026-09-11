@@ -17,9 +17,9 @@ Two packages, and they are the two ends of one wire format:
 | `@voqalize/avatar` | npm | the face. `createAvatar({ mount, client })` in the browser. |
 | `voqalize-avatar` | PyPI | the pipeline half. `AvatarProcessor()` between your TTS and `transport.output()`. |
 
-They publish in lockstep from one tag, because a version pair that can drift is
-a protocol mismatch waiting to be debugged in production
-([RELEASING.md](../RELEASING.md)).
+They release independently; the wire contract, not a shared version number, is
+what keeps them compatible
+([RELEASING.md § Compatibility](../RELEASING.md#compatibility)).
 
 ## The goal
 

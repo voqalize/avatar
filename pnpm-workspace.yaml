@@ -23,7 +23,7 @@ packages:
 # `@pipecat-ai/small-webrtc-transport` tracks `client-js` with a `~` peer, so
 # these two move together or not at all. They sit at the TOP of the
 # `>=1.4 <2` range this package declares in `peerDependencies`; the floor is
-# checked by the `client floor` job in ci.yml.
+# checked by the `client floor` job in ci-js.yml.
 catalog:
   "@pipecat-ai/client-js": "1.13.0"
   "@pipecat-ai/small-webrtc-transport": "1.10.6"

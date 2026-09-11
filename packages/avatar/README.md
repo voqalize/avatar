@@ -11,9 +11,9 @@ entry point, so you pay for the one you import — and you can author your own.
 
 This is the browser half. The pipeline half is
 [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) on PyPI; they are
-two ends of one wire format and publish in lockstep from one tag, because a
-version pair that can drift is a protocol mismatch waiting to be debugged in
-production.
+two ends of one wire format and release independently, kept compatible by the
+wire contract rather than a shared version number
+([RELEASING.md § Compatibility](https://github.com/voqalize/avatar/blob/main/RELEASING.md#compatibility)).
 
 **Licence: MIT.** Use it anywhere, including in closed-source products.
 
