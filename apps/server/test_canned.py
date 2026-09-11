@@ -13,6 +13,7 @@ are tested rather than reviewed.
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -45,6 +46,7 @@ from pipecat.utils.asyncio.task_manager import TaskManager, TaskManagerParams
 
 from pipecat.processors.frameworks.rtvi.frames import RTVIServerMessageFrame
 from voqalize_avatar import AvatarControlFrame, AvatarProcessor
+from voqalize_avatar.avatarsync import AvatarsyncPaths, AvatarsyncUnavailableError
 
 from canned import CannedLines, CannedLLMService, CannedTTSService
 
@@ -523,6 +525,28 @@ async def test_pacing_hands_audio_over_gradually(lines: CannedLines) -> None:
 # --- the avatar seat --------------------------------------------------------
 
 
+@pytest.fixture
+def aligner() -> None:
+    """The boundary tests wait for the accurate leg's `final` cues, and only a
+    loaded aligner produces those.
+
+    Without one the processor logs that lipsync is off and carries on — right
+    for a call, and a 15 s timeout with no reason here. So: skip naming the
+    missing path, or fail when the run has declared it is testing this for real,
+    exactly as `packages/avatar-py/tests/conftest.py` does.
+    """
+    try:
+        paths = AvatarsyncPaths.discover()
+        if paths is None:
+            raise AvatarsyncUnavailableError("no native/avatarsync directory above the package")
+        paths.check()
+    except AvatarsyncUnavailableError as exc:
+        if os.environ.get("AVATAR_REQUIRE_ALIGNER"):
+            pytest.fail(f"AVATAR_REQUIRE_ALIGNER is set and the aligner is unusable: {exc}")
+        pytest.skip(str(exc))
+
+
+@pytest.mark.usefixtures("aligner")
 async def test_the_sentence_boundary_reaches_the_avatar(lines: CannedLines) -> None:
     """A real pipeline, not a synthetic frame — because this is the one fact the
     library cannot check for itself.
@@ -658,6 +682,7 @@ async def test_word_times_are_against_the_turn_and_not_the_sentence(
     assert 0.5 * elapsed < last < elapsed
 
 
+@pytest.mark.usefixtures("aligner")
 async def test_the_sentence_boundary_reaches_the_avatar_on_the_karaoke_path(
     lines: CannedLines,
 ) -> None:

@@ -112,10 +112,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Both ends of the declared range. The floor is a real claim — one
-        # pipecat constructor moved inside it, and
-        # packages/avatar-py/tests/helpers.py spans
-        # the seam — so "we support 1.4" is checked, not asserted.
+        # Both ends of the declared range. The floor is a real claim — pipecat
+        # moved a constructor and where a processor's input task starts inside
+        # it, and packages/avatar-py/tests/helpers.py spans both — so "we
+        # support 1.4" is checked, not asserted. The tests step says how.
         include:
           - pipecat: floor
             resolution: lowest-direct
@@ -168,15 +168,31 @@ jobs:
           AVATAR_REQUIRE_ALIGNER: "1"
         # `--frozen` is wrong here: the whole point of the matrix is to
         # re-resolve at each end of the range rather than replay the lockfile.
-        run: uv run --resolution "$UV_RESOLUTION" pytest -q
+        #
+        # Re-resolving is not enough for the floor. The lock is universal
+        # across dependency groups and the `server` groups need pipecat 1.7,
+        # so `lowest-direct` settles on 1.7 — never the 1.4 this package
+        # declares. The floor leg installs the declared floor over it, read
+        # from pyproject.toml rather than restated here, and both legs print
+        # what they actually tested.
+        run: |
+          uv sync --resolution "$UV_RESOLUTION"
+          if [ "$UV_RESOLUTION" = lowest-direct ]; then
+            uv pip install --resolution lowest-direct --upgrade-package pipecat-ai -r pyproject.toml
+          fi
+          uv run --no-sync python -c "import importlib.metadata as m; print('pipecat under test:', m.version('pipecat-ai'))"
+          uv run --no-sync pytest -q
 
-      # The local server is not part of the package and has no aligner in the
-      # loop, so it rides the resolved leg only — what it checks is the frame
-      # contract between our two canned services and pipecat's, and that
-      # contract does not vary with the dependency floor.
+      # The local server is not part of the package, so it rides the resolved
+      # leg only — what it checks is the frame contract between our two canned
+      # services and pipecat's, and that contract does not vary with the
+      # dependency floor. It does have the aligner in the loop: the boundary
+      # tests read the accurate leg's cues, so they are held to the same rule.
       - name: server frame contract
         if: matrix.pipecat == 'resolved'
         working-directory: apps/server
+        env:
+          AVATAR_REQUIRE_ALIGNER: "1"
         run: uv run --project ../../packages/avatar-py --group server --group dev python -m pytest -q
 
       - name: distributions build and validate
