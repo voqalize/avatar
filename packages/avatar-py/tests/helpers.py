@@ -151,8 +151,9 @@ class _Capture(FrameProcessor):
     @property
     def passed(self) -> list[Frame]:
         """The pipeline's own traffic — what arrived minus what the avatar
-        added, which is the set the pass-through obligation is about."""
-        return [f for f in self.frames if not isinstance(f, RTVIServerMessageFrame)]
+        added and the harness's own markers, which is the set the pass-through
+        obligation is about."""
+        return [f for f in self.frames if not isinstance(f, RTVIServerMessageFrame | _Marker)]
 
 
 class AvatarPipe:
@@ -200,7 +201,16 @@ class AvatarPipe:
         return self
 
     async def start(self) -> None:
-        await self.push(StartFrame(audio_in_sample_rate=16000, audio_out_sample_rate=24000))
+        """Deliver the StartFrame the way a pipeline does: through the queue.
+
+        From pipecat 1.8 a processor's input task is created by a *queued*
+        StartFrame rather than by `setup()`. Handed to `process_frame`, the
+        StartFrame starts the processor but leaves its queue with no reader, and
+        every `queue()`d frame after it waits forever. Queued, it is correct on
+        both sides of that change, and `settle()` returns once it is handled.
+        """
+        await self.queue(StartFrame(audio_in_sample_rate=16000, audio_out_sample_rate=24000))
+        await self.settle()
 
     async def __aexit__(self, *exc: object) -> None:
         for p in (self.upstream, self.avatar, self.downstream):
