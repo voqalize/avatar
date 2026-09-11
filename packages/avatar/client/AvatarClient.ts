@@ -522,13 +522,15 @@ export class AvatarClient {
   }
 
   /** Listen to the bot's audio track, if the transport has one yet. */
-  private listenTo(client: PipecatClient): void {
+  private listenTo(client: PipecatClient, heard?: MediaStreamTrack): void {
     if (this.opts.playoutProbe) return;
-    let track: MediaStreamTrack | undefined;
-    try {
-      track = client.tracks().bot?.audio;
-    } catch {
-      return;
+    let track: MediaStreamTrack | undefined = heard;
+    if (!track) {
+      try {
+        track = client.tracks().bot?.audio;
+      } catch {
+        return;
+      }
     }
     if (!track || track === this.probeTrack) return;
     this.dropProbe();
@@ -723,7 +725,14 @@ export class AvatarClient {
    */
   attach(client: PipecatClient): () => void {
     const onServerMessage = (raw: unknown) => this.dispatch(unwrapServerMessage(raw));
-    const onTrackStarted = () => this.listenTo(client);
+    // The bot's track has to come from the event. SmallWebRTC never lists a
+    // remote track in `tracks()`; it only hands it to this callback, with no
+    // participant. Asking `tracks()` alone meant no probe on that transport,
+    // so every turn fell back to the event.
+    const onTrackStarted = (track?: MediaStreamTrack, participant?: { local?: boolean }) => {
+      if (participant?.local || (track && track.kind !== "audio")) return;
+      this.listenTo(client, track);
+    };
     const subscriptions: Array<[string, (...args: any[]) => void]> = [
       [RTVI_EVENTS.serverMessage, onServerMessage],
       [RTVI_EVENTS.connected, this.onConnectedOrReady],

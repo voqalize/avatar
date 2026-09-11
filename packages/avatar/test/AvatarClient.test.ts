@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AvatarClient, RTVI_EVENTS, VISUAL_LEAD_MS as LEAD } from "../client/AvatarClient.js";
 import { createFakeAvatar } from "./fakeAvatar.js";
 
@@ -216,6 +216,56 @@ describe("AvatarClient playout anchor", () => {
     vi.advanceTimersByTime(400);
     expect(probe.onset.mock.calls.length).toBe(asked);
     vi.useRealTimers();
+  });
+});
+
+describe("AvatarClient hears the bot track it is given", () => {
+  // SmallWebRTC hands the bot's track to `trackStarted` and nowhere else —
+  // `tracks()` lists local media only. Reading `tracks()` alone meant no probe
+  // on that transport, and every turn anchored on the event.
+  function withAudio() {
+    const sources: MediaStreamTrack[][] = [];
+    class FakeContext {
+      state = "running";
+      outputLatency = 0;
+      resume() { return Promise.resolve(); }
+      close() { return Promise.resolve(); }
+      createMediaStreamSource(s: { tracks: MediaStreamTrack[] }) {
+        sources.push(s.tracks);
+        return { connect() {}, disconnect() {} };
+      }
+      createAnalyser() { return { fftSize: 0, getFloatTimeDomainData() {} }; }
+    }
+    class FakeStream { constructor(public tracks: MediaStreamTrack[]) {} }
+    vi.stubGlobal("AudioContext", FakeContext);
+    vi.stubGlobal("MediaStream", FakeStream);
+    const listeners = new Map<string, (...args: any[]) => void>();
+    const pc = {
+      on(event: string, listener: (...args: any[]) => void) { listeners.set(event, listener); },
+      off(event: string) { listeners.delete(event); },
+      tracks: () => ({ local: {} }),
+    };
+    const client = new AvatarClient(createFakeAvatar().api);
+    client.attach(pc as never);
+    const started = (...args: unknown[]) => listeners.get(RTVI_EVENTS.trackStarted)?.(...args);
+    return { sources, started };
+  }
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("listens to the remote audio track the event carries", () => {
+    const { sources, started } = withAudio();
+    const bot = { kind: "audio", id: "bot" } as MediaStreamTrack;
+    started(bot);
+    expect(sources).toEqual([[bot]]);
+    started(bot);
+    expect(sources).toHaveLength(1);
+  });
+
+  it("does not mistake the user's microphone or a video track for the bot", () => {
+    const { sources, started } = withAudio();
+    started({ kind: "audio", id: "mic" }, { local: true });
+    started({ kind: "video", id: "cam" });
+    expect(sources).toEqual([]);
   });
 });
 
