@@ -312,17 +312,18 @@ describe("AvatarClient mouth lead and re-anchor", () => {
   // Speech at 0, a pause from 400 to 900, speech again at 900.
   const PAUSED = [{ t: 0, v: "B" }, { t: 400, v: "X" }, { t: 900, v: "C" }, { t: 1300, v: "X" }];
 
-  it("re-anchors where the sound resumes after a pause, slewing instead of jumping", () => {
+  it("re-anchors where the sound resumes late after a pause, slewing instead of jumping", () => {
     let heard: number | null | undefined = 10_000;
     const { clock } = start({ onset: () => heard }, PAUSED);
     expect(clock()).toBe(LEAD);
 
-    // The track says speech resumes at 10_900; it is heard 80 ms late.
+    // The track says speech resumes at 10_900; the server ran dry, and it is
+    // heard 170 ms later — past anything the track's own anticipation explains.
     heard = null;
-    vi.advanceTimersByTime(890);
+    vi.advanceTimersByTime(1_065);
     clock();
-    heard = 10_980;
-    vi.advanceTimersByTime(120);
+    heard = 11_070;
+    vi.advanceTimersByTime(15);
     const before = clock();
     vi.advanceTimersByTime(100);
     const step = clock() - before;
@@ -330,11 +331,37 @@ describe("AvatarClient mouth lead and re-anchor", () => {
     expect(step).toBeGreaterThanOrEqual(90);
     expect(step).toBeLessThan(100);
 
-    vi.advanceTimersByTime(1_000);
+    vi.advanceTimersByTime(1_500);
     clock();
     vi.advanceTimersByTime(10);
-    // Fully absorbed: the track's 900 now sits on the sound at 10_980.
-    expect(clock()).toBe(Date.now() - 10_080 + LEAD);
+    // Fully absorbed: the track's 900 now sits where a resumption is usually
+    // heard before its sound — 30 ms ahead of 11_070.
+    expect(clock()).toBe(Date.now() - 10_140 + LEAD);
+    vi.useRealTimers();
+  });
+
+  it("keeps the clock where the sound resumes within the track's usual anticipation of it", () => {
+    // A mouth opens before its sound: 105 ms after the cue is still on time.
+    let heard: number | null | undefined = 10_000;
+    const { clock } = start({ onset: () => heard }, PAUSED);
+    heard = null;
+    vi.advanceTimersByTime(990);
+    heard = 11_005;
+    vi.advanceTimersByTime(1_010);
+    expect(clock()).toBe(2_000 + LEAD);
+    vi.useRealTimers();
+  });
+
+  it("re-anchors where the sound resumes before the track says it does", () => {
+    let heard: number | null | undefined = 10_000;
+    const { clock } = start({ onset: () => heard }, PAUSED);
+    heard = null;
+    vi.advanceTimersByTime(990);
+    heard = 10_840; // 60 ms before the cue: the clock is late
+    vi.advanceTimersByTime(1_500);
+    clock();
+    vi.advanceTimersByTime(10);
+    expect(clock()).toBe(Date.now() - 9_910 + LEAD);
     vi.useRealTimers();
   });
 

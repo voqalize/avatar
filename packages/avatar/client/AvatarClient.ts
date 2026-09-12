@@ -24,8 +24,10 @@
  * smoothing makes every mouth shape late by about that much. It is pulled back
  * by any output-device latency beyond what the display already matches (a
  * Bluetooth headset). Within a turn, each resumption after a pause in the
- * track is a second chance to hear where the sound really is. A disagreement
- * is slewed out at no more than 10 % of clock rate, never jumped, because a
+ * track is a second chance to hear where the sound really is — but a mouth
+ * opens before its sound, so a resumption heard within the track's usual
+ * anticipation of it agrees with the clock. Only a disagreement beyond that is
+ * slewed out, at no more than 10 % of clock rate, never jumped, because a
  * mouth that skips is seen and one that runs briefly fast is not.
  *
  * `attach()` subscribes to the avatar server-message channel *and* Pipecat's
@@ -131,6 +133,18 @@ const REANCHOR_GAP_MS = 250;
  * sees 170 ms back, so one look catches an early sound as well as a late one. */
 const REANCHOR_LOOK_MS = 100;
 const REANCHOR_WINDOW_MS = 150;
+/**
+ * Where a resumption is heard, after the cue that marks it. The track opens
+ * the mouth before the sound leaves digital silence: by 30–41 ms at most of the
+ * demo corpus's silent resumptions (median 32, both voices) and by up to 105 at
+ * a few, and the browser hears the sound a few ms after it leaves the wire. A
+ * sound heard anywhere in that band is the clock being right. Taking
+ * it as the resumption itself set every later phrase of a turn that much late —
+ * the direction people notice — and a mouth left early by an underrun smaller
+ * than the band is the direction they forgive (see `VISUAL_LEAD_MS`).
+ */
+const RESUME_HEARD_MS = 30;
+const RESUME_HEARD_RANGE_MS = [0, 130] as const;
 /** The most a re-anchor may speed or slow the clock, as a fraction of real time. */
 const MAX_SLEW = 0.1;
 
@@ -483,7 +497,7 @@ export class AvatarClient {
       if (this.turn !== turn || !this.probe || turn.t0 === null) return;
       const due = (turn.target ?? turn.t0) + at;
       const onset = this.probe.onset();
-      if (onset === null && this.now() < due + REANCHOR_WINDOW_MS) {
+      if (onset === null && this.now() < due + RESUME_HEARD_MS + REANCHOR_WINDOW_MS) {
         this.reanchorTimer = this.setTimer(poll, ONSET_POLL_MS);
         return;
       }
@@ -491,8 +505,13 @@ export class AvatarClient {
       // `undefined` is sound all the way back: the pause was not silence on
       // the wire, or it resumed long before the track says. Either way there
       // is nothing to measure.
-      if (typeof onset === "number" && Math.abs(onset - due) <= REANCHOR_WINDOW_MS) {
-        turn.target = onset - at;
+      if (typeof onset === "number") {
+        const heard = onset - due;
+        const [earliest, latest] = RESUME_HEARD_RANGE_MS;
+        const agrees = heard >= earliest && heard <= latest;
+        if (!agrees && Math.abs(heard - RESUME_HEARD_MS) <= REANCHOR_WINDOW_MS) {
+          turn.target = onset - at - RESUME_HEARD_MS;
+        }
       }
       this.scheduleReanchor(turn);
     };
