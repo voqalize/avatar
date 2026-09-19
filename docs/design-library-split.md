@@ -80,8 +80,7 @@ a distribution choice that leaves it dark in the common case is a regression in
 the thing this project is for, whatever it saves elsewhere.
 
 The cost is honest and small — a 44 MB wheel, a build per platform instead of
-one ([RELEASING.md](../RELEASING.md) § The PyPI side is four artifacts, which
-owns the tags),
+one ([RELEASING.md](../RELEASING.md), which owns the tags and the wheel matrix),
 and no wheel at all for platforms outside the matrix. The last of those is
 survivable precisely because of the property below: an install with no binary is
 an ordinary condition, not a failure.

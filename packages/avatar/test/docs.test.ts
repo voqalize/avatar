@@ -68,9 +68,9 @@ const CODE_DIRS = [
   "apps/authoring",
   // The release tooling. Private-only, so on the public line this entry finds
   // nothing — which is right, and walk() already tolerates an absent tree. It is
-  // here because docs/release-0.4.0.md names the export tool's allowlist
-  // constants, and a plan that documents a constant is exactly as capable of
-  // going stale as a doc that documents a state.
+  // here because RELEASING.md names the export tool's allowlist constants on
+  // this line, and a doc that documents a constant is exactly as capable of
+  // going stale as one that documents a state.
   "tools",
 ];
 const CODE_EXT = /\.(js|mjs|ts|tsx|py|c|h|json|html)$/;

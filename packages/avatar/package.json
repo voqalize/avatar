@@ -1,7 +1,7 @@
 {
   "name": "@voqalize/avatar",
-  "version": "0.3.0",
-  "description": "A JavaScript-programmable 2-D talking head for AI voice calls: server-synced lipsync, state through motion, zero dependencies.",
+  "version": "0.4.0",
+  "description": "A JavaScript-programmable talking head for AI voice calls: line-art or 2.5-D faces, server-synced lipsync, state through motion, no runtime dependencies.",
   "license": "MIT AND CC-BY-4.0",
   "author": "Voqalize",
   "homepage": "https://github.com/voqalize/avatar#readme",
