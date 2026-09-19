@@ -13,6 +13,8 @@ const IMAGES = {
 const FACE = () => import('../src/canvas/avatars/round/face.mjs');
 
 export type { CanvasAvatarOptions };
+// Same mixer, same clip library, so the same declaration (`supports.ts`).
+export { supports } from './supports.js';
 
 export function createAvatar(options: CanvasAvatarOptions): AvatarInstance {
   return createCanvasAvatar(options, {

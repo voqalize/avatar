@@ -1,5 +1,5 @@
 {
-  "description": "Cross-runtime conformance cases for the shared visible cue normalizer. Only t/v are compared: the Python wire keeps an optional phone while the browser adds a local intensity default.",
+  "description": "Cross-runtime conformance cases for the shared visible cue normalizer. Each case is compared on the keys its expected output declares, so the shape cases stay t/v and the phone cases add p.",
   "cases": [
     {
       "name": "sorts, maps unknown shapes to silence, and merges duplicates",
@@ -20,6 +20,36 @@
       "name": "removes a swallowed middle shape between matching closures",
       "input": [{"t": 0, "v": "G"}, {"t": 70, "v": "F"}, {"t": 90, "v": "G"}],
       "output": [{"t": 0, "v": "G"}]
+    },
+    {
+      "name": "keeps every phone under a held shape, as one mouth position",
+      "input": [{"t": 0, "v": "B", "p": "S"}, {"t": 120, "v": "B", "p": "IH"}, {"t": 200, "v": "B", "p": "T"}, {"t": 320, "v": "X"}],
+      "output": [{"t": 0, "v": "B", "p": "S"}, {"t": 120, "v": "B", "p": "IH"}, {"t": 200, "v": "B", "p": "T"}, {"t": 320, "v": "X", "p": null}]
+    },
+    {
+      "name": "merges a repeated phone under a held shape",
+      "input": [{"t": 0, "v": "B", "p": "S"}, {"t": 120, "v": "B", "p": "S"}, {"t": 200, "v": "B", "p": "T"}],
+      "output": [{"t": 0, "v": "B", "p": "S"}, {"t": 200, "v": "B", "p": "T"}]
+    },
+    {
+      "name": "a phone change cannot swallow the shape change after it",
+      "input": [{"t": 0, "v": "C", "p": "EH"}, {"t": 100, "v": "C", "p": "AE"}, {"t": 110, "v": "A", "p": "P"}],
+      "output": [{"t": 0, "v": "C", "p": "EH"}, {"t": 100, "v": "C", "p": "AE"}, {"t": 110, "v": "A", "p": "P"}]
+    },
+    {
+      "name": "phone detail does not outlive the shape that was dropped",
+      "input": [{"t": 0, "v": "C", "p": "EH"}, {"t": 10, "v": "B", "p": "S"}, {"t": 60, "v": "B", "p": "T"}],
+      "output": [{"t": 0, "v": "C", "p": "EH"}]
+    },
+    {
+      "name": "a winning closure brings its own phone detail to the earlier timestamp",
+      "input": [{"t": 0, "v": "C", "p": "EH"}, {"t": 10, "v": "A", "p": "P"}, {"t": 60, "v": "A", "p": "B"}],
+      "output": [{"t": 0, "v": "A", "p": "P"}, {"t": 60, "v": "A", "p": "B"}]
+    },
+    {
+      "name": "silence is never split by a phone",
+      "input": [{"t": 0, "v": "X", "p": null}, {"t": 50, "v": "X", "p": "Breath"}, {"t": 120, "v": "C", "p": "EH"}],
+      "output": [{"t": 0, "v": "X", "p": null}, {"t": 120, "v": "C", "p": "EH"}]
     }
   ]
 }

@@ -17,10 +17,20 @@
  *   H  tongue up            L
  *   X  idle / silence
  *
- * A cue is `{ t, v, i? }` — millisecond offset into the utterance, the letter,
- * and an optional 0..1 intensity (loudness). Intensity is cheap for the server
- * to derive from TTS energy and is the single biggest realism win available:
- * the same viseme shouted and murmured should not look identical.
+ * A cue is `{ t, v, i?, p? }` — millisecond offset into the utterance, the
+ * letter, an optional 0..1 intensity (loudness): the same viseme shouted and
+ * murmured should not look identical, and an optional phone label. The backend
+ * measures `i` from the RMS under each cue, but only on the leg that has audio
+ * to measure — a predicted cue describes speech nobody has generated yet, so it
+ * arrives without one and is read here as 1.
+ *
+ * `p` is the phone being articulated under the letter, and the nine letters are
+ * a lossy projection of it: `B` above lists four phone families and absorbs
+ * fourteen more. Nothing in this file reads it — `VISEME_SHAPES` is the mouth
+ * every face owes the server and it is keyed by letter. It rides through
+ * normalization and out of `sample()` so that a rig with a finer mouth than
+ * nine shapes can use it without the server sending a second track, and so that
+ * a rig without one is unaffected.
  */
 
 import {
@@ -71,17 +81,50 @@ export function shapeFor(letter, intensity = 1) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Group a time-ordered cue list into runs that share a mouth shape.
+ *
+ * A backend emits one cue per intersection of its shape and phone timelines, so
+ * a held shape arrives as several cues differing only in `p`. Grouping them is
+ * what lets the visibility rules stay rules about shapes.
+ */
+function shapeRuns(cues) {
+  const runs = [];
+  for (const c of cues) {
+    const v = VISEME_SHAPES[c.v] ? c.v : SILENT;
+    const clean = { t: c.t, v, i: c.i == null ? 1 : c.i, p: c.p ?? null };
+    if (runs.length && runs[runs.length - 1][0].v === v) runs[runs.length - 1].push(clean);
+    else runs.push([clean]);
+  }
+  return runs;
+}
+
+/**
  * Sort, merge consecutive duplicates, and drop sub-perceptual cues. Servers
  * emit noisy tracks; this makes them watchable.
+ *
+ * **Every decision here is a decision about shapes**, taken over the run heads
+ * and nothing else. MIN_VISIBLE_CUE_MS and the closure swap are rules about what
+ * the face can be *seen* to do, and a phone transition inside a held shape is
+ * not something the face does at all — letting one participate would mean a
+ * phone changing 15 ms before a real shape change could swallow that change,
+ * which is a lipsync regression bought with a field this file does not read.
+ * Phone detail is re-attached afterwards, bounded by the mouth positions either
+ * side of it. Mirrors `normalize_cues` server-side.
  */
 export function normalizeCues(cues) {
+  const runs = shapeRuns([...cues].sort((a, b) => a.t - b.t));
+
+  // Pass one: the shape track, by exactly the rule that predates phone detail.
+  // `kept` maps each surviving cue back to the run it speaks for, which the
+  // closure swap can change without moving the cue's timestamp.
   const out = [];
-  const sorted = [...cues].sort((a, b) => a.t - b.t);
-  for (const c of sorted) {
-    const v = VISEME_SHAPES[c.v] ? c.v : SILENT;
+  const kept = [];
+  for (let index = 0; index < runs.length; index++) {
+    const head = runs[index][0];
+    const v = head.v;
     const prev = out[out.length - 1];
     if (prev && prev.v === v) continue; // merge repeats
-    if (prev && c.t - prev.t < MIN_VISIBLE_CUE_MS) {
+    if (prev && head.t - prev.t < MIN_VISIBLE_CUE_MS) {
       // Too short to read. Keep whichever is more visually salient: a closure
       // (A/G) carries more lip-reading information than a mid-open vowel.
       if (v === 'A' || v === 'G') {
@@ -89,17 +132,38 @@ export function normalizeCues(cues) {
         // Its replacement would otherwise create a duplicate visible shape;
         // preserving the first G is both the stable wire form and the face the
         // viewer actually saw.
-        if (out.length > 1 && out[out.length - 2].v === v) out.pop();
+        if (out.length > 1 && out[out.length - 2].v === v) { out.pop(); kept.pop(); }
         // A winning closure replaces the preceding shape for the entire
         // sub-perceptual interval. Preserve that cue's timestamp while taking
         // the closure's intensity, matching the server-side wire normalizer.
-        else out[out.length - 1] = { ...c, t: prev.t, v };
+        else {
+          out[out.length - 1] = { ...head, t: prev.t, v };
+          kept[kept.length - 1] = index;
+        }
       }
       continue;
     }
-    out.push({ t: c.t, v, i: c.i == null ? 1 : c.i });
+    out.push({ t: head.t, v, i: head.i, p: head.p });
+    kept.push(index);
   }
-  return out;
+
+  // Pass two: the phone detail inside each surviving mouth position. Silence is
+  // never split — nothing is being articulated under a rest.
+  const result = [];
+  for (let slot = 0; slot < out.length; slot++) {
+    const cue = out[slot];
+    result.push(cue);
+    if (cue.v === SILENT) continue;
+    const limit = slot + 1 < out.length ? out[slot + 1].t : Infinity;
+    for (const sub of runs[kept[slot]].slice(1)) {
+      // Strictly after whatever was last emitted, not merely after the head: a
+      // splice joins two legs' tracks and both can name the same millisecond.
+      if (sub.t <= result[result.length - 1].t || sub.t >= limit) continue;
+      if (sub.p === result[result.length - 1].p) continue;
+      result.push({ t: sub.t, v: cue.v, i: sub.i, p: sub.p });
+    }
+  }
+  return result;
 }
 
 /**
@@ -124,7 +188,12 @@ export class VisemeTrack {
     this._idx = 0;
     this.onEnd = null;
     this.tailMs = SPEECH_TRACK_TAIL_MS;
+    // Where the last sample() landed, for the layers that read the track's
+    // future (prosody.js looks ahead to the end of a pause).
+    this.now = 0;
   }
+
+  get index() { return this._idx; }
 
   /** @param {() => number} clock returns elapsed ms of the audio being played */
   start(cues, clock) {
@@ -149,10 +218,11 @@ export class VisemeTrack {
     this._idx = 0;
   }
 
-  /** @returns {{letter: string, intensity: number} | null} */
+  /** @returns {{letter: string, intensity: number, phone: string | null} | null} */
   sample() {
     if (!this.playing || !this.cues.length || !this.clock) return null;
     const now = this.clock() + LEAD_MS;
+    this.now = now;
 
     // Cues are time-ordered and `now` is mostly monotonic, so this walk is O(1)
     // amortized. Reset on seek-backward.
@@ -167,8 +237,8 @@ export class VisemeTrack {
     }
 
     const cue = this.cues[this._idx];
-    if (cue.t > now) return { letter: SILENT, intensity: 1 };
-    return { letter: cue.v, intensity: cue.i == null ? 1 : cue.i };
+    if (cue.t > now) return { letter: SILENT, intensity: 1, phone: null };
+    return { letter: cue.v, intensity: cue.i == null ? 1 : cue.i, phone: cue.p ?? null };
   }
 }
 

@@ -5,8 +5,9 @@
  * It is not a seam any avatar implementation sees: an implementation receives
  * a PipecatClient and decides for itself what a state means.
  *
- * The vocabulary is the nine core states. It used to be seventeen — the core
- * set plus every SVG render state (TYPING, CANT_HEAR, SEARCHING_SCREEN, …)
+ * The vocabulary is the nine core states and two core actions. The states used
+ * to be seventeen — the core
+ * set plus every SVG render state (TYPING, SEARCHING_SCREEN, WANTS_IN, …)
  * passed straight through, so that tooling could drive one of *those* from
  * here. That made the mixer's private state list look like part of the
  * behaviour vocabulary. Tooling that wants a render state calls
@@ -14,52 +15,52 @@
  */
 
 /**
- * Durable states the behavior layer resolves, and the render state each one
- * asks the bundled SVG mixer for. The right-hand column belongs to a renderer:
- * `WORKING` may draw as anything, and this is where a divergence lands rather
- * than leaks. `STRAINING` is the first row to actually use that — the two
- * columns were written out for years while the mapping stayed 1:1.
+ * The durable states this layer resolves. Each one *is* the render state it
+ * asks the bundled SVG mixer for, so there is nothing here to map.
+ *
+ * There used to be a second column — a per-state `renderState`, so a renderer
+ * could draw `WORKING` as anything it liked and the divergence would land here
+ * rather than leak. In nine rows it had exactly one non-identity entry,
+ * `STRAINING -> CANT_HEAR`, and the wire redesign deleted that entry by
+ * renaming the state: a state names the bot's *situation*, never how it looks,
+ * and "straining" was a situation named after one drawing of it. A table whose
+ * every row reads `X: X` documents nothing and invites a renderer to plug into
+ * it, so it is a list now. A renderer that genuinely wants to draw one of these
+ * as something else calls `avatar.setState` with the render state it wants,
+ * which is whose state that is.
  */
-export const BEHAVIOR_STATES = Object.freeze({
-  IDLE: { renderState: 'IDLE' },
-  LISTENING: { renderState: 'LISTENING' },
-  // What the server calls straining, this renderer draws as CANT_HEAR: the
-  // behavior name claims only that the avatar is trying harder to hear, while
-  // the pose is one particular drawing of that. A renderer with no such pose
-  // may legitimately point this at LISTENING.
-  STRAINING: { renderState: 'CANT_HEAR' },
-  THINKING: { renderState: 'THINKING' },
-  WORKING: { renderState: 'WORKING' },
-  MUTED: { renderState: 'MUTED' },
-  SPEAKING: { renderState: 'SPEAKING' },
-  DEGRADED: { renderState: 'DEGRADED' },
-  OFFLINE: { renderState: 'OFFLINE' },
-});
+export const BEHAVIOR_STATE_IDS = Object.freeze([
+  'IDLE', 'LISTENING', 'CANT_HEAR', 'THINKING', 'WORKING',
+  'MUTED', 'SPEAKING', 'DEGRADED', 'OFFLINE',
+]);
 
-export const BEHAVIOR_STATE_IDS = Object.freeze(Object.keys(BEHAVIOR_STATES));
+const STATE_IDS = new Set(BEHAVIOR_STATE_IDS);
 
-/** Library action IDs. These are broader and more readable than the wire. */
+/**
+ * Library action IDs: the two intents every renderer owes a server, in this
+ * layer's readable spelling.
+ *
+ * It used to be seven, with a `sequence` command alongside for a renderer's own
+ * motions. The seven were not the wrong *names* so much as the wrong idea: four
+ * of them were `GESTURE_*` — a greet, a goodbye, a wave — which are things a
+ * particular body does and not intents a server can hold every face to, and two
+ * were the receipt and the nod, which are two *shapes* of acknowledging. So the
+ * server now says only that an acknowledgement is due, the avatar picks which
+ * one it makes, and the gestures live in whichever catalogue can draw them,
+ * reachable by the same open `action` id a sequence used to need its own
+ * command for.
+ */
 export const BEHAVIOR_ACTIONS = Object.freeze({
-  'ack.receive': { renderAction: 'ACK_RECEIVE' },
-  'ack.nod': { renderAction: 'ACK_NOD' },
+  ack: { renderAction: 'ACKNOWLEDGE' },
   'turn.interrupted': { renderAction: 'RESPONSE_INTERRUPTED' },
-  'gesture.greet': { renderAction: 'GESTURE_GREET' },
-  'gesture.farewell': { renderAction: 'GESTURE_GOODBYE' },
-  'gesture.approve': { renderAction: 'GESTURE_APPROVE' },
-  'gesture.wait': { renderAction: 'GESTURE_WAIT' },
 });
 
 export const BEHAVIOR_ACTION_IDS = Object.freeze(Object.keys(BEHAVIOR_ACTIONS));
 
-/** Stable, promoted wire names map into the behavior catalog here and nowhere else. */
+/** The two core wire names map into the behavior catalog here and nowhere else. */
 export const WIRE_ACTION_TO_BEHAVIOR = Object.freeze({
-  ACK_RECEIVE: 'ack.receive',
-  ACK_NOD: 'ack.nod',
+  ACKNOWLEDGE: 'ack',
   RESPONSE_INTERRUPTED: 'turn.interrupted',
-  GESTURE_GREET: 'gesture.greet',
-  GESTURE_GOODBYE: 'gesture.farewell',
-  GESTURE_APPROVE: 'gesture.approve',
-  GESTURE_WAIT: 'gesture.wait',
 });
 
 /**
@@ -77,11 +78,10 @@ export class BehaviorController {
   }
 
   setState(id, { force = false } = {}) {
-    const def = BEHAVIOR_STATES[id];
-    if (!def) throw new Error(`unknown behavior state: ${id}`);
+    if (!STATE_IDS.has(id)) throw new Error(`unknown behavior state: ${id}`);
     if (!force && this.state === id) return this;
     this.state = id;
-    this.avatar.setState(def.renderState);
+    this.avatar.setState(id);
     return this;
   }
 
@@ -94,9 +94,21 @@ export class BehaviorController {
     return this;
   }
 
+  /**
+   * One id off the wire. A core one goes through the behavior catalog; any
+   * other goes straight to the renderer, and that asymmetry is the point.
+   * `BEHAVIOR_ACTIONS` exists so a portable intent has a readable name
+   * independent of how any one face renders it. An avatar's own id has no such
+   * independence — it *is* the rendering, named by the renderer that owns it —
+   * so giving it a behavior alias would claim a portability it does not have.
+   *
+   * Neither path throws. The wire's action vocabulary is open and an id this
+   * face cannot draw is the expected case, not somebody's broken build.
+   */
   wireAction(id) {
     const behaviorId = WIRE_ACTION_TO_BEHAVIOR[id];
-    if (!behaviorId) throw new Error(`unknown wire action: ${id}`);
-    return this.action(behaviorId);
+    if (behaviorId) return this.action(behaviorId);
+    this.avatar.action(id);
+    return this;
   }
 }

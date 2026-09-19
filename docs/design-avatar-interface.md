@@ -38,6 +38,42 @@ not another public interface and not a registry. (The original entry points —
 — still work as `@deprecated` aliases for the names above; renamed for
 memorability without touching the SVG faces.)
 
+## The one optional export
+
+A module may also export `supports`, and nothing else is ever added beside
+`createAvatar`.
+
+```ts
+export const supports: AvatarSupport = { actions: ["ACKNOWLEDGE", …] };
+```
+
+It exists for a page that *drives* an avatar rather than one that mounts it.
+The wire's action id is open and an unknown one is ignored in silence
+([contract-wire.md](contract-wire.md) § Action), which is the right behaviour
+for a protocol and useless for a control surface: a button per name cannot
+tell "this face has no such motion" from "nothing happened". The avatar is the
+only thing that knows, so this is it saying so, and `states` says the narrower
+thing again — which of the nine it draws *distinguishably*, since every avatar
+must accept all nine and drawing two of them alike is conforming.
+
+Three properties, and they are what keep it from becoming a second contract:
+
+- **Nothing reads it but a UI.** `createAvatar` does not take it, the library
+  never consults it, and no behaviour changes if it is wrong.
+- **It is a declaration, not a capability check.** Nobody verifies it. A list
+  that has drifted from the drawing is a bug in the avatar.
+- **Omitting it is conforming.** The right answer to `undefined` is to show
+  every action the server offers, which is what a driving page did before this
+  existed.
+
+Ours: [`packages/avatar/client/supports.ts`](../packages/avatar/client/supports.ts)
+for every SVG face and Canvas identity — one renderer, one list — and
+`BLENDER_SUPPORTS` in
+[`packages/avatar/client/three/sequences.ts`](../packages/avatar/client/three/sequences.ts)
+for the 3-D characters, which is that list plus their own nod names. Both are
+derived from the tables rather than written out, because a hand-kept copy could
+only disagree with them.
+
 ## Why there is no renderer interface
 
 The [rig pose model](internal-rig.md) is 30 float pose channels. It reads like the
@@ -54,7 +90,7 @@ is why this page exists:
 - `expressionFor()` reverse-engineered `CANT_HEAR` out of brow and squint
   values. The rig inferring intent is precisely what CLAUDE.md forbids.
 
-A renderer receiving `{ claim, action, cues }` needs none of that. So the seam
+A renderer receiving `{ state, action, cues }` needs none of that. So the seam
 moves up to the client, and there is deliberately no second public contract:
 designing a render interface is premature until a second renderer has told us
 what it needs.
@@ -84,7 +120,7 @@ reference, published under `/internal` with no semver promise.
 
 | | |
 |---|---|
-| `@voqalize/avatar` | `createAvatar`. Framework-free; `@pipecat-ai/client-js` is a type-only import, so even that peer stays genuinely optional at runtime. Carries one drawing: `peep`, the default `face`. |
+| `@voqalize/avatar` | `createAvatar`, and `supports`. Framework-free; `@pipecat-ai/client-js` is a type-only import, so even that peer stays genuinely optional at runtime. Carries one drawing: `peep`, the default `face`. |
 | `@voqalize/avatar/faces/{peep,wren,myna}` | One drawing each, to pass as `face`. Separate entry points because a name-keyed table is a dynamic index no bundler can shake — the others would ship with it. |
 | `@voqalize/avatar/react` | `<Avatar client create options>`. Separate so `createAvatar` costs a non-React caller nothing. |
 | `@voqalize/avatar/internal` | The SVG widget, the behavior catalog, `VisemeTrack`. **No semver promise** — moves in any minor. |

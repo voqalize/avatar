@@ -2,7 +2,7 @@
   "name": "@voqalize/avatar",
   "version": "0.3.0",
   "description": "A JavaScript-programmable 2-D talking head for AI voice calls: server-synced lipsync, state through motion, zero dependencies.",
-  "license": "MIT",
+  "license": "MIT AND CC-BY-4.0",
   "author": "Voqalize",
   "homepage": "https://github.com/voqalize/avatar#readme",
   "repository": {
@@ -22,7 +22,9 @@
     "pipecat",
     "voice-agent",
     "svg",
-    "animation"
+    "animation",
+    "3d",
+    "threejs"
   ],
   "engines": {
     "node": ">=20"
@@ -47,6 +49,10 @@
       "types": "./dist/internal.d.ts",
       "default": "./dist/internal.js"
     },
+    "./internal/three": {
+      "types": "./dist/three/internal.d.ts",
+      "default": "./dist/three/internal.js"
+    },
     "./faces/peep": {
       "types": "./src/face-peep.d.ts",
       "default": "./src/face-peep.js"
@@ -58,6 +64,18 @@
     "./faces/myna": {
       "types": "./src/face-myna.d.ts",
       "default": "./src/face-myna.js"
+    },
+    "./avatars/tara": {
+      "types": "./dist/three/tara.d.ts",
+      "default": "./dist/three/tara.js"
+    },
+    "./avatars/tushar": {
+      "types": "./dist/three/tushar.d.ts",
+      "default": "./dist/three/tushar.js"
+    },
+    "./avatars/tanya": {
+      "types": "./dist/three/tanya.d.ts",
+      "default": "./dist/three/tanya.js"
     },
     "./avatars/arjun": {
       "types": "./dist/arjun.d.ts",
@@ -112,7 +130,9 @@
   "files": [
     "src",
     "client",
-    "dist"
+    "dist",
+    "assets",
+    "LICENSE-CC-BY-4.0"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -122,7 +142,8 @@
   "peerDependencies": {
     "@pipecat-ai/client-js": ">=1.4 <2",
     "react": ">=18",
-    "react-dom": ">=18"
+    "react-dom": ">=18",
+    "three": ">=0.180 <0.187"
   },
   "peerDependenciesMeta": {
     "@pipecat-ai/client-js": {
@@ -133,6 +154,13 @@
     },
     "react-dom": {
       "optional": true
+    },
+    "three": {
+      "optional": true
     }
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.4",
+    "three": "^0.180.0"
   }
 }

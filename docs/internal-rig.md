@@ -10,7 +10,7 @@
 > non-SVG experiment (a Rive rig, removed 2026-08-12) to the
 > wrong layer: it reconstructed a Rhubarb letter and a `CANT_HEAR` intent out of
 > pose floats that the wire had already stated plainly. A renderer that is not
-> ours should take `claim` / `action` / `cues` and never see this page.
+> ours should take `state` / `action` / `cues` and never see this page.
 
 The interface between the mixer and a rig it drives. It is deliberately
 independent of SVG, WebGL, video, and any future rendering technology. The rig
@@ -133,8 +133,9 @@ An author reviews rest and channel extremes, meaningful extreme composites,
 every viseme at full-frame and close scale, curated transitions (`X→A→X`,
 `A→D→A`, `D→F→B`, `B→G→H`, and rapid closures), the same raw frame across
 registered rigs, and numeric conformance (finite values, mounted renderer,
-clean teardown). The pages under `apps/authoring/` implement this review —
-`contact-sheet.html`, `torso-check.html`, `clip-strip.html`, `rig-check.html`
-([apps/authoring/README.md](../apps/authoring/README.md)). Studio does not: it drives the
-published contract and never reaches a pose channel
-([apps/studio/README.md](../apps/studio/README.md)).
+clean teardown). Four pages implement this review — the contact sheet, the torso
+check, the clip strip and the rig check. They are the maintainers' workshop rather
+than part of the package; what each one shows, and how to build the equivalent,
+is [authoring-a-face.md § Checklist for a new avatar](authoring-a-face.md). The
+review IDE does not reach a pose channel at all: it drives the published contract
+only.

@@ -131,8 +131,8 @@ Practical consequences for us:
   *topology* (open/closed, teeth/no-teeth, round/wide), not in amplitude.
 - The Preston Blair working method — "the best trick to getting lip synch
   looking correct is having an easy way to repeatedly preview your sequence
-  along with your soundtrack ... fine tuning poses" — is what
-  `apps/authoring/lipsync-eval.html` exists to be.
+  along with your soundtrack ... fine tuning poses" — is what a lipsync review
+  page with a scrubber exists to be, and ours is one.
 
 **Open question — a minimum-perceptible hold.** `MIN_CUE_MS = 30` in
 `visemes.js` is a *drop* threshold (cues closer than that merge), which is a
@@ -488,6 +488,56 @@ matters: Kiran should place its own blinks at its own clause boundaries while
 SPEAKING, because that is where a human listener expects them and where they
 would entrain if they could.
 
+### 3.8 The speaker's head: how much it moves, and on what
+
+A listener's head is §3.3–3.4. A *speaker's* head is a different motion, and
+for most of the project we had no number for it, so the speech layer was sized
+by eye and came out too still. These are the numbers `packages/avatar/src/prosody.js`
+is now sized against.
+
+- **Head motion carries the voice's prosody.** Head movement alone accounted for
+  **over 63 % of the variance in F0** for their talkers, and animating a talking
+  head with the speaker's own natural head motion **improved intelligibility**
+  of speech in noise over the same head held still. Doubling that head motion
+  did **not** help: it scored no better than no motion at all.
+  ([Munhall et al. 2004](https://www.queensu.ca/psychology/sites/psycwww/files/uploaded_files/Faculty/Kevin%20Munhall/Munhall_Psyc_Sci.pdf))
+  **The target is natural amplitude, not maximum** — more is not safer.
+- **How much, in degrees.** Busso et al. 2007 motion-captured an actor reading
+  sentences and report, for **neutral speech**, the standard deviation of head
+  rotation around its per-sentence mean — **pitch (nod) 3.3°, yaw 0.9°,
+  roll 0.8°** — and mean per-sentence ranges of **9.5°, 2.3° and 2.3°**.
+  Head motion in emotional speech is "much higher" on every axis, and its
+  velocity in happy and angry speech about twice neutral's. The first
+  canonical correlation between head motion and prosodic features was about
+  **0.7** in every emotion.
+  ([Busso et al., *Rigid head motion in expressive speech animation*, IEEE TASLP 2007](https://sail.usc.edu/publications/files/bussotaslp2007.pdf))
+  **Pitch is the dominant axis by about 4:1 in neutral speech.** A speaking
+  head that turns side to side more than it nods has the proportions wrong.
+- **Where the beats go, and what shape they are.** Graf et al. 2002 tracked a
+  speaker's head against labelled prosody. Nods are **synchronised with pitch
+  accents** and span 2–4 phones. Of the pitch accents, **42 % carried a nod,
+  18 % a nod with an overshoot, and 20 % an abrupt swing in one direction**.
+  Pitch was the strongest axis, **yaw was common and often combined with pitch
+  into a diagonal, and roll was rare**. The head moved *before* the voice at
+  phrase onsets in **over 70 %** of phrases. And one speaker **repeated the same
+  motions**: variety between speakers, habit within one. Brow raises also fell
+  on prosodic events, sometimes together with a nod.
+  ([Graf, Cosatto, Strom & Huang, *Visual prosody: facial movements accompanying speech*, IEEE FG 2002](https://ieeexplore.ieee.org/document/1004186))
+- **Stress and juncture.** Hadar et al. 1983 split a speaker's head motion
+  into slow, ordinary and rapid classes by frequency, and found the rapid class
+  tied to **stress** and the pattern of movement against stillness tied to
+  **juncture**, the boundary between phrases.
+  ([Hadar, Steiner, Grant & Rose, *Head movement correlates of juncture and stress at sentence level*, Language and Speech 1983](https://journals.sagepub.com/doi/10.1177/002383098302600202))
+
+**What this means for the rig.** Hadar's rapid class is off the table for us — above
+1.5 Hz a head reads as impatient (§3.4), and it costs the user's encoder — so
+stress is carried by a stroke that is slow in frequency but placed on the
+accent, and the phrase-scale motion does the rest: a pose held through a
+phrase and changed at the boundary. A small face on a call cannot use
+Busso's full ranges, so we keep his *proportions* (pitch first) inside each
+rig's envelope rather than his amplitudes. Munhall's doubling result says that
+is not a loss worth chasing.
+
 ---
 
 ## 4. Gaze and cognitive-state signalling
@@ -669,6 +719,97 @@ beat (no brow raise, no nod). DISTRACTED should therefore be built as "long
 aversions, absent backchannels, delayed return" rather than as any particular
 pose.
 
+### 4.8 How a gaze shift splits between the eyes and the head
+
+The mixer cites Guitton & Volle in exactly one place — the socket range the
+vestibulo-ocular reflex may carry the eye through — and the paper appears
+nowhere else in this repo. This section is that citation's evidence, and more
+usefully, a record of what it does *not* license.
+
+**The primary findings.**
+
+- "Humans have an oculomotor range (OMR) of about **±55 degrees**." Guitton and
+  Volle measured shifts to targets "situated within and beyond the OMR at
+  offsets ranging from **30 to 160 degrees**": past that eccentricity the eye
+  cannot reach the target at all and the head must supply the remainder. Their
+  result that matters to us is about the *transit*, not the endpoint — "the eye
+  saccade amplitude was a function of head velocity: for a given target offset,
+  **the faster the head the smaller the saccade**." The eye's excursion is not
+  fixed by where the target is; it shrinks as the head takes more of the work.
+  ([Guitton & Volle, *J Neurophysiol* 58(3):427–459, 1987](https://pubmed.ncbi.nlm.nih.gov/3655876/))
+- "Head movements did not contribute to the change in gaze position during small
+  gaze shifts (**<20°**) directed along the horizontal meridian, when the eyes
+  were initially centered in the orbits." The head contributes progressively
+  more from 25–90°, and carries most of a shift beyond **50–60°**.
+  ([Freedman, *Exp Brain Res* 190(4):369–387, 2008](https://link.springer.com/article/10.1007/s00221-008-1504-8))
+- Two range measures worth having names for, from Stahl's work as summarised by
+  a recent VR survey: the **Eye-Only Range**, "the range where the probability of
+  an eye-only saccade exceeds 50%", where an eye-only saccade is "one in which
+  any associated head movement does not exceed **10%** of the shift"; and the
+  **customary oculomotor range**, "the angular span of the central 90% of
+  eye-in-head positions".
+  ([Hu, Sidenmark, Lee & Gellersen, arXiv:2602.06164, 2026](https://arxiv.org/abs/2602.06164))
+  The customary range is a *definition* here and not a number — that survey
+  states no degree value for it, and this page does not invent one.
+
+**What this says about tara, which does not flatter the physiology.**
+
+Her calibration is 10.03° of eye a pupil unit horizontally and 6.21° vertically,
+against 6.43° of head a yaw unit and 17.14° a pitch unit. The socket range the
+reflex may use is therefore **8.0° left and right, 2.8° up, 3.1° down** —
+vertically about a twentieth of the human oculomotor range.
+
+Her whole look table, as total gaze angle: USER 0.4°, SCREEN_CENTER 2.8°,
+OWN_SCREEN 3.3°, SCREEN_TOP 6.4°, SCREEN_WORK 7.7°, AWAY_SIDE 7.9°, AWAY_DOWN
+8.8°, SCREEN_LEFT and SCREEN_RIGHT 9.5°, AWAY_RIGHT 10.6°, AWAY_THINKING 11.3°.
+The largest shift available between any two of them is **19.4°**, and that is the
+diagonal from AWAY_RIGHT to AWAY_DOWN — a pairing no state actually makes.
+
+So **tara's entire repertoire lies inside Freedman's eye-only band.** A human
+making any shift she is capable of would make it almost entirely with the eyes
+and leave the head still. She does the opposite: her authored targets put
+**53–87 %** of every look that is not USER onto the head. That inversion is
+deliberate and TARA-SPECIFIC, and its reason is in the rig, not the literature —
+a photographic iris driven a third of the way into the socket reads as side-eye,
+and an iris under the upper lid with white beneath it reads as an eye-roll. The
+albedo rule makes it structural: sclera is geometry, so it cannot be painted out
+at the extremes.
+
+**Consequences for tara:**
+
+1. **Do not derive head recruitment from shift amplitude.** The amplitude law
+   decides when a head *starts* helping, and its threshold sits above her largest
+   shift. Applied here it says "never move the head", which is the behaviour the
+   rig was built to escape. The head-carries-60 % split is right, and it is
+   argued from the face, not from physiology.
+2. **The transit is where the physiology still applies.** Guitton and Volle's
+   head-velocity result describes what the eye does *while* the head is moving,
+   and it is the half of the sentence the mixer's comment does not yet implement.
+   The reflex may currently demand an eye position past the socket range, and a
+   hard clamp answers by pinning the iris there. A real eye reduces its own
+   excursion instead.
+3. **When endpoint accuracy and transit accuracy conflict, keep the endpoint.**
+   At this scale the error the reflex corrects during a ~300 ms transit is not
+   observable — 2.8° is below § 4.6's 5° floor for socially acceptable eye
+   contact. A pinned iris showing sclera is highly observable. The trade is
+   one-sided.
+4. **Do not reach for § 4.6's 15–20° for this.** It is numerically identical to
+   Freedman's threshold and two sections away, which makes it an inviting
+   mistake. It measures the angle between a camera and a screen — where a
+   viewer's gaze points relative to a lens — and not the amplitude of a gaze
+   shift. Nothing in § 4.6 sizes a head-recruitment constant.
+
+**The honest gap.** None of these numbers was measured on anything shaped like
+this problem. They are head-free orienting in a laboratory, to targets tens of
+degrees away, on a whole human. tara is a head-and-shoulders crop whose entire
+vertical eye range is 2.8°, and whose head is a shallow shell tipping on a
+photograph — a pitch that, as the rig's own notes record, reads as a fraction of
+what it is. Freedman's threshold is horizontal and assumes the eyes start
+centred; the case that fails here is vertical, with the eyes already off centre.
+These sources bound the argument. None of them sizes a constant, so a constant
+added for this has to be justified by what it measurably removes from the
+render.
+
 ---
 
 ## 5. Blink science
@@ -726,8 +867,14 @@ is a good LISTENING default and a poor everything-else.
 - Speaker blinks cluster at **breakpoints of speech** — ends of utterances and
   pauses (Nakano & Kitazawa, §3.7).
 - Animation practice adds: **blink on the head turn** (§1.2), and blink on any
-  large gaze shift. Our `gaze.js` already does the latter, at
-  `BLINK_THRESHOLD = 0.45`.
+  large gaze shift. Our `gaze.js` does the latter on a ramp — `BLINK_RAMP_DEG`
+  on a rig that states its angles, `BLINK_RAMP_UNITS` on one that does not — so
+  the odds grow with the size of the shift instead of tripping at a threshold.
+  `idle.js` then holds the result to the state's own rate: an evoked blink may
+  move the next blink *onto* the shift but not add one. Without that gate a
+  state that shifts its gaze oftener than it blinks ends up blinking at its
+  gaze's rate rather than the rate §5.1 set — `SEARCHING_SCREEN`, at 42 hops a
+  minute, measured 2.12× its own authorised rate.
 
 **A blink placed at a clause boundary is worth several blinks placed randomly.**
 Since the server already sends us a viseme stream with silences in it, clause
@@ -1091,13 +1238,16 @@ it touches. Ordered roughly by expected value per unit of work.
 - Doughty, M.J. (2001). *Consideration of Three Types of Spontaneous Eyeblink Activity in Normal Humans*. Optom Vis Sci. https://www.researchgate.net/publication/11653609_Consideration_of_Three_Types_of_Spontaneous_Eyeblink_Activity_in_Normal_Humans_during_Reading_and_Video_Display_Terminal_Use_in_Primary_Gaze_and_while_in_Conversation
 - Ehrlichman, H. & Micic, D. (2012). *Why Do People Move Their Eyes When They Think?* Curr Dir Psychol Sci. https://journals.sagepub.com/doi/abs/10.1177/0963721412436810
 - Eibl-Eibesfeldt, I. — the eyebrow flash (~1/6 s), via Grammer et al., *Patterns on the Face: The Eyebrow Flash in Crosscultural Comparison*, Ethology 77. https://ui.adsabs.harvard.edu/abs/1988Ethol..77..279G/abstract
+- Freedman, E.G. (2008). *Coordination of the eyes and head during visual orienting*. Exp Brain Res 190(4). https://link.springer.com/article/10.1007/s00221-008-1504-8
 - Frontiers (2021). *The Role of Eye Gaze in Regulating Turn Taking in Conversations*. https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2021.616471/full
 - Frontiers (2023). *Head movement and its relation to hearing*. https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2023.1183303/full
 - Frontiers (2025). *The speaker's "okay" vs. the listener's "okay"* (backchannel rate compilation). https://www.frontiersin.org/journals/communication/articles/10.3389/fcomm.2025.1655049/full
 - Game AI Pro 2, ch. 36. *Realizing NPCs: Animation and Behavior Control for Believable Characters*. https://www.gameaipro.com/GameAIPro2/GameAIPro2_Chapter36_Realizing_NPCs_Animation_and_Behavior_Control_for_Believable_Characters.pdf
 - Gratch, J. et al. (2007). *Creating Rapport with Virtual Agents*. IVA 2007. https://people.ict.usc.edu/~gratch/GratchIVA07-rapport.pdf
 - Gratch, J., DeVault, D. et al. (2014). *SimSensei Kiosk: A Virtual Human Interviewer for Healthcare Decision Support*. AAMAS. https://dl.acm.org/doi/10.5555/2615731.2617415
+- Guitton, D. & Volle, M. (1987). *Gaze control in humans: eye-head coordination during orienting movements to targets within and beyond the oculomotor range*. J Neurophysiol 58(3). https://pubmed.ncbi.nlm.nih.gov/3655876/
 - Hömke, P., Holler, J. & Levinson, S.C. (2018). *Eye blinks are perceived as communicative signals in human face-to-face interaction*. PLOS ONE. https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0208030
+- Hu, J., Sidenmark, L., Lee, H.S. & Gellersen, H. (2026). *The Eye-Head Mover Spectrum: Modelling Individual and Population Head Movement Tendencies in Virtual Reality*. arXiv:2602.06164. https://arxiv.org/abs/2602.06164
 - Ito, K. et al. (2025). *Real-time Generation of Various Types of Nodding for Avatar Attentive Listening System*. ICMI 2025. https://arxiv.org/pdf/2507.23298
 - Lee, S.P., Badler, J.B. & Badler, N.I. (2002). *Eyes Alive*. SIGGRAPH 2002. https://repository.upenn.edu/hms/51/
 - Live2D Cubism — Standard Parameter List. https://docs.live2d.com/en/cubism-editor-manual/standard-parameter-list/
@@ -1105,6 +1255,9 @@ it touches. Ordered roughly by expected value per unit of work.
 - Mehrabian, A. (1971). *Silent Messages* — immediacy. Summarized: https://www.frontiersin.org/journals/education/articles/10.3389/feduc.2025.1726842/full
 - MoCap Online. *Idle Animation for Games: Design Guide*. https://mocaponline.com/blogs/mocap-news/idle-animation-game-dev-guide
 - Munhall, K.G. et al. (2004). *Visual Prosody and Speech Intelligibility: Head Movement Improves Auditory Speech Perception*. Psychological Science 15(2). https://www.queensu.ca/psychology/sites/psycwww/files/uploaded_files/Faculty/Kevin%20Munhall/Munhall_Psyc_Sci.pdf
+- Busso, C., Deng, Z., Grimm, M., Neumann, U. & Narayanan, S. (2007). *Rigid Head Motion in Expressive Speech Animation: Analysis and Synthesis*. IEEE Transactions on Audio, Speech, and Language Processing 15(3). https://sail.usc.edu/publications/files/bussotaslp2007.pdf
+- Graf, H.P., Cosatto, E., Strom, V. & Huang, F.J. (2002). *Visual Prosody: Facial Movements Accompanying Speech*. Proc. IEEE Automatic Face and Gesture Recognition. https://ieeexplore.ieee.org/document/1004186
+- Hadar, U., Steiner, T.J., Grant, E.C. & Rose, F.C. (1983). *Head Movement Correlates of Juncture and Stress at Sentence Level*. Language and Speech 26(2). https://journals.sagepub.com/doi/10.1177/002383098302600202
 - Nakano, T. & Kitazawa, S. (2010). *Eyeblink entrainment at breakpoints of speech*. Exp Brain Res. https://www.researchgate.net/publication/45604519_Eyeblink_entrainment_at_breakpoints_of_speech
 - PLOS ONE (2018). *Effects of breathing movement on the reduction of postural sway during postural-cognitive dual tasking*. https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0197385
 - PLOS ONE (2025). *Structure of nods in conversation*. https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0323448

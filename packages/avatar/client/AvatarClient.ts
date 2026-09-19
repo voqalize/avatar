@@ -34,9 +34,9 @@
  * standard lifecycle events. Server messages carry only what Pipecat cannot:
  * correlated speech/cue timing and deliberate application instructions. The
  * lifecycle events project the factual presence states locally. The server
- * supplies only lower-priority `THINKING` / `WORKING` claims and deliberate,
+ * supplies only the three lower-priority states and deliberate,
  * self-completing actions. This keeps the face tied to Pipecat's output truth
- * even if a server claim is delayed or stale.
+ * even if a server state is delayed or stale.
  *
  * ## Cue splice
  *
@@ -71,7 +71,6 @@
  */
 
 import type { PipecatClient, RTVIEvent } from "@pipecat-ai/client-js";
-import type { AvatarActionId, AvatarApi } from "../src/avatar.js";
 import { BehaviorController } from "../src/behavior.js";
 import { createPlayoutProbe, type PlayoutProbe } from "./playout.js";
 import {
@@ -149,6 +148,28 @@ const RESUME_HEARD_RANGE_MS = [0, 130] as const;
 const MAX_SLEW = 0.1;
 
 /**
+ * The private renderer-side vocabulary the lifecycle driver actually uses.
+ *
+ * This stays narrower than `AvatarApi` on purpose. The latter is the SVG
+ * mixer's driving API; requiring a second renderer to impersonate every one
+ * of its inspection and authoring methods would turn that implementation
+ * detail into a renderer contract. The public seam remains `createAvatar`.
+ */
+export interface AvatarDriver {
+  setState(name: string): unknown;
+  /**
+   * One motion by name — a core intent or one of this avatar's own. **A name
+   * it does not have is a no-op, not a throw**: the wire's action vocabulary is
+   * open, so a face that cannot do the thing is as expected as a newer server.
+   */
+  action(id: string): unknown;
+  speak(options: { cues: AvatarCue[]; clock: () => number }): unknown;
+  pushCues(cues: AvatarCue[]): unknown;
+  stopSpeaking(): unknown;
+  setUserSpeaking(speaking: boolean | null): unknown;
+}
+
+/**
  * Internal. Not exported from the package — the public surface is
  * `createAvatar({ mount, client })` and nothing else.
  *
@@ -212,9 +233,9 @@ export const RTVI_EVENTS = {
   // Only to find the bot's audio track once the transport has it; which track
   // is re-read from `tracks()`, the one authority for whose it is.
   trackStarted: "trackStarted",
-  // Mute is a Pipecat fact, not a claim: the server's mute strategy emits
-  // `UserMuteStarted/StoppedFrame`, the RTVI observer forwards them, and the
-  // browser client raises these. So "has muted you" costs no wire verb —
+  // Mute is a Pipecat fact, and there is no server state for it: the server's
+  // mute strategy emits `UserMuteStarted/StoppedFrame`, the RTVI observer
+  // forwards them, and the browser client raises these. So "has muted you" costs no wire verb —
   // reading the events the peer already sends is exactly the authority model.
   userMuteStarted: "userMuteStarted",
   userMuteStopped: "userMuteStopped",
@@ -222,10 +243,10 @@ export const RTVI_EVENTS = {
 
 /** The resolved, factual presence state a host may render around the avatar. */
 export type AvatarPresenceState =
-  | "IDLE" | "LISTENING" | "STRAINING" | "THINKING" | "WORKING"
+  | "IDLE" | "LISTENING" | "CANT_HEAR" | "THINKING" | "WORKING"
   | "MUTED" | "SPEAKING" | "DEGRADED" | "OFFLINE";
 type LifecycleState = AvatarPresenceState;
-type ServerClaim = "STRAINING" | "THINKING" | "WORKING" | null;
+type ServerState = "CANT_HEAR" | "THINKING" | "WORKING" | null;
 
 /** Defensive unwrap for the `RTVIEvent.ServerMessage` `{ data }` quirk: some
  * transports deliver the payload directly and some wrap it once more. */
@@ -236,7 +257,7 @@ function unwrapServerMessage(raw: unknown): Record<string, unknown> {
 }
 
 export class AvatarClient {
-  private readonly avatar: AvatarApi;
+  private readonly avatar: AvatarDriver;
   /** Maps factual/wire intent into the broader client behavior catalog. */
   private readonly behavior: BehaviorController;
   private readonly opts: AvatarClientOptions;
@@ -246,7 +267,7 @@ export class AvatarClient {
   private readonly pendingCtxs: string[] = [];
   private readonly closedCtxs = new Set<string>();
   private projected: LifecycleState | null = null;
-  private serverClaim: ServerClaim = null;
+  private serverState: ServerState = null;
   private userSpeaking = false;
   private botSpeaking = false;
   private muted = false;
@@ -269,7 +290,7 @@ export class AvatarClient {
   private onsetTimer: ReturnType<typeof setTimeout> | null = null;
   private reanchorTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(avatar: AvatarApi, opts: AvatarClientOptions = {}) {
+  constructor(avatar: AvatarDriver, opts: AvatarClientOptions = {}) {
     this.avatar = avatar;
     this.behavior = new BehaviorController(avatar);
     this.opts = opts;
@@ -313,8 +334,8 @@ export class AvatarClient {
     if (!msg) return;
     try {
       switch (msg.cmd) {
-        case "claim":
-          this.handleClaim(msg.state);
+        case "state":
+          this.handleState(msg.state);
           break;
         case "action":
           this.handleAction(msg.id);
@@ -333,14 +354,14 @@ export class AvatarClient {
     }
   }
 
-  private handleClaim(state: ServerClaim): void {
-    this.serverClaim = state;
+  private handleState(state: ServerState): void {
+    this.serverState = state;
     if (state) this.idle = false;
     this.applyProjection();
     this.armIdleIfEligible();
   }
 
-  private handleAction(id: AvatarActionId): void {
+  private handleAction(id: string): void {
     // An interruption is a server-confirmed explanation of a transition, not
     // authority to steal the mouth while bot audio is still playing. Hold it
     // until Pipecat output has released the speaking state.
@@ -354,7 +375,7 @@ export class AvatarClient {
     this.playAction(id);
   }
 
-  private playAction(id: AvatarActionId): void {
+  private playAction(id: string): void {
     this.behavior.wireAction(id);
   }
 
@@ -568,7 +589,7 @@ export class AvatarClient {
     // The one copy of the ladder is docs/pipecat-lifecycle-protocol.md; this is
     // its implementation, in the same order.
     //
-    // Audio truth is the P0 invariant: no lower claim or microphone event may
+    // Audio truth is the P0 invariant: no lower state or microphone event may
     // put the face in a non-speaking pose while bot speech is audible.
     if (this.botSpeaking) return "SPEAKING";
     if (this.userSpeaking) return "LISTENING";
@@ -576,13 +597,13 @@ export class AvatarClient {
     // not the thing worth saying about a dead call.
     if (this.failure) return this.failure;
     if (this.muted) return "MUTED";
-    // Every claim resolves to the presence state of the same name, so there is
-    // nothing to rank here — a claim is a single value and only one can be in
-    // flight. STRAINING > THINKING > WORKING is decided where more than one
-    // condition can hold at once, which is the server: `AvatarStateMachine.
-    // _resolve()`. Ranking them again on this side would be a second, silent
-    // copy of that ladder, and the two would drift.
-    if (this.serverClaim) return this.serverClaim;
+    // A server state *is* the presence state of the same name, so there is
+    // nothing to rank here — only one can be in flight, and the command sets
+    // rather than adds. CANT_HEAR > THINKING > WORKING is decided where more
+    // than one condition can hold at once, which is the server:
+    // `AvatarStateMachine._resolve()`. Ranking them again on this side would be
+    // a second, silent copy of that ladder, and the two would drift.
+    if (this.serverState) return this.serverState;
     if (this.idle) return "IDLE";
     return "LISTENING";
   }
@@ -620,7 +641,7 @@ export class AvatarClient {
 
   private eligibleForIdle(): boolean {
     return this.listening && !this.userSpeaking && !this.botSpeaking
-      && !this.muted && !this.serverClaim && !this.failure;
+      && !this.muted && !this.serverState && !this.failure;
   }
 
   private enterListening(): void {
@@ -630,10 +651,10 @@ export class AvatarClient {
     this.armIdleIfEligible();
   }
 
-  private clearClaimForTurnBoundary(): void {
-    // Claims are lower-priority hints. A fresh user turn or bot output means
-    // any prior thinking/work claim is no longer allowed to reappear later.
-    this.serverClaim = null;
+  private clearServerStateForTurnBoundary(): void {
+    // A server state is a lower-priority hint. A fresh user turn or bot output
+    // means any prior thinking/working one may not reappear later.
+    this.serverState = null;
   }
 
   private maybePlayInterrupted(): void {
@@ -653,7 +674,7 @@ export class AvatarClient {
   private onUserStartedSpeaking = (): void => {
     this.clearRecoverableFailure();
     this.userSpeaking = true;
-    this.clearClaimForTurnBoundary();
+    this.clearServerStateForTurnBoundary();
     this.listening = true;
     this.idle = false;
     this.clearIdleTimer();
@@ -670,7 +691,7 @@ export class AvatarClient {
   private onBotStartedSpeaking = (): void => {
     this.clearRecoverableFailure();
     this.botSpeaking = true;
-    this.clearClaimForTurnBoundary();
+    this.clearServerStateForTurnBoundary();
     this.idle = false;
     this.clearIdleTimer();
     this.applyProjection();

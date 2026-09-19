@@ -119,16 +119,21 @@ const CLIPS = {
     keys: {
       // Recognition → take it in → settle. The face does not nod; it lands in
       // a quiet, held receipt, leaving room for the user to see the response.
-      browRaiseL: [[0, 0], [0.12, 0.16], [0.34, 0.055], [1, 0]],
-      browRaiseR: [[0, 0], [0.12, 0.13], [0.34, 0.045], [1, 0]],
-      lidL: [[0, 0], [0.16, 0.15], [0.49, 0.14], [0.82, 0.035], [1, 0]],
-      lidR: [[0, 0], [0.16, 0.15], [0.49, 0.14], [0.82, 0.035], [1, 0]],
-      mouthPress: [[0, 0], [0.23, 0.20], [0.60, 0.17], [1, 0]],
-      mouthCornerL: [[0, 0], [0.34, 0.08], [0.80, 0.055], [1, 0]],
-      mouthCornerR: [[0, 0], [0.34, 0.08], [0.80, 0.055], [1, 0]],
-      torsoLean: [[0, 0], [0.34, 0.13], [0.70, 0.10], [1, 0]],
-      shoulderL: [[0, 0], [0.50, 0.070], [0.76, 0.045], [1, 0]],
-      shoulderR: [[0, 0], [0.50, 0.070], [0.76, 0.045], [1, 0]],
+      // Recognition is quick: everything arrives in the first ~150 ms and then
+      // holds. It used to build over the first third of the clip with the lids
+      // half-lowered and the trunk sinking, and a video reviewer read that as
+      // the head drifting down — "looks like losing consciousness". The lids
+      // are a flicker now, not a droop, and the lean is a small forward set.
+      browRaiseL: [[0, 0], [0.09, 0.17], [0.30, 0.06], [1, 0]],
+      browRaiseR: [[0, 0], [0.09, 0.14], [0.30, 0.05], [1, 0]],
+      lidL: [[0, 0], [0.10, 0.09], [0.30, 0.04], [0.70, 0.02], [1, 0]],
+      lidR: [[0, 0], [0.10, 0.09], [0.30, 0.04], [0.70, 0.02], [1, 0]],
+      mouthPress: [[0, 0], [0.13, 0.20], [0.60, 0.15], [1, 0]],
+      mouthCornerL: [[0, 0], [0.18, 0.09], [0.80, 0.055], [1, 0]],
+      mouthCornerR: [[0, 0], [0.18, 0.09], [0.80, 0.055], [1, 0]],
+      torsoLean: [[0, 0], [0.14, 0.07], [0.70, 0.05], [1, 0]],
+      shoulderL: [[0, 0], [0.16, 0.060], [0.70, 0.035], [1, 0]],
+      shoulderR: [[0, 0], [0.16, 0.060], [0.70, 0.035], [1, 0]],
     },
   },
   ACK_REALIZE: {
@@ -164,19 +169,47 @@ const CLIPS = {
   // with a barely-there listening tilt reflect the common conversational form
   // the current single deep receipt does not show. It stays comparison-only:
   // the host can decide whether this faster cadence fits its conversation.
+  // **Slower than it was, and that is what made it land.** This nod ran two
+  // down-beats 381 ms apart — 2.6 Hz, which is past the 1.5 Hz line CLAUDE.md
+  // and research-biomechanics.md § 3.4 both draw between "I'm with you" and
+  // "hurry up", and which the head's own 160 ms smoothing attenuates to about a
+  // third. Authoring it louder was the obvious fix and the wrong one: the
+  // gesture was not too small, it was too *fast* to survive the mass of the
+  // thing it was moving.
+  //
+  // At 780 ms between down-beats it is 1.28 Hz, attenuated to about 0.64
+  // instead of 0.36, and 1.5 s long — which is where the research puts this
+  // kind of nod anyway. § 3.3 separates a `short` continuer (0.83 s, small)
+  // from a `long` assessment nod (1.42 s, large range), and an acknowledgement
+  // of what someone just said is the second. § 3.4's two structural laws hold:
+  // the first cycle is the biggest, and each one decays.
+  //
+  // **No opening up-beat, and the corpus is why.** An earlier pass gave this a
+  // small preparatory lift on the theory that a nod winds up before it starts.
+  // § 3.3 separates `long` (large range, *no* swing-up) from `long_p` (large
+  // range *with* one, reading as a cognitive shift), so a lift here was quietly
+  // making agreement look like realisation. It also broke the rate: the beat
+  // sat 330 ms before the first peak, a 1.52 Hz opening half-cycle in a clip
+  // whose two down-beats are a comfortable 1.28 Hz apart.
   ACK_NOD: {
-    id: 'ACK_NOD', label: 'acknowledge: nod', text: '', duration: 1120,
+    id: 'ACK_NOD', label: 'acknowledge: nod', text: '', duration: 1500,
     keys: {
-      // Values are intentionally a little theatrical at close range: at a
-      // video-call tile the head's 160 ms smoothing otherwise eats the second
-      // beat and the slight listening tilt entirely.
-      headPitch: [[0, 0], [0.12, -0.15], [0.30, 0.98], [0.46, -0.13], [0.64, 0.68], [0.82, -0.09], [1, 0]],
-      headRoll: [[0, 0], [0.18, -0.090], [0.68, -0.070], [1, 0]],
-      torsoLean: [[0, 0], [0.31, 0.115], [0.68, 0.075], [1, 0]],
-      shoulderL: [[0, 0], [0.43, 0.055], [0.73, 0.032], [1, 0]],
-      shoulderR: [[0, 0], [0.43, 0.055], [0.73, 0.032], [1, 0]],
-      lidL: [[0, 0], [0.30, 0.065], [0.64, 0.038], [1, 0]],
-      lidR: [[0, 0], [0.30, 0.065], [0.64, 0.038], [1, 0]],
+      // Down, up through neutral, down again, settle. The trailing −0.08 flourish
+      // that used to sit at 0.94 is gone: it put two *return* beats 570 ms apart,
+      // a 1.75 Hz oscillation inside a clip whose down-beats are a comfortable
+      // 1.28 Hz. A gesture's last move should be releasing, not one more beat.
+      // Each down is the stroke and each up the recovery, so the downs are
+      // fast and the ups take their time: a symmetric ramp on both sides read
+      // as "a very slow, linear dip" on video. The downs still sit 720 ms
+      // apart (1.39 Hz), and a short hold at the bottom is what gives the
+      // stroke its weight.
+      headPitch: [[0, 0], [0.16, 1.10], [0.24, 1.00], [0.52, -0.20], [0.64, 0.66], [0.72, 0.58], [1, 0]],
+      headRoll: [[0, 0], [0.18, -0.090], [0.70, -0.070], [1, 0]],
+      torsoLean: [[0, 0], [0.32, 0.130], [0.70, 0.085], [1, 0]],
+      shoulderL: [[0, 0], [0.44, 0.062], [0.76, 0.036], [1, 0]],
+      shoulderR: [[0, 0], [0.44, 0.062], [0.76, 0.036], [1, 0]],
+      lidL: [[0, 0], [0.30, 0.070], [0.68, 0.040], [1, 0]],
+      lidR: [[0, 0], [0.30, 0.070], [0.68, 0.040], [1, 0]],
     },
   },
   // The disagree family follows the same three laws as explicit nods (§3.4): the
@@ -664,10 +697,21 @@ const CLIPS = {
 export const INTERNAL_CLIPS = CLIPS;
 
 /**
- * Public, server-addressable actions. Naming is `CATEGORY_INTENT`:
- * acknowledgements are `ACK_*`, the special transition is `RESPONSE_*`, and
- * visible hand/body movements are `GESTURE_*`. This is deliberately an intent
- * vocabulary — `ACK_NOD` is one implementation, not a promise about anatomy.
+ * This renderer's own addressable actions — the bundled SVG faces' catalogue,
+ * not the wire's vocabulary, which is open and has only two required ids
+ * (`docs/contract-wire.md` § Action).
+ *
+ * Every one of these is a name a server may send *once it knows this renderer
+ * is mounted*, and nothing here is a name it may send blind. Two of them are
+ * what `ACKNOWLEDGE` resolves to on the floor — `ACK_NOD` while the user still
+ * has it, `ACK_RECEIVE` once they have stopped — and `RESPONSE_INTERRUPTED` is
+ * required of every avatar, so it appears here as this renderer's shape for it
+ * rather than as its own idea. The four `GESTURE_*` are things this body does
+ * and no protocol asks for.
+ *
+ * Naming is `CATEGORY_INTENT`, and the list doubles as the conformance sweep's
+ * roster: `ACKNOWLEDGE` is absent on purpose, because sweeping both shapes it
+ * resolves to covers strictly more.
  */
 export const ACTION_IDS = Object.freeze([
   'ACK_RECEIVE', 'ACK_NOD',

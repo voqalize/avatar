@@ -36,6 +36,12 @@ const RETIRED = new Set([
   // The renamed state, told as a cautionary tale in five places: a behaviour
   // named after one rendering of it. Removing the name would remove the lesson.
   "TYPING",
+  // The other one, renamed for the same reason from the other direction:
+  // `STRAINING` named the effort a pose depicts, where `CANT_HEAR` names the
+  // situation the caller is in. It is what emptied the behaviour layer's
+  // state/render mapping table, so the pages that explain why the table is a
+  // list have to be able to say the old name.
+  "STRAINING",
   // design-library-split.md § the env-var override that was removed: the four
   // variables are named so the decision can be read without git archaeology.
   "AVATARSYNC_HOME",
@@ -50,11 +56,22 @@ const RETIRED = new Set([
 const CODE_DIRS = [
   "packages/avatar/src",
   "packages/avatar/client",
+  // The Blender avatars. Added when `contract-wire.md` gained a section naming
+  // their sequence catalogue: a doc that can cite `packages/avatar-3d` needs
+  // that tree in the corpus, or the check quietly stops covering the names it
+  // is being asked about.
+  "packages/avatar-3d/scripts",
   "packages/avatar-py/src",
   "packages/avatar-py/native",
   "apps/studio/src",
   "apps/server",
   "apps/authoring",
+  // The release tooling. Private-only, so on the public line this entry finds
+  // nothing — which is right, and walk() already tolerates an absent tree. It is
+  // here because docs/release-0.4.0.md names the export tool's allowlist
+  // constants, and a plan that documents a constant is exactly as capable of
+  // going stale as a doc that documents a state.
+  "tools",
 ];
 const CODE_EXT = /\.(js|mjs|ts|tsx|py|c|h|json|html)$/;
 
@@ -63,6 +80,10 @@ const DOC_FILES = [
   "README.md",
   "CLAUDE.md",
   "RELEASING.md",
+  // Public-only, and existence-filtered like the rest: it makes path claims
+  // about the trees a contributor is allowed to touch, which is exactly the
+  // claim that goes stale when one of them moves.
+  "CONTRIBUTING.md",
   "packages/avatar/README.md",
   "packages/avatar-py/README.md",
   "apps/studio/README.md",
@@ -125,7 +146,10 @@ function docFiles(): string[] {
   const docs = readdirSync(join(ROOT, DOC_DIR))
     .filter((n) => n.endsWith(".md") && !DOC_EXEMPT.test(n))
     .map((n) => join(ROOT, DOC_DIR, n));
-  return [...docs, ...DOC_FILES.map((f) => join(ROOT, f))];
+  // Existence-filtered for the same reason as ELSEWHERE below: the named files
+  // are the ones that make claims, and which of them a line of this repository
+  // carries is not fixed.
+  return [...docs, ...DOC_FILES.map((f) => join(ROOT, f))].filter(existsSync);
 }
 
 /**
@@ -211,6 +235,39 @@ const NARRATES_THE_OLD_TREE = new Set([
   "RELEASING.md",
 ]);
 
+/**
+ * Trees that one line of this repository has and the other does not.
+ *
+ * `voqalize/avatar` is public and `voqalize/avatar-private` is where we work, and
+ * from 0.4.0 they are a fork rather than two views of one history: the Blender
+ * pipeline, Studio and the workshop are private, the Python package and the demo
+ * server are public, and this file ships to both. So a doc naming
+ * `apps/authoring/rig-check.html` is making a true claim on one line and an
+ * unresolvable one on the other, with nothing wrong in either.
+ *
+ * The rule is *absence*, not exemption: a reference under one of these prefixes
+ * is skipped only when the tree is not there. Where the tree exists the claim is
+ * checked exactly as before, so private keeps every workshop path honest and
+ * public keeps every Python path honest, from the same list.
+ *
+ * This is deliberately narrow. Five prefixes, each one a tree that a documented
+ * decision put on the other side of the wall — not a place to put a path that is
+ * simply wrong.
+ */
+const ELSEWHERE = [
+  "packages/avatar-3d",
+  "packages/avatar-py",
+  "apps/studio",
+  "apps/authoring",
+  "apps/server",
+];
+
+/** True when the reference is into a tree this checkout does not have at all. */
+const isElsewhere = (path: string) => {
+  const tree = ELSEWHERE.find((t) => path === t || path.startsWith(t + "/"));
+  return tree !== undefined && !existsSync(join(ROOT, tree));
+};
+
 /** Repo-relative paths a file claims exist: markdown link targets and backticks. */
 function referencedPaths(text: string): string[] {
   const out: string[] = [];
@@ -290,7 +347,8 @@ describe("the docs", () => {
         // `src/voqalize_avatar`). Resolve both ways and report the repo-relative
         // form, so the failure names a path you can `ls`.
         const candidates = [path, relative(ROOT, join(dirname(file), path))];
-        if (candidates.some((c) => existsSync(join(ROOT, c)) || isGenerated(c))) continue;
+        if (candidates.some((c) => existsSync(join(ROOT, c)) || isGenerated(c) || isElsewhere(c)))
+          continue;
         const line = text.slice(0, text.indexOf(path)).split("\n").length;
         stale.push(`${relative(ROOT, file)}:${line}  ${path}`);
       }

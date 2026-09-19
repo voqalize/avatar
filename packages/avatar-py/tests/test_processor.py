@@ -34,7 +34,7 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frameworks.rtvi import RTVIServerMessageFrame
 
-from voqalize_avatar import AVATAR_MESSAGE_TYPE, AvatarClaim, AvatarControlFrame, AvatarMessage, AvatarProcessor
+from voqalize_avatar import AVATAR_MESSAGE_TYPE, AvatarControlFrame, AvatarMessage, AvatarProcessor, AvatarState
 from voqalize_avatar.state_machine import AvatarStateMachine
 from tests.helpers import AvatarPipe, said, sentence, spoken, word
 
@@ -88,7 +88,7 @@ async def test_messages_travel_downstream_in_the_rtvi_server_message_shape() -> 
     whose serializer can claim `RTVIServerMessageFrame` and then block on an ack
     that never comes — so upstream is a deadlock and downstream is free."""
     async with AvatarPipe() as pipe:
-        await pipe.push(AvatarControlFrame(AvatarMessage.claim(AvatarClaim.WORKING)))
+        await pipe.push(AvatarControlFrame(AvatarMessage.state(AvatarState.WORKING)))
         emitted = [f for f in pipe.downstream.frames if isinstance(f, RTVIServerMessageFrame)]
         assert emitted
         for frame in emitted:
@@ -101,14 +101,14 @@ async def test_messages_travel_downstream_in_the_rtvi_server_message_shape() -> 
 # ─── Out-of-band entry points ─────────────────────────────────────────────────
 
 
-async def test_client_ready_replays_the_current_server_claim() -> None:
+async def test_client_ready_replays_the_current_server_state() -> None:
     """The browser connects after the pipeline; without a resync it would sit
     in whatever pose it booted with."""
     async with AvatarPipe() as pipe:
-        await pipe.push(AvatarControlFrame(AvatarMessage.claim(AvatarClaim.WORKING)))
+        await pipe.push(AvatarControlFrame(AvatarMessage.state(AvatarState.WORKING)))
         pipe.drain()
         await pipe.avatar.on_client_ready()
-        assert pipe.sent == ["claim:WORKING"]
+        assert pipe.sent == ["state:WORKING"]
 
 
 async def test_client_ready_before_the_start_frame_is_held_not_lost() -> None:
@@ -134,8 +134,8 @@ async def test_send_lets_a_supervisor_override_the_heuristics() -> None:
     has to be able to say what the frame stream never implies."""
     async with AvatarPipe() as pipe:
         pipe.drain()
-        await pipe.avatar.send(AvatarMessage.action("ACK_RECEIVE"))
-        assert pipe.sent == ["action:ACK_RECEIVE"]
+        await pipe.avatar.send(AvatarMessage.action("ACKNOWLEDGE"))
+        assert pipe.sent == ["action:ACKNOWLEDGE"]
 
 
 @dataclass
@@ -162,10 +162,10 @@ async def test_a_subclass_can_name_its_own_state_machine() -> None:
     async with AvatarPipe(cls=MyProcessor) as pipe:
         pipe.drain()
         await pipe.push(_MyToolCall())
-        assert pipe.drain() == ["claim:WORKING"]
+        assert pipe.drain() == ["state:WORKING"]
         # ...and everything the base machine does still happens underneath.
         await pipe.push(UserStartedSpeakingFrame())
-        assert pipe.drain() == ["claim:None"]
+        assert pipe.drain() == ["state:None"]
 
 
 # ─── Failure ──────────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ async def test_a_non_fatal_error_degrades_and_the_next_turn_recovers() -> None:
         await pipe.push(ErrorFrame(error="tts websocket dropped"))
         assert pipe.drain() == []
         await pipe.push(UserStartedSpeakingFrame(), UserStoppedSpeakingFrame())
-        assert pipe.drain() == ["claim:THINKING"]
+        assert pipe.drain() == ["state:THINKING"]
 
 
 async def test_a_fatal_error_goes_offline_and_stays_there() -> None:

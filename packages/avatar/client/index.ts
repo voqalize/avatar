@@ -23,14 +23,19 @@
  *   because they are an interface.
  *
  * To ship your own avatar, publish a module exporting `createAvatar` and import
- * that instead — see `createAvatar.ts` and docs/design-avatar-interface.md.
+ * that instead — see `createAvatar.ts` and docs/design-avatar-interface.md. A
+ * module may also export `supports`, which is how a page that *drives* an
+ * avatar learns which action ids this one answers to; every consumer that only
+ * mounts a face can ignore it.
  */
 
 export { createAvatar } from "./createAvatar.js";
+export { supports } from "./supports.js";
 export type {
   AvatarOptions,
   AvatarInstance,
   AvatarFactory,
+  AvatarSupport,
   SvgAvatarOptions,
   Face,
   FaceTheme,

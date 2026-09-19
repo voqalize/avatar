@@ -71,7 +71,7 @@ Two consequences that surprise people, both deliberate:
   to it directly, with its own precedence, for its own chrome.
 - **Pipecat output is fact; a server message is a candidate.** While Pipecat's
   bot-output interval is active, the avatar is speaking and its mouth is
-  viseme-driven, whatever the server most recently claimed. That lifecycle is
+  viseme-driven, whatever the server most recently sent. That lifecycle is
   not proof that a browser device has made a sample audible. The client never
   decides what the agent is *doing* — it has no view of call content and no way
   to refuse a server command — but it does own the Pipecat facts it receives.
@@ -84,8 +84,8 @@ and it is *not* the last message received — it is the winner of a fixed
 precedence ladder.
 
 Roughly, and illustratively only: Pipecat bot output outranks user speech, which
-outranks connection posture and mute, which outrank the server's claims
-(`STRAINING`, then `THINKING`, then `WORKING`), which outrank the client's own
+outranks connection posture and mute, which outrank the server's own states
+(`CANT_HEAR`, then `THINKING`, then `WORKING`), which outrank the client's own
 quiet timer falling through to `IDLE`. **The normative ladder — all of its
 rungs, in order, with what retires each one — is
 [pipecat-lifecycle-protocol.md § Authority model](pipecat-lifecycle-protocol.md),
@@ -97,7 +97,7 @@ Two things the ladder is protecting are worth stating here, because they are
 why it is a ladder rather than a switch:
 
 - **If bot audio is playing, `SPEAKING` wins and the mouth articulates.** Full
-  stop. A claim arriving mid-utterance cannot take the mouth away.
+  stop. A server state arriving mid-utterance cannot take the mouth away.
 - **`IDLE` is the wrong answer to most of the silence in a call.** Something is
   nearly always happening in it — an endpointer deciding, a context
   aggregating, a model generating, a tool running, a TTS buffering — and a face
@@ -129,12 +129,13 @@ understanding them. Autonomy here is contingent, never decorative — the
 renderer's own autonomy stops at physical polish: blending, blink, breath,
 small eye motion, sustained posture.
 
-Seven actions are promoted to the wire (`ACK_RECEIVE`, `ACK_NOD`,
-`RESPONSE_INTERRUPTED`, `GESTURE_GREET`, `GESTURE_GOODBYE`, `GESTURE_APPROVE`,
-`GESTURE_WAIT`). The bundled SVG renderer's internal clip library is larger,
-and that is not a broader profile waiting to be exposed: promoting a clip is a
-decision about what a *server* may ask any avatar for
-([contract-behavior.md](contract-behavior.md) § Action).
+Two actions are required of every avatar — `ACKNOWLEDGE` and
+`RESPONSE_INTERRUPTED` — and the id is otherwise **open**: a name out of the
+mounted avatar's own catalogue, ignored by a face that has no such name. So the
+bundled SVG renderer's larger clip library is addressable by a server that knows
+what it is talking to, and what the two required ids buy is the thing an open
+name cannot — something to send *without* knowing which face is on the other
+end ([contract-wire.md](contract-wire.md) § Action).
 
 ### 4. An avatar is a JavaScript contract, not a renderer
 
@@ -164,7 +165,7 @@ than an omission. The bundled rig's 30 pose channels read like the renderer
 seam, and an experiment plugged into them: it ended up thresholding mouth
 floats back into a viseme letter and reverse-engineering an intent out of brow
 values — reconstructing inputs the wire had already carried in plain words. A
-renderer that receives `claim`, `action` and `cues` needs none of that, so the
+renderer that receives `state`, `action` and `cues` needs none of that, so the
 seam sits at the client
 ([design-avatar-interface.md § Why there is no renderer interface](design-avatar-interface.md)).
 
@@ -177,9 +178,9 @@ perceptual, and they are in [contract-behavior.md](contract-behavior.md).
 The browser half is driven by `@pipecat-ai/client-js` — your instance of it,
 which you already have; the package declares it an *optional* peer and imports
 its types only, so nothing about the avatar's entry point fails to load without
-it. Our own Avatar Studio additionally uses `@pipecat-ai/client-react` and the
-voice-ui-kit for its call plumbing, which is the ordinary consumer's position
-and deliberately so ([apps/studio/README.md](../apps/studio/README.md)).
+it. Our own review IDE additionally uses `@pipecat-ai/client-react` and the
+voice-ui-kit for its call plumbing, which is the ordinary consumer's position and
+deliberately so.
 
 The pipeline half is an ordinary pipecat `FrameProcessor`. It sits between the
 TTS service and `transport.output()`, which is the seat where it can see the
@@ -206,10 +207,10 @@ renders the bot's tile.
         ▼                                   │
   ┌───────────────┐   RTVI server-message   ▼
   │AvatarProcessor│ ───────────────────► AvatarClient ── resolves ONE effective
-  │  state machine│    claim / action /    (lifecycle)   state; anchors the cue
+  │  state machine│    state / action /    (lifecycle)   state; anchors the cue
   │  viseme legs  │    cues                    │         clock to real playout
   └───────────────┘                            ▼
-        │                                 behavior ──── nine states, seven
+        │                                 behavior ──── nine states, two core
         ▼                                 (src/behavior.js)  actions
   transport.output()                          │
                                               ▼
@@ -223,8 +224,8 @@ Only three commands cross the gap, and the envelope is one RTVI
 `server-message` shape ([contract-wire.md](contract-wire.md), the one copy):
 
 ```json
-{ "type": "avatar", "cmd": "claim",  "state": "WORKING" }
-{ "type": "avatar", "cmd": "action", "id": "ACK_NOD" }
+{ "type": "avatar", "cmd": "state",  "state": "WORKING" }
+{ "type": "avatar", "cmd": "action", "id": "ACKNOWLEDGE" }
 { "type": "avatar", "cmd": "cues",   "ctx": "tts-context", "from_ms": 0, "cues": [] }
 ```
 
@@ -247,10 +248,10 @@ a future renderer does not plug into the wrong seam.
 | | comes from |
 |---|---|
 | `SPEAKING`, `LISTENING` | `PipecatClient` events, browser-side. No backend involvement at all. |
-| `MUTED` | pipecat's own mute events, which already reach the browser. It is not a wire command and never was — a claim would be a second, lower-authority spelling of a fact. |
+| `MUTED` | pipecat's own mute events, which already reach the browser. It is not a wire command and never was — a server state would be a second, lower-authority spelling of a fact. |
 | `OFFLINE`, `DEGRADED` | the client's disconnect and error events. |
 | `IDLE` | the client's quiet timer (12 s), only in an established session. |
-| `THINKING`, `WORKING`, `STRAINING` | `AvatarProcessor` inferring from stock frames — the end of a user turn, LLM response boundaries, function-call frames, and a grace timer for the turn that produced nothing. These are claims because the frames they need do not all reach the browser. |
+| `THINKING`, `WORKING`, `CANT_HEAR` | `AvatarProcessor` inferring from stock frames — the end of a user turn, LLM response boundaries, function-call frames, and a grace timer for the turn that produced nothing. These are the server's to send because the frames they need do not all reach the browser. |
 | `RESPONSE_INTERRUPTED` | the processor observing a real interruption during Pipecat bot output, and sending the action itself. |
 | lipsync | `AvatarProcessor`, from the same karaoke frames pipecat already pushes for word-level captions. Two legs, spliced server-side. |
 | idle motion, blink, breath, gaze aversion | the renderer, always. |
@@ -292,7 +293,7 @@ it.
 
 ```text
 Pipecat JavaScript events  -> factual speech, connection posture, cue-clock anchor
-avatar server-message      -> visemes, server claims, and explicit actions
+avatar server-message      -> visemes, server states, and explicit actions
 avatar renderer            -> composition; never an inferred acknowledgement
 ```
 
@@ -314,6 +315,7 @@ can all be tested without running a call
 | the precedence ladder, and every latch under it | [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md) |
 | states and actions as an avatar author receives them | [contract-behavior.md](contract-behavior.md) |
 | the public interface, and how to ship your own avatar | [design-avatar-interface.md](design-avatar-interface.md) |
+| mounting one of the three 2.5-D characters, and what it costs | [characters.md](characters.md) |
 | why a library, what each package owns, the repo layout | [design-library-split.md](design-library-split.md) |
 | the pipeline half, its two seams, its wheels | [packages/avatar-py/README.md](../packages/avatar-py/README.md) |
 | our SVG renderer's internals — not a seam to implement | [internal-mixer.md](internal-mixer.md), [internal-rig.md](internal-rig.md) |

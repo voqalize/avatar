@@ -9,20 +9,20 @@ message received. Its precedence is fixed:
 2. `LISTENING` while Pipecat reports user speech.
 3. `OFFLINE` / `DEGRADED` when no observed speech pre-empts that presentation.
 4. `MUTED` while Pipecat reports a mute strategy in place.
-5. Server claim `STRAINING`.
-6. Server claim `THINKING`.
-7. Server claim `WORKING`.
+5. Server state `CANT_HEAR`.
+6. Server state `THINKING`.
+7. Server state `WORKING`.
 8. Client `LISTENING`, then client-owned `IDLE` after 12 seconds of quiet in
    an established Pipecat session. A newly mounted avatar begins available,
    never already "stepped aside".
 
 Connection failure is lower than observed speech. A new user turn and Pipecat
-bot output both retire any prior server claim, so it cannot reappear stale
+bot output both retire any prior server state, so it cannot reappear stale
 after speech.
 The browser never uses microphone VAD to interrupt bot speech: while Pipecat
 reports bot output, the avatar is speaking and its mouth is viseme-driven.
 
-Rungs 5–7 are ranked here but not compared here. A claim is a single value and
+Rungs 5–7 are ranked here but not compared here. A server state is a single value and
 only one is ever in flight, so the browser reads whichever one arrived; the
 ordering is applied where several conditions genuinely hold at once, which is
 the server (`AvatarStateMachine._resolve`). Ranking them a second time on the
@@ -31,9 +31,9 @@ client would be a duplicate ladder, and the two would drift.
 The server sends only three kinds of avatar intent:
 
 ```json
-{ "type": "avatar", "cmd": "claim", "state": "THINKING" }
-{ "type": "avatar", "cmd": "claim", "state": null }
-{ "type": "avatar", "cmd": "action", "id": "ACK_RECEIVE" }
+{ "type": "avatar", "cmd": "state", "state": "THINKING" }
+{ "type": "avatar", "cmd": "state", "state": null }
+{ "type": "avatar", "cmd": "action", "id": "ACKNOWLEDGE" }
 ```
 
 An action is self-completing. It can include face, torso, and hand motion. A
@@ -73,7 +73,7 @@ name a failure mode for is a heuristic that will be wrong silently.
 | `SPEAKING` | Pipecat's bot-output interval is active | `BotStartedSpeakingFrame` | `BotStoppedSpeakingFrame` |
 | `LISTENING` | the user is speaking | `UserStartedSpeakingFrame` | `UserStoppedSpeakingFrame` |
 | `MUTED` | a mute strategy holds the user's microphone | `UserMuteStartedFrame` | `UserMuteStoppedFrame` |
-| `STRAINING` | the turn produced nothing to answer | an empty final transcript, or `AvatarProcessor`'s grace timer expiring | the next user turn, or any sign of a response |
+| `CANT_HEAR` | the turn produced nothing to answer | an empty final transcript, or `AvatarProcessor`'s grace timer expiring | the next user turn, or any sign of a response |
 | `THINKING` | a reply is outstanding | `UserStoppedSpeakingFrame`, `UserTurnInferenceCompletedFrame`, `LLMFullResponseStartFrame`, a tool's result | `BotStartedSpeakingFrame` |
 | `WORKING` | a tool is running | `FunctionCallsStartedFrame` / `FunctionCallInProgressFrame` | the last call's result — or its cancel |
 | `IDLE` | none of the above, for 12 s | the client's quiet timer | any of the above |
@@ -89,7 +89,7 @@ immediately *before* the model is asked. But arming only there would leave the
 transcription and aggregation latency in front of it uncovered, and that gap is
 a second or more. So the wait opens when the user stops talking and closes when
 Pipecat begins bot output, and `LLMFullResponseStartFrame` merely confirms it mid-flight
-— which is also the fix for a real defect: that frame used to *clear* the claim,
+— which is also the fix for a real defect: that frame used to *clear* the state,
 so the single longest silence in a call was the one stretch with nothing to
 show.
 
@@ -101,7 +101,7 @@ and the tool's result resumes it. That is not a workaround for the ordering: a
 model blocked on a tool result is not composing an answer. Read `THINKING` as
 "waiting on the model for words" and the two stop overlapping.
 
-**`STRAINING` needs a clock, because there is no negative frame.** Nothing says
+**`CANT_HEAR` needs a clock, because there is no negative frame.** Nothing says
 "the turn produced nothing". `UserTurnInferenceCompletedFrame` is emitted only
 when a producer judges a turn complete, and its own docstring is explicit that
 absence means nothing. So the empty case is inferred two ways: instantly from an
@@ -116,7 +116,7 @@ pushed before inference starts.
 `UserMuteStoppedFrame` are stock pipecat, the RTVI observer already forwards
 them, and `PipecatClient` already raises `userMuteStarted`/`userMuteStopped`. So
 "the agent has muted you" reaches the browser with the same authority as the
-speech states above it, and the state machine says nothing about it. A claim
+speech states above it, and the state machine says nothing about it. A server state
 here would be the library inventing a second, lower-authority spelling of
 something pipecat states directly.
 
@@ -128,8 +128,8 @@ server's seat: `VADUserStoppedSpeakingFrame` arrives while the turn stays open,
 which is the endpointer saying *they are not finished*. It is not implemented,
 and the reason is a client limitation rather than a preference —
 `@pipecat-ai/client-js` (1.13.0) exposes no VAD event at all, so the browser
-reports the user as speaking for the entire hold and a claim raised there would
-lose to `LISTENING` on rung 2 every time. A claim that can never win is not a
+reports the user as speaking for the entire hold and a state raised there would
+lose to `LISTENING` on rung 2 every time. A candidate that can never win is not a
 feature. If the client gains a VAD event, this becomes a two-line change on both
 ends.
 
@@ -148,7 +148,7 @@ breath, small eye motion and sustained posture.
 
 ```text
 Pipecat JavaScript events  -> factual speech, connection posture, cue-clock anchor
-avatar server-message      -> visemes, server claims, and explicit actions
+avatar server-message      -> visemes, server states, and explicit actions
 avatar renderer            -> composition; never an inferred acknowledgement
 ```
 
@@ -165,8 +165,8 @@ application extension hooks in this version.
 | Pipecat event | Default projection |
 |---|---|
 | `UserStartedSpeaking` | `LISTENING`; stop the work loop; `setUserSpeaking(true)` enables only the sustained engagement lean. |
-| `UserStoppedSpeaking` | `setUserSpeaking(false)` and hold `LISTENING`; the server claims `THINKING` from this point. No acknowledgement is emitted. |
-| `BotStartedSpeaking` | `SPEAKING`; it pre-empts and consumes any lower-priority server claim. |
+| `UserStoppedSpeaking` | `setUserSpeaking(false)` and hold `LISTENING`; the server sends `THINKING` from this point. No acknowledgement is emitted. |
+| `BotStartedSpeaking` | `SPEAKING`; it pre-empts and consumes any lower-priority server state. |
 | `BotStoppedSpeaking` | Stop any still-open viseme track immediately, then return to `LISTENING`. |
 | `UserMuteStarted` / `UserMuteStopped` | `MUTED`, then back to `LISTENING`. The quiet under a mute never earns `IDLE`: the silence was imposed, and letting the timer run behind it would reveal a stepped-aside face the moment the microphone came back. |
 | `Error` | `DEGRADED`, or `OFFLINE` when `data.fatal` is true. |
@@ -195,10 +195,10 @@ high-frequency subscription serving decoration.
 resulting state back. Shortening it to *watch* the transition means
 constructing `AvatarClient` yourself, which is what the lab below does.
 
-The server owns the three claims because the frames they are inferred from do
+The server owns the three because the frames they are inferred from do
 not all reach the browser: function-event reporting there is optional, and the
 LLM response boundaries are not exposed at all. The client behavior library owns
-how each one is *rendered* — `STRAINING` selects the renderer's straining pose,
+how each one is *rendered* — `CANT_HEAR` selects this renderer's lean-in,
 `WORKING` its work program — and a renderer with no such pose may legitimately
 draw either as ordinary listening. Tool-specific behaviour, DOM-aware gaze and
 custom compound motion remain deferred until there is evidence for a stable
@@ -206,12 +206,14 @@ JavaScript extension API.
 
 ## Verification lab
 
-Open [the Pipecat lifecycle lab](../apps/authoring/pipecat-lifecycle-lab.html)
-through the development server. It mounts the real `AvatarClient` against a
-Pipecat-shaped local event emitter and exposes six repeatable traces:
+The ladder above is verified by driving the real `AvatarClient` against a
+Pipecat-shaped local event emitter — no transport, no server — and watching six
+repeatable traces. Ours is a page in the maintainers' workshop; the emitter is the
+interesting half, and it is short, because `AvatarClient` takes a client object
+and listens to it. The traces:
 
 - Normal reply
-- Streaming reply (bot speech pre-empts a thinking claim)
+- Streaming reply (bot speech pre-empts a `THINKING` state)
 - Parallel tools
 - Interruption
 - Failure and reconnect
@@ -227,8 +229,8 @@ so repeated Started/InProgress notifications cannot strand `WORKING`.
 ## Streaming and event order
 
 LLM and audio events overlap in streaming pipelines. `BotStartedSpeaking` can
-arrive while a `THINKING` claim is still present; Pipecat bot output wins
-immediately and consumes the claim.
+arrive while a `THINKING` state is still present; Pipecat bot output wins
+immediately and consumes it.
 
 The Pipecat JavaScript client has no standalone interruption event. The server
 observes the actual `InterruptionFrame` and emits `action:RESPONSE_INTERRUPTED` only
@@ -237,7 +239,7 @@ interval as the mouth safety boundary, then plays that action.
 
 ## What the backend does and does not send
 
-The three commands and the promoted `action.id` list are
+The three commands, and which `action.id`s every avatar owes a server, are
 [contract-wire.md](contract-wire.md) — one copy, and it is that one. What
 belongs here is the part that is about *lifecycle* rather than vocabulary:
 
@@ -259,10 +261,11 @@ of that zero, by what the mixer's mouth smoothing will cost the picture, less an
 output-device latency the display does not match. Each resumption after a pause
 in the track is listened for again. A mouth opens before its sound, so a sound
 heard within the track's usual lead over it agrees with the clock; a
-disagreement beyond that is slewed out rather than jumped. The FIFO holds only because `AvatarProcessor` never sends a context the
+disagreement beyond that is slewed out rather than jumped. The FIFO holds only
+because `AvatarProcessor` never sends a context the
 browser will not hear: cues wait for their context's first audio and are dropped
 if an interruption lands first. `AvatarProcessor` passes
-`AvatarControlFrame` claims/actions through for explicit application intent.
+`AvatarControlFrame` states/actions through for explicit application intent.
 
 **Actions are layered over the effective state** resolved by the Authority
 model above, and finish their natural landing; they never create a durable

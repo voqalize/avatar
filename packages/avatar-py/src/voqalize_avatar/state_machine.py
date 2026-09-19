@@ -1,4 +1,4 @@
-"""Frames in, claims/actions and stock-context viseme messages out.
+"""Frames in, states/actions and stock-context viseme messages out.
 
 Deliberately synchronous, dependency-free and pipeline-free: it takes a frame
 (or a named event) and returns the list of messages that frame implies. No
@@ -9,20 +9,20 @@ processor, is a state machine you can only observe by running a call.
 
 **Everything it reads is stock pipecat.** The browser receives the same
 lifecycle through Pipecat's JavaScript client and projects factual speech and
-failure presentation locally. This class emits lower-priority server claims and
-explicit actions; the processor emits viseme cues keyed by TTS context.
+failure presentation locally. This class emits the lower-priority server states
+and explicit actions; the processor emits viseme cues keyed by TTS context.
 
 Two rules shape the output:
 
-- **A claim is lower-priority application intent.** `AvatarControlFrame`
-  carries a `STRAINING`/`THINKING`/`WORKING` claim or an action in pipeline
+- **A server state is lower-priority application intent.** `AvatarControlFrame`
+  carries a `CANT_HEAR`/`THINKING`/`WORKING` state or an action in pipeline
   order; Pipecat lifecycle is not redundantly translated into a second state
   protocol.
 - **No client-side conversational inference.** The browser may project factual
   lifecycle posture, but every acknowledgement, nod and semantic reaction still
   arrives as an explicit application action.
 
-## What the claims mean, and why they are inferred this way
+## What the three states mean, and why they are inferred this way
 
 The hard part is the stretch where neither party is speaking. `IDLE` is the
 wrong answer there almost every time: something is happening, it is just not
@@ -30,13 +30,13 @@ audible, and a face that goes blank while the model is mid-inference reads as
 *disconnected* rather than *busy*. So this class keeps a small set of latches,
 each one a fact about the frame stream, and resolves them in a fixed order.
 
-| claim | latch | armed by | retired by |
+| state | latch | armed by | retired by |
 |---|---|---|---|
-| `STRAINING` | nothing came back | a turn that ended with no text, or `waited()` | the next user turn, or any sign of a response |
+| `CANT_HEAR` | nothing came back | a turn that ended with no text, or `waited()` | the next user turn, or any sign of a response |
 | `THINKING` | a reply is outstanding | `UserStoppedSpeakingFrame`, `LLMFullResponseStartFrame` | `BotStartedSpeakingFrame` |
 | `WORKING` | a tool is running | `FunctionCalls*Frame` | the last call's result — or its cancel |
 
-Only one claim is on the wire at a time, so **when several latches are set the
+Only one state is on the wire at a time, so **when several latches are set the
 resolution order is the whole design** — `_resolve`. `WORKING` sits at the
 bottom, below `THINKING`, which needs saying because it makes the obvious
 implementation wrong: tool calls happen *inside* an outstanding reply, so if
@@ -48,26 +48,26 @@ in-flight tool suspends and the tool's result resumes.
 
 ## What is not here, and why
 
-**Mute is not a claim.** `UserMuteStartedFrame`/`UserMuteStoppedFrame` are stock
+**Mute is not one of them.** `UserMuteStartedFrame`/`UserMuteStoppedFrame` are stock
 pipecat, the RTVI observer already converts them, and `PipecatClient` already
 raises `userMuteStarted`/`userMuteStopped` — so "the agent has muted you" reaches
-the browser as a *fact* without this class saying anything. Adding a claim for it
-would be the library inventing a second, lower-authority spelling of something
-pipecat states directly.
+the browser as a *fact* without this class saying anything. A server state for
+it would be the library inventing a second, lower-authority spelling of
+something pipecat states directly.
 
 **"The turn strategy is still holding the turn open" is not here either**, and
 that is a client limitation rather than a preference. It is perfectly visible
 from this seat — `VADUserStoppedSpeakingFrame` arrives while the turn stays open
 — but pipecat's JavaScript client reports the user as speaking for the whole
-hold and exposes no VAD event to contradict it, so a claim raised there would
-lose the ladder to `LISTENING` every time. A claim that can never win is not a
-feature.
+hold and exposes no VAD event to contradict it, so a state raised there would
+lose the ladder to `LISTENING` every time. A candidate that can never win is
+not a feature.
 
 One caveat about the frame diet. This class reads whatever a caller feeds it,
 but the seat it is *mounted* at — between TTS and the output transport — is
 downstream of the user context aggregator, which in most pipelines consumes
 transcription frames. So `_on_transcription` may never fire: it is the *fast*
-path to `STRAINING` for a pipeline whose transcripts do reach the seat, and
+path to `CANT_HEAR` for a pipeline whose transcripts do reach the seat, and
 `waited()` is the one that works everywhere. Nothing here may *depend* on a
 transcript arriving.
 """
@@ -96,7 +96,7 @@ from pipecat.frames.frames import (
 )
 
 from .frames import AvatarControlFrame
-from .messages import AvatarClaim, AvatarMessage
+from .messages import AvatarMessage, AvatarState
 
 
 class AvatarStateMachine:
@@ -109,9 +109,9 @@ class AvatarStateMachine:
     """
 
     def __init__(self) -> None:
-        # The last claim put on the wire. Everything else here is a latch; this
+        # The last state put on the wire. Everything else here is a latch; this
         # is the memo that keeps `_resolve` from repeating itself.
-        self._claim: AvatarClaim | None = None
+        self._state: AvatarState | None = None
         self._user_speaking = False
         self._bot_speaking = False
         self._tools_in_flight: set[str] = set()
@@ -121,17 +121,21 @@ class AvatarStateMachine:
         # too — that gap is a second or more in a real pipeline, and it is the
         # single longest stretch where the face used to have nothing to show.
         self._awaiting_reply = False
+        # The model has been given this turn to answer. The wait goes on — words
+        # are still owed, and THINKING is still true — but it can no longer end
+        # in "nothing is coming", so it stops the clock that would decide that.
+        self._answering = False
         # The turn came back with nothing to answer. Distinct from
         # `_awaiting_reply` because it is the *end* of waiting, not more of it.
-        self._straining = False
+        self._cant_hear = False
         self._offline = False
 
     # ─── Introspection ──────────────────────────────────────────────────
 
     @property
-    def claim(self) -> AvatarClaim | None:
-        """The current lower-priority server claim, if any."""
-        return self._claim
+    def state(self) -> AvatarState | None:
+        """The current lower-priority server state, if any."""
+        return self._state
 
     @property
     def tools_in_flight(self) -> int:
@@ -145,8 +149,13 @@ class AvatarStateMachine:
         running: while it is true there is something to give up on, and giving up
         is what `waited()` means. The processor owns the clock because this class
         does not have one — see the module docstring.
+
+        False once the model has the turn, though the THINKING state holds until
+        words are audible. Model and TTS latency is routinely past the grace
+        period, and a clock left running through it read every slow reply as an
+        empty turn: the face leaned in straining to hear, a beat before it spoke.
         """
-        return self._awaiting_reply
+        return self._awaiting_reply and not self._answering
 
     # ─── Out-of-band events ─────────────────────────────────────────────
 
@@ -160,7 +169,7 @@ class AvatarStateMachine:
         Deliberately bypasses dedup: the memo tracks what we *sent*, and a
         client that was not listening did not receive it.
         """
-        return [] if self._claim is None else [AvatarMessage.claim(self._claim)]
+        return [] if self._state is None else [AvatarMessage.state(self._state)]
 
     def waited(self) -> list[AvatarMessage]:
         """The grace period expired with the reply still outstanding.
@@ -175,10 +184,10 @@ class AvatarStateMachine:
         the same conclusion without a clock, but only where transcripts reach
         this seat, which is the minority.
         """
-        if not self._awaiting_reply:
+        if not self.awaiting_reply:
             return []
         self._awaiting_reply = False
-        self._straining = True
+        self._cant_hear = True
         return self._resolve()
 
     # ─── The frame stream ───────────────────────────────────────────────
@@ -221,7 +230,7 @@ class AvatarStateMachine:
             # rather than ending it, and the empty-aggregation case still resolves
             # through `waited()`.
             self._awaiting_reply = True
-            self._straining = False
+            self._cant_hear = False
             return self._resolve()
         if isinstance(frame, LLMFullResponseStartFrame):
             # The frame the heuristic actually wants is `LLMContextFrame` — input
@@ -231,11 +240,12 @@ class AvatarStateMachine:
             # *is* "the model has been given something to answer".
             #
             # It re-arms rather than clears, which is the fix for the reported
-            # bug: this used to set the claim to None, so the entire model+TTS
-            # latency window — the longest silence in a call — was claimless and
+            # bug: this used to clear the state, so the entire model+TTS
+            # latency window — the longest silence in a call — was stateless and
             # the widget fell through its ladder to IDLE.
             self._awaiting_reply = True
-            self._straining = False
+            self._answering = True
+            self._cant_hear = False
             return self._resolve()
         if isinstance(frame, TTSStoppedFrame):
             # Nothing: TTSStopped means *generation* finished, and generation
@@ -264,12 +274,14 @@ class AvatarStateMachine:
         # A new turn retires everything the last one was waiting on. Whatever we
         # had not worked out by now, we are not going to.
         self._awaiting_reply = False
-        self._straining = False
+        self._answering = False
+        self._cant_hear = False
         return self._resolve()
 
     def _on_user_stopped(self) -> list[AvatarMessage]:
         self._user_speaking = False
         self._awaiting_reply = True
+        self._answering = False
         return self._resolve()
 
     def _on_transcription(self, frame: TranscriptionFrame) -> list[AvatarMessage]:
@@ -281,7 +293,7 @@ class AvatarStateMachine:
         if frame.text.strip():
             return []
         self._awaiting_reply = False
-        self._straining = True
+        self._cant_hear = True
         return self._resolve()
 
     # ─── The agent's turn ───────────────────────────────────────────────
@@ -291,9 +303,9 @@ class AvatarStateMachine:
             return []
         self._bot_speaking = True
         # Words arrived. Everything the wait was for is now audible, and audible
-        # is a fact the browser owns — no claim survives it.
+        # is a fact the browser owns — no server state survives it.
         self._awaiting_reply = False
-        self._straining = False
+        self._cant_hear = False
         return self._resolve()
 
     def _on_bot_stopped(self) -> list[AvatarMessage]:
@@ -315,17 +327,17 @@ class AvatarStateMachine:
     # ─── Explicit control ───────────────────────────────────────────────
 
     def _on_control(self, frame: AvatarControlFrame) -> list[AvatarMessage]:
-        """Pass an application claim/action through in pipeline order."""
+        """Pass an application state/action through in pipeline order."""
         message = frame.message
-        if message.cmd == "claim":
+        if message.cmd == "state":
             raw = message.payload.get("state")
-            self._claim = None if raw is None else AvatarClaim(raw)
+            self._state = None if raw is None else AvatarState(raw)
         return [message]
 
     # ─── Tool calls ─────────────────────────────────────────────────────
 
     def tool_started(self, tool_call_id: str) -> list[AvatarMessage]:
-        """Track parallel calls and claim `WORKING` once.
+        """Track parallel calls and take `WORKING` once.
 
         Keyed on `tool_call_id` rather than counted so a repeated announcement
         (pipecat sends both *Started* and *InProgress* for the same call) cannot
@@ -344,7 +356,7 @@ class AvatarStateMachine:
             return []
         self._tools_in_flight.add(tool_call_id)
         self._awaiting_reply = False
-        self._straining = False
+        self._cant_hear = False
         return self._resolve()
 
     def tool_finished(self, tool_call_id: str) -> list[AvatarMessage]:
@@ -356,6 +368,7 @@ class AvatarStateMachine:
         # says it a round-trip earlier, and there is no silence in between worth
         # showing as IDLE.
         self._awaiting_reply = True
+        self._answering = True
         return self._resolve()
 
     def tool_cancelled(self, tool_call_id: str) -> list[AvatarMessage]:
@@ -388,31 +401,31 @@ class AvatarStateMachine:
     # ─── Resolution ─────────────────────────────────────────────────────
 
     def _resolve(self) -> list[AvatarMessage]:
-        """One claim out of every latch that is set, in a fixed order.
+        """One state out of every latch that is set, in a fixed order.
 
         Called after every transition rather than at chosen moments, so a latch
         cleared by one frame and a latch set by another cannot leave the wire
         describing a state that stopped being true — which is how the old code,
-        which set the claim inline at each handler, lost the whole model-latency
+        which set the state inline at each handler, lost the whole model-latency
         window to a single stray clear.
 
         Speech is deliberately at the top and resolves to *nothing*. Both speech
-        states are Pipecat facts the browser already has, and it outranks every
-        claim with them; sending one anyway would be this library restating
+        states are Pipecat facts the browser already has, and it outranks all
+        three with them; sending one anyway would be this library restating
         something with less authority than the copy already there.
         """
         if self._user_speaking or self._bot_speaking:
-            return self._set_claim(None)
-        if self._straining:
-            return self._set_claim(AvatarClaim.STRAINING)
+            return self._set_state(None)
+        if self._cant_hear:
+            return self._set_state(AvatarState.CANT_HEAR)
         if self._awaiting_reply:
-            return self._set_claim(AvatarClaim.THINKING)
+            return self._set_state(AvatarState.THINKING)
         if self._tools_in_flight:
-            return self._set_claim(AvatarClaim.WORKING)
-        return self._set_claim(None)
+            return self._set_state(AvatarState.WORKING)
+        return self._set_state(None)
 
-    def _set_claim(self, claim: AvatarClaim | None) -> list[AvatarMessage]:
-        if claim is self._claim:
+    def _set_state(self, state: AvatarState | None) -> list[AvatarMessage]:
+        if state is self._state:
             return []
-        self._claim = claim
-        return [AvatarMessage.claim(claim)]
+        self._state = state
+        return [AvatarMessage.state(state)]

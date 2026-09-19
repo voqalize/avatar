@@ -107,8 +107,7 @@ def flatten(message: AvatarMessage | dict[str, Any]) -> str:
     wire = message.to_wire() if isinstance(message, AvatarMessage) else message
     cmd = wire["cmd"]
     salient = {
-        "state": "name",
-        "claim": "state",
+        "state": "state",
         "action": "id",
         "interject": "id",
         "speech": "event",

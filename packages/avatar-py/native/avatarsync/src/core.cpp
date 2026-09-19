@@ -353,16 +353,31 @@ JoiningContinuousTimeline<Shape> restPauses(
 // ---------------------------------------------------------------------------
 // Zip a shape track against the phone timeline that produced it.
 //
-// A shape cue and a phone rarely share edges — animate() merges runs, inserts
-// tweens and cleans up static segments — so point-sampling the phone timeline at
-// the cue's start would attribute a cue to whatever happened to straddle its
-// boundary. Maximum overlap answers the question actually being asked: which
-// segment is this mouth position mostly showing.
+// The output is one cue per *intersection* of the two tracks, not one per shape:
+// both are information the caller paid for, and animate() discarding thirty-one
+// of the forty phones is no reason for this function to discard the rest of the
+// timeline as well. A held shape therefore comes back as a run of cues that
+// share it and differ in `phone`.
+//
+// A shape and a phone rarely share edges — animate() merges runs, inserts tweens
+// and cleans up static segments — so the intersections at either end of a shape
+// are routinely a centisecond of the neighbouring phone. kMinPhoneMs drops
+// those, and a shape whose every intersection is one falls back to maximum
+// overlap: which segment is this mouth position mostly showing, the answer this
+// function used to give for all of them.
 //
 // Both tracks are sorted and non-overlapping, so this is a merge, not a search:
 // once a phone segment ends before the current cue starts, no later cue can want
 // it either.
 // ---------------------------------------------------------------------------
+// A phone overlapping a shape segment by less than this is an edge artifact
+// rather than an articulation. animate() merges runs, inserts tweens and cleans
+// up static segments, so a shape and a phone almost never share an edge and the
+// overhang at either end is routinely a centisecond of the neighbour. Rhubarb
+// resolves time to 10 ms, so this is two of its frames — below anything a mouth
+// is doing on purpose, and above the ragged edges.
+constexpr int kMinPhoneMs = 20;
+
 vector<Cue> zipCues(
 	const JoiningContinuousTimeline<Shape>& shapes, const BoundedTimeline<Phone>& phones)
 {
@@ -384,31 +399,74 @@ vector<Cue> zipCues(
 	for (const auto& timed : shapes) {
 		const int start = static_cast<int>(timed.getStart().count());
 		const int end = static_cast<int>(timed.getEnd().count());
+		const Shape shape = timed.getValue();
 
 		while (first < segments.size() && segments[first].end <= start) ++first;
 
+		// A rest carries no phone even when one overlaps it, and it is never
+		// split. restPauses() closes the mouth on measured silence, and the
+		// recogniser will happily have labelled that silence — a free phone loop
+		// labels every frame with something, so a pause routinely arrives inside
+		// a stretched fricative. The wire contract is that `p` is the segment
+		// being *articulated*, and nothing is: attaching one here would tell a
+		// phone-aware renderer to shape a mouth the shape track has just decided
+		// to shut.
+		if (shape == Shape::X) {
+			Cue cue;
+			cue.tMs = start * 10;
+			cue.shape = shape;
+			cue.phone = -1;
+			cues.push_back(cue);
+			continue;
+		}
+
+		// One cue per phone actually articulated under this shape, not one per
+		// shape. The nine shapes are a lossy projection of forty phones and the
+		// loss is concentrated — B alone absorbs fourteen — so a quarter-second
+		// of held B routinely spans S, then T, then a vowel, and emitting the
+		// single best-overlap phone threw the other two away. A renderer with a
+		// mouth for one of them could not ask for it from `shape` and can from
+		// `phone`.
+		//
+		// **The shape track is unchanged by this.** Every split cue repeats the
+		// shape it sits in, so a client that reads only `shape` merges them back
+		// and sees exactly the track this function used to return — which is why
+		// the first split cue is anchored at the shape's own start below.
 		int best = -1;
 		int bestOverlap = 0;
+		const size_t before = cues.size();
 		for (size_t j = first; j < segments.size() && segments[j].start < end; ++j) {
-			const int overlap = std::min(end, segments[j].end) - std::max(start, segments[j].start);
+			const int from = std::max(start, segments[j].start);
+			const int overlap = std::min(end, segments[j].end) - from;
 			if (overlap > bestOverlap) {
 				bestOverlap = overlap;
 				best = static_cast<int>(segments[j].phone);
 			}
+			if (overlap * 10 < kMinPhoneMs) continue;
+
+			Cue cue;
+			// The first surviving phone is anchored at the shape's start rather
+			// than its own. The mouth has to change at exactly the centisecond it
+			// changed before this function learned to split, or lipsync timing
+			// moved — and it is also the honest answer, since the shape started
+			// there whatever the recogniser's segment boundaries say.
+			cue.tMs = (cues.size() == before ? start : from) * 10;
+			cue.shape = shape;
+			cue.phone = static_cast<int8_t>(segments[j].phone);
+			cues.push_back(cue);
 		}
 
-		Cue cue;
-		cue.tMs = start * 10;
-		cue.shape = timed.getValue();
-		// A rest carries no phone even when one overlaps it. restPauses() closes
-		// the mouth on measured silence, and the recogniser will happily have
-		// labelled that silence — a free phone loop labels every frame with
-		// something, so a pause routinely arrives inside a stretched fricative.
-		// The wire contract is that `p` is the segment being *articulated*, and
-		// nothing is: attaching one here would tell a phone-aware renderer to
-		// shape a mouth the shape track has just decided to shut.
-		cue.phone = cue.shape == Shape::X ? -1 : static_cast<int8_t>(best);
-		cues.push_back(cue);
+		// Nothing cleared kMinPhoneMs, so this segment is all overhang — or the
+		// phone timeline has a gap under it. It still owes exactly one cue, with
+		// the answer this function gave for every segment before: whichever phone
+		// it mostly shows, or none.
+		if (cues.size() == before) {
+			Cue cue;
+			cue.tMs = start * 10;
+			cue.shape = shape;
+			cue.phone = static_cast<int8_t>(best);
+			cues.push_back(cue);
+		}
 	}
 	return cues;
 }

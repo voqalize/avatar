@@ -11,7 +11,7 @@ instant. It has an authority source, entry and exit conditions, and precedence
 against other candidate states. It remains active until those facts change; it
 does not complete on a timer.
 
-Core states are `IDLE`, `LISTENING`, `STRAINING`, `THINKING`, `WORKING`,
+Core states are `IDLE`, `LISTENING`, `CANT_HEAR`, `THINKING`, `WORKING`,
 `MUTED`, `SPEAKING`, `DEGRADED`, and `OFFLINE`. These nine are the whole
 vocabulary an avatar implementation receives; a state supplies sustained pose,
 gaze policy, and an idle/liveness profile. Where each one comes from and what
@@ -27,11 +27,18 @@ name promoted to a behaviour's — which is the shape of the mistake even when
 the picture is right. Choosing among several work activities is a renderer's
 business, and lives there.
 
-`STRAINING` is the first state where that separation does real work rather than
-being merely respected: it says the avatar is trying harder to hear, and this
-renderer draws that as `CANT_HEAR`, a pose with a specific lean and squint. A
-renderer with nothing of the sort may point it at ordinary listening and be
-correct.
+`CANT_HEAR` is the state that tested the rule, and the way it was settled is
+worth keeping. It used to be called `STRAINING` — the avatar trying harder to
+hear — and this renderer drew that as `CANT_HEAR`, a pose with a specific lean
+and squint. Two names for one row, and the wrong one was on the wire: straining
+is the *effort the pose depicts*, while not being able to hear is the situation
+the caller is actually in. The wire redesign renamed the state to the situation,
+which collapsed the row and with it the last non-identity entry in the behaviour
+layer's mapping table — the table is a list of nine names now
+(`packages/avatar/src/behavior.js`). The separation itself is unchanged and
+still load-bearing: a renderer with nothing like a lean-in may draw `CANT_HEAR`
+as ordinary listening and be correct. It simply no longer needs a second column
+to say so.
 
 ## Action
 
@@ -49,17 +56,42 @@ articulation. An action during bot speech contributes compatible
 head/body/hand channels but not a competing mouth shape. `turn.interrupted`
 waits for that interval to stop, then its held mouth can communicate the cut.
 
-The vocabulary is seven, and `BEHAVIOR_ACTIONS` in `packages/avatar/src/behavior.js` is the one
-copy: `ack.receive`, `ack.nod`, `turn.interrupted`, `gesture.greet`,
-`gesture.farewell`, `gesture.approve`, `gesture.wait`. Each maps to exactly one
-promoted wire id ([contract-wire.md](contract-wire.md)) — the two lists are the
-same seven things spelled twice, once for a reader and once for a protocol, and
+The vocabulary is two, and `BEHAVIOR_ACTIONS` in `packages/avatar/src/behavior.js` is the one
+copy: `ack` and `turn.interrupted`. Each maps to exactly one required wire id
+([contract-wire.md](contract-wire.md) § Action) — the two lists are the same two
+things spelled twice, once for a reader and once for a protocol, and
 `WIRE_ACTION_TO_BEHAVIOR` is where they meet.
 
-The SVG renderer's own clip library is larger (`INTERNAL_CLIPS`), and that is
-not a broader profile waiting to be exposed: promoting a clip to an action is a
-decision about what a *server* may ask for, and it costs an edit in three
-places on purpose ([internal-mixer.md](internal-mixer.md) § Actions).
+`ack` is the whole backchannel family in one id. A receipt, a continuer nod, a
+realisation and an empathy beat are four *shapes* of acknowledging, and which
+one a face makes is a rendering decision — the caller's job is to know that an
+acknowledgement is due, not what it looks like. It used to be seven ids: two
+were the receipt and the nod, which are that one intent spelled twice, and four
+were `gesture.*`, which are things a particular body does rather than intents a
+server may hold every face to.
+
+The SVG renderer's own clip library is larger (`INTERNAL_CLIPS`), and a server
+that knows this renderer is mounted may name any of the part of it that is
+published (`ACTION_IDS`). What it may not do is expect another avatar to answer
+— which is exactly the line between the two required ids and an open name
+([internal-mixer.md](internal-mixer.md) § Actions).
+
+**A renderer publishes its own motions, and a server may ask for one by name** —
+the same `action` command, whose id is open
+([contract-wire.md](contract-wire.md) § Action). Such a name carries no behavior
+id, and that asymmetry is the point: `BEHAVIOR_ACTIONS` exists to name an intent
+independently of how any one face renders it, while a renderer's own name *is*
+the rendering. It can only add, never redefine a required id, and a face that
+lacks the name ignores the message. The first table of them is the Blender
+avatars' three research-shaped nod types and a head shake, which are three
+things to say where `ack` is one.
+
+**A renderer may also re-shape one of the two** — never change what it means.
+The shared clips are authored in pose units that mean pixels on a line face, and
+the same keys drove tara's head through 15°, three times a continuer. So the
+Blender avatars answer `ack` with their own continuer
+(`BLENDER_ACTIONS` in `packages/avatar/client/three/sequences.ts`). The intent is the
+contract; how big a nod has to be to read as that intent belongs to the body.
 
 ## Effective-state precedence
 
@@ -69,5 +101,5 @@ received. The ladder — which authority wins over which — is
 and that is the only copy.
 
 The invariant it exists to protect: **if bot audio is playing, `SPEAKING` wins
-and the mouth must articulate.** Server claims are lower-priority candidates,
-never effective-state commands.
+and the mouth must articulate.** A state the server sends is a lower-priority
+candidate, never an effective-state command.

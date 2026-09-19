@@ -30,47 +30,120 @@
  */
 
 import { REST, CHANNELS, TAU, RANGE, GROUPS, clamp, approach } from './params.js';
-import { emotionPose } from './emotions.js';
+import { EMOTIONS, emotionPose } from './emotions.js';
 import { GazeLayer, GAZE_TARGETS, AVERSION } from './gaze.js';
 import { IdleLayer, ListeningEngine } from './idle.js';
 import { ClipPlayer } from './clips.js';
 import { ACTIONS, INTERNAL_CLIPS } from './interjections.js';
 import { VisemeTrack, shapeFor, SILENT } from './visemes.js';
+import { SpeechProsody, UNCALIBRATED_HEAD_GAIN } from './prosody.js';
+import { HEAD_AXES, soften } from './head.js';
 import { PerformTrack } from './perform.js';
 import { createHand, HAND_GESTURES, HAND_ACTION_TO_FRAME_GESTURE } from './hand.js';
 import { avatarFrame, createSvgRig } from './rig.js';
 
+const rand = ([a, b]) => a + Math.random() * (b - a);
+const pick = (xs) => xs[(Math.random() * xs.length) | 0];
+
 // Each state's `idle` is a profile for the liveness layer (see DEFAULT_PROFILE
 // in idle.js). Blink gaps come from docs/research-biomechanics.md §5: the rate
 // alone separates listening (~16/min) from thinking (~25/min) from visually
-// busy (~9/min), and it is the cheapest state signal the rig has.
+// busy (~9/min), and it is the cheapest state signal the rig has. The gap is
+// the budget for every blink, paired ones included (about one in six), so it
+// sits a little longer than 60/rate.
 export const STATES = {
-  // Idle means present but occupied with one's own quiet business. It must not
-  // compete with LISTENING's sustained user attention: the default target is
-  // away from the user and the wander only visits other non-task targets.
-  IDLE:               { gaze: 'AWAY_THINKING', emotion: 'neutral', engagement: false,
-                        idle: { sway: 0.72, blinkGap: [4.6, 6.6] },
-                        wander: { targets: ['AWAY_THINKING', 'AWAY_RIGHT', 'NOTES'], every: [3.6, 6.8] } },
+  // Idle means present and relaxed, not attending. It is also the face before
+  // a call connects — the first one anyone sees — so it rests on the user and
+  // leaves for soft, unhurried looks (AVERSION.IDLE) rather than parking the
+  // eyes somewhere. It used to open on AWAY_THINKING and wander between it,
+  // AWAY_RIGHT and NOTES from the first frame: a face that loads looking up
+  // and to the left, at nothing, reads as broken rather than idle. What keeps
+  // it apart from LISTENING is the longer, lazier looks, the slower scan and
+  // the missing engagement lean, not refusing to look at the user.
+  IDLE:               { gaze: 'USER', emotion: 'neutral', engagement: false,
+                        aversion: 'IDLE', scan: [0.8, 2.0],
+                        idle: { sway: 0.72, blinkGap: [3.6, 5.2] } },
   // `aversion` is why this state does not stare. Continuous eye contact is not
   // the attentive pose it looks like — it is a demand for more talk (Rossano)
   // and it measures as *tense*, not attentive (Wang & Gratch). See AVERSION in
   // gaze.js for the numbers; the mixer holds it off near a turn boundary.
+  // The blink timer runs slower than the ~17/min it lands on because a sixth
+  // of timed blinks come as a pair; at 3.2-4.4 s it measured 20-23/min.
   LISTENING:          { gaze: 'USER',     emotion: 'neutral',    engagement: true,
                         aversion: 'LISTEN',
-                        idle: { sway: 1.0, blinkGap: [3.1, 4.2] },
+                        idle: { sway: 1.0, blinkGap: [3.6, 4.8] },
                         pose: { browRaiseL: 0.06, browRaiseR: 0.06, lidL: -0.04, lidR: -0.04 } },
   // Faster, shallower breath is the measured cognitive-load signature, and the
   // occasional dead-still hold is the strongest "working on it" cue a rig this
-  // simple can make — deliberate stillness, not more motion. The aversion
-  // leads DOWN (39% of measured cognitive aversions, §4.2) and wanders on the
-  // ~3.5s cognitive-aversion cadence, coming back to the user roughly one
-  // dwell in four — still with you, working.
-  THINKING:           { gaze: 'AWAY_DOWN', emotion: 'thoughtful', engagement: false,
-                        idle: { sway: 0.7, blinkGap: [2.1, 2.7], breathRate: 1.18, breathAmp: 0.7,
+  // simple can make — deliberate stillness, not more motion. The look away is
+  // Andrist's cognitive aversion (§4.2): one look held ~3.5 s (SD 1.26) that
+  // drifts a little where it sits, a check-in with the user, then the next.
+  //
+  // In a call this state mostly lasts under two seconds — the gap between the
+  // user finishing and the reply starting — so its opening is what gets seen,
+  // and the opening used to be wrong. The eyes left the instant the user
+  // stopped, down and to the left, every turn: a listener who drops their
+  // eyes the moment you finish reads as ashamed or done with you. Now the
+  // eyes hold the user for `opening` first (a person takes in the end of
+  // what was said before they go to think), and a fast reply never looks
+  // away at all. The look is mostly up-and-aside or level-aside: that is the
+  // one audiences read as thinking, whatever the measured split, and down
+  // is kept to a fifth of looks because on a face this real it reads as
+  // downcast. The pose takes back `thoughtful`'s lid drop: a thinking face is
+  // alert, and the two together measured past the 0.15 that reads drowsy.
+  // The handoff to SPEAKING is in setState: a reply that starts mid-look
+  // finishes the look instead of snapping back.
+  THINKING:           { gaze: 'AWAY_SIDE', emotion: 'thoughtful', engagement: false,
+                        // Fixational jumps rare and small: a thinker's eyes rest
+                        // where they land. At the default gap the look jittered
+                        // about its spot every second, and with a drift on top
+                        // the eyes never held anything — searching the wall, not
+                        // thinking.
+                        scan: [1.2, 2.6, 0.35],
+                        idle: { sway: 0.7, blinkGap: [2.6, 3.2], slowBlink: 0.3,
+                                breathRate: 1.18, breathAmp: 0.7,
                                 hold: { every: [4.5, 9.0], dur: [0.8, 1.5] } },
-                        wander: { targets: ['AWAY_DOWN', 'AWAY_DOWN', 'AWAY_THINKING', 'USER'],
-                                  every: [2.6, 4.4] } },
-  SPEAKING:           { gaze: 'USER',     emotion: 'neutral',    idle: { sway: 0.55 }, engagement: false },
+                        // `stick`: people have a side they look to when they
+                        // think and keep to it (Day; Kinsbourne's lateral eye
+                        // movements) — one who alternates sides on every look is
+                        // scanning the room. `dart`: now and then, once in a
+                        // look, the eyes move on to a second spot with a flick of
+                        // the brows, which is the thought moving; the random
+                        // drift this replaces never stopped and read as roving.
+                        // `blinkTo`: the look back to the user always blinks —
+                        // the re-engagement is the beat to see.
+                        glance: { to: 'USER', opening: [0.35, 0.7], every: [2.2, 4.4], hold: [0.8, 1.3],
+                                  back: ['AWAY_THINKING', 'AWAY_THINKING', 'AWAY_THINKING',
+                                         'AWAY_SIDE', 'AWAY_SIDE', 'AWAY_SIDE',
+                                         'AWAY_RIGHT', 'AWAY_RIGHT', 'AWAY_DOWN', 'AWAY_DOWN'],
+                                  stick: 0.55, dart: { p: 0.4, mag: 0.08, brow: 0.12 }, blinkTo: true },
+                        // **The chin comes up, and that is the state's loudest
+                        // signal below the eyes.** Thinking is the one stretch
+                        // of a call where the avatar owes the user visible
+                        // feedback and has no mouth to give it with: the eyes
+                        // are off the user by design, so without the head there
+                        // is nothing left moving that says *working on it*
+                        // rather than *gone*. A head that tips back as the gaze
+                        // leaves is also what the research calls a swing-up —
+                        // "nodding with swinging up is regarded to reflect a
+                        // cognitive shift in the listener"
+                        // (research-biomechanics.md § 3.3) — so the same
+                        // gesture that means "ah, I see" at the end of a nod
+                        // means "let me think" at the start of a pause.
+                        //
+                        // It rides the looks that go up, as the head's share of
+                        // them, and not the state. Held as a pose it lifted the
+                        // chin on the level and downward looks too and on every
+                        // check-in, so the user was looked at down the nose, and
+                        // eyes drawn inside a head tipped back aimed every look
+                        // meant to be level at the ceiling.
+                        pose: { lidL: -0.10, lidR: -0.10 } },
+  // Eyes on the user, with the speaker's own looks away (AVERSION.SPEAK):
+  // a planning look at the start of most turns, a short one every ~5 s at a
+  // phrase boundary, and none as the turn ends. A speaker who never looks
+  // away is staring the listener down.
+  SPEAKING:           { gaze: 'USER',     emotion: 'neutral',    aversion: 'SPEAK',
+                        idle: { sway: 0.55 }, engagement: false },
   REVIEWING_SCREEN:   { gaze: 'SCREEN_CENTER', emotion: 'thoughtful', engagement: false,
                         idle: { sway: 0.8, blinkGap: [4.0, 6.5] },
                         wander: { targets: ['SCREEN_CENTER', 'SCREEN_LEFT', 'SCREEN_RIGHT', 'SCREEN_TOP', 'SCREEN_WORK'],
@@ -99,9 +172,12 @@ export const STATES = {
     // extremes row, not from what a fleshed rig would need: brows DOWN
     // (corrugator effort, not the browInner worry-lift), a real squint, and
     // the resting smile pressed flat — nobody smiles while straining to hear.
+    // The squint is the lower lid's (AU7), with no upper lid dropped on top:
+    // the two together narrowed a photographic eye from above and read as
+    // drowsy, and a line face's squint is its lower lid already.
     pose: {
       torsoLean: 0.70, headPitch: 0.10,
-      lidL: 0.12, lidR: 0.12, squintL: 0.75, squintR: 0.75,
+      squintL: 0.75, squintR: 0.75,
       browRaiseL: -0.45, browRaiseR: -0.45, browInnerL: 0.15, browInnerR: 0.12,
       mouthPress: 0.45, mouthCornerL: -0.22, mouthCornerR: -0.22,
     },
@@ -135,23 +211,47 @@ export const STATES = {
   },
   // --- application state ---------------------------------------------------
   // "Momentarily busy on the thing you asked for." No hands in frame, so the
-  // whole read comes from four cheap cues (docs/research-biomechanics.md §6.4):
-  // gaze parked DOWN on a stable target, blinks suppressed to task-focus rate
-  // (~9/min), shoulders slightly raised and *working* — the burst/pause rhythm
-  // is what says activity rather than rocking — and, the important one, a
-  // brief glance back up to the user every few seconds. The glance is the tell
-  // that the user has not been forgotten; without it, busy is just absent.
+  // whole read comes from four cheap cues (docs/research-biomechanics.md §6.4,
+  // recommendation 19): gaze down on one stable target with a reading scan,
+  // blinks suppressed to task-focus rate (~9/min), shoulders slightly raised
+  // and *held* with brief micro-freezes, and a glance back up to the user.
+  // The glance is the tell that the user has not been forgotten; without it,
+  // busy is just absent, and much more often than that it is fidgeting. There
+  // is no shoulder rhythm: at 2.2 Hz it ran over the 1.5 Hz ceiling every
+  // other motion here keeps, and held is what §6.4 describes. The trunk sits
+  // out the glance — checking on someone is a look, not a turn toward them.
   WORKING: {
-    // SCREEN_WORK, not NOTES: on a steep down target the gaze layer's lid
-    // follow seals the eyes, and at tile size shut eyes read as asleep, not
-    // busy. A mild down-left with the head pitched into it keeps the iris in
-    // the opening — eyes down but awake.
-    gaze: 'SCREEN_WORK', emotion: 'neutral', engagement: false,
-    idle: { sway: 0.6, blinkGap: [6.0, 7.5], breathRate: 1.05,
-            rhythm: { amp: 0.05, freq: 2.2 } },
-    glance: { to: 'USER', every: [4, 7], hold: [0.7, 1.1] },
-    pose: { headPitch: 0.10, lidL: -0.04, lidR: -0.04,
-            shoulderL: 0.06, shoulderR: 0.06 },
+    // OWN_SCREEN: eyes down at the agent's own display, head nearly level.
+    // This was SCREEN_WORK, which turned the head down and to the left and
+    // held it there for the whole task, with a random drift too small to see
+    // on it — a head turned away from the user, staring at a point. `read` is
+    // what makes it busy instead: fixations stepping along a line, a sweep
+    // back, the next line, a pause on the result (see readStep). The lids
+    // take back most of the down look's follow so the eyes stay awake.
+    gaze: 'OWN_SCREEN', emotion: 'neutral', engagement: false,
+    scan: [0.9, 2.0, 0.12],
+    // §6.4's ~9/min is a count of blinks, and a sixth of timed blinks here
+    // come as a pair, so the timer runs slower than the table's 6-7.5 s gap
+    // to land on it; at 6-7.5 s it measured 12-13/min, which is not focus.
+    idle: { sway: 0.5, blinkGap: [6.8, 8.6], breathRate: 1.05, breathAmp: 0.8,
+            hold: { every: [5.0, 9.0], dur: [0.6, 1.1] } },
+    // The look up to check is brows-first and blinkless, the lids leading it
+    // (their 18 ms against the eye's 32 ms); the blink comes on the way back
+    // down, where the eyes re-engage with the work. A blink going up hid the
+    // one moment the user is actually looked at.
+    glance: { to: 'USER', every: [6, 11], hold: [0.8, 1.2], brow: 0.10,
+              blinkTo: false, blinkBack: true },
+    // Fewer, longer fixations than a page reader's. At 3-5 steps a quarter
+    // second apart the scan measured a shift a second, and over a webcam that
+    // is a jiggle, not reading.
+    read: { width: 0.20, steps: [2, 3], fix: [0.35, 0.7], lines: [2, 4], line: 0.05,
+            pause: [0.9, 1.8] },
+    // The brows draw down and together — AU4, the one facial action that
+    // reliably marks effortful concentration. Without it the face over a
+    // reading scan is blank, and blank over a moving eye reads as bored.
+    pose: { headPitch: 0.04, lidL: -0.08, lidR: -0.08,
+            shoulderL: 0.06, shoulderR: 0.06,
+            browRaiseL: -0.08, browRaiseR: -0.08, browInnerL: -0.10, browInnerR: -0.10 },
   },
   // The audio channel is broken and the agent is typing in the chat window to
   // communicate — TYPING's mechanics turned *communicative*. The glance is
@@ -198,6 +298,13 @@ export const STATES = {
     gaze: 'SCREEN_CENTER', emotion: 'neutral', engagement: false,
     idle: { sway: 0.65, blinkGap: [5.0, 6.8], breathRate: 1.05,
             flick: { amp: 0.30, every: [3.5, 7.0] } },
+    // The only screen state that never named its own scan, so it ran the
+    // default [0.5, 1.6] at full amplitude: a second full-size jump landing on
+    // top of a wander hop, which is most of what reads as snapping. A hunt's
+    // refixations are faster and much smaller than a reader's — quick little
+    // checks around the thing being looked at — so this is the other end of
+    // the dial from WORKING's [0.9, 2.0, 0.12] rather than a copy of it.
+    scan: [0.4, 1.1, 0.55],
     wander: { targets: ['SCREEN_CENTER', 'SCREEN_LEFT', 'SCREEN_TOP', 'SCREEN_WORK',
                         'SCREEN_RIGHT', 'SCREEN_CENTER', 'SCREEN_LEFT'],
               every: [0.8, 2.0] },
@@ -250,16 +357,56 @@ export const STATES = {
     },
   },
 
+  // --- connection ----------------------------------------------------------
+  // Neither of these may close the eyes. A lid at 0.3 reads sleepy and one at
+  // 0.95 reads asleep (research-perception.md §6), and on a photographic face
+  // a disconnected call rendered as someone falling asleep on camera. The SVG
+  // faces also desaturate (`filter`); a rig that does not is carried by pose
+  // and gaze alone, so those have to say it.
+  //
+  // Our side of the call is struggling: still with the user, a little worried
+  // about it — inner brows up, mouth pressed — and quieter than listening.
   DEGRADED:           { gaze: 'USER',     emotion: 'neutral',    engagement: false,
-                        idle: { sway: 0.4, blinkGap: [4.0, 8.0] },
-                        pose: { lidL: 0.3, lidR: 0.3 }, filter: 'grayscale(.55) brightness(.82)' },
-  OFFLINE:            { gaze: 'USER',     emotion: 'neutral',    engagement: false,
-                        idle: { sway: 0.15, blinkGap: [9, 15] },
-                        pose: { lidL: 0.95, lidR: 0.95, mouthCornerL: 0, mouthCornerR: 0 },
+                        aversion: 'LISTEN',
+                        idle: { sway: 0.4, blinkGap: [3.4, 5.0] },
+                        pose: { browInnerL: 0.30, browInnerR: 0.26, browRaiseL: -0.04, browRaiseR: -0.04,
+                                mouthPress: 0.20, mouthCornerL: -0.10, mouthCornerR: -0.10 },
+                        filter: 'grayscale(.55) brightness(.82)' },
+  // The call is gone. What a person does when their call drops: eyes on their
+  // own screen, waiting, and now and then a look back up to see whether it
+  // has come back. Still, with long holds — not in conversation — but awake.
+  OFFLINE:            { gaze: 'OWN_SCREEN', emotion: 'neutral', engagement: false,
+                        scan: [1.2, 2.6],
+                        idle: { sway: 0.3, blinkGap: [4.5, 7.0],
+                                hold: { every: [4.0, 8.0], dur: [1.0, 2.0] } },
+                        glance: { to: 'USER', every: [7, 12], hold: [0.8, 1.3] },
+                        pose: { lidL: -0.08, lidR: -0.08, mouthPress: 0.25 },
                         filter: 'grayscale(1) brightness(.6)' },
 };
 
 export const STATE_NAMES = Object.keys(STATES);
+
+/**
+ * The shoulder line's share of a held tilt, per unit of `headRoll`.
+ *
+ * Roll is the one head axis with nothing under it: a turn recruits the trunk
+ * and a nod bends the neck, but a tilt on a 2.5-D head is a rotation about a
+ * point near the chin and every other pixel stays exactly where it was. That is
+ * the read reported as "a hinge". Anatomically a tilt is lower-cervical
+ * (docs/research-head-rotation.md §2.1) — spread down the neck, ending at the
+ * girdle — so the shoulder line tips a little with it, and that tip is what says
+ * the neck bent rather than the head swinging off a pin.
+ *
+ * Sized to stay an accompaniment: at the roll clamp the line tips about a
+ * quarter of the trunk's own share of a turn, which lifts a shoulder ~0.11 of
+ * its shrug — inside the band a weight shift already occupies. A third, the
+ * figure Live2D gives its body angles, put 6 px of shoulder on an 8 degree tilt
+ * and read as a shrug arriving with the head.
+ *
+ * Exported for a page that drives a rig by hand and wants the body the shipping
+ * mixer would have put under the tilt (`apps/studio/lab/head.ts`).
+ */
+export const SHOULDER_TILT = 0.08;
 
 export function createAvatar(opts = {}) {
   const mount = typeof opts.mount === 'string' ? document.querySelector(opts.mount) : opts.mount;
@@ -284,6 +431,7 @@ export function createAvatar(opts = {}) {
   const gaze = new GazeLayer();
   const idle = new IdleLayer();
   const speech = new VisemeTrack();
+  const prosody = new SpeechProsody({ brows: opts.brows });
 
   let gazeOverrideByClip = null;
   const clip = new ClipPlayer({
@@ -301,14 +449,14 @@ export function createAvatar(opts = {}) {
   // coordinates or the hand layer's private geometry.
   const rig = opts.rig ? opts.rig(mount, opts.rigOptions) : createSvgRig(face, hand);
 
-  gaze.onLargeShift = () => idle.blink();
+  gaze.onLargeShift = (forced) => idle.blink(false, true, forced);
 
   const listeners = {
     state: [], speakEnd: [], clipEnd: [], performEnd: [], gestureEnd: [],
   };
   const emit = (ev, ...a) => listeners[ev] && listeners[ev].forEach((f) => f(...a));
   clip.onEnd = (c) => { if (c) emit('clipEnd', c.id); };
-  speech.onEnd = () => { emit('speakEnd'); };
+  speech.onEnd = () => { prosody.closeTurn(); emit('speakEnd'); };
   performTrack.onEnd = () => { emit('performEnd'); };
 
   // --- live state -----------------------------------------------------------
@@ -328,6 +476,56 @@ export function createAvatar(opts = {}) {
   // channel clamp, which is the intended ceiling rather than a bug.
   let mouthGain = opts.mouthGain ?? 1;
   let handSide = opts.handSide === -1 ? 'left' : 'right';
+  /**
+   * This avatar's own addressable motions, on top of the two core intents.
+   *
+   * An avatar is a drawing with a body, and some bodies can do things the wire
+   * has no portable word for. The three nod types the listening research
+   * separates — a continuer, an assessment, a realisation — are one
+   * `ACKNOWLEDGE` to a server, because that is all a server can ask of every
+   * face; the *shapes* are sized in a rig's own units and belong to the rig
+   * (`packages/avatar/client/three/sequences.ts` is the first table of them).
+   *
+   * Deliberately not a registry and not a loader: it is a plain object the
+   * avatar module passes in, and it can only add. `ACTIONS` wins on a name
+   * collision, so no asset can quietly change what a core action means.
+   */
+  const sequences = opts.sequences || {};
+  /**
+   * This avatar's own *rendering* of an id this renderer already has — same id,
+   * same intent, a shape sized for its body.
+   *
+   * These are an intent vocabulary, and `ACK_NOD` is one implementation of
+   * "the avatar nodded", not a promise about anatomy (interjections.js). The
+   * shared clips are authored in pose units that mean pixels on a line face;
+   * on a rig whose unit is a degree the same keys can land outside what the
+   * gesture *means* — the shared nod renders 15° on tara, where a continuer is
+   * 3-5° — and scaling it would not fix it, because a continuer is one stroke
+   * where an agreement is two. So a renderer may re-author the shape.
+   *
+   * What it may not do is change the vocabulary: every id here must already be
+   * one this renderer publishes, so no avatar can add a word through this door
+   * or make one mean something else. `sequences` is the door for adding.
+   */
+  const actionShapes = opts.actions || {};
+  for (const id of Object.keys(actionShapes)) {
+    if (!ACTIONS[id]) throw new Error(`actions: ${id} is not one of this renderer's own`);
+  }
+  /**
+   * This avatar's own rendering of a state — the same door as `actions`, for
+   * the held face instead of the gesture. A state's pose is authored where a
+   * line face reads, and the cue that carries it there can say something else
+   * on a photograph: WORKING's knit brows are what keep peep's reading face
+   * from going blank, and on a real eye — already hooded by a lid following it
+   * down to the screen — they finish a squint that reads as strain. A rig
+   * replaces a state's fields whole (`pose`, say), and only for a state the
+   * table already has: it can re-render the vocabulary, never extend it.
+   */
+  const states = { ...STATES };
+  for (const [id, own] of Object.entries(opts.states || {})) {
+    if (!STATES[id]) throw new Error(`states: ${id} is not a state`);
+    states[id] = { ...STATES[id], ...own };
+  }
   let handAction = null;
   const handQueue = [];
   // Gesture gain, same idea for the clip layer. A nod is ballistic — NOD_SMALL
@@ -343,20 +541,114 @@ export function createAvatar(opts = {}) {
   // than rendering it locally as SVG, where the motion costs nothing — turns
   // this down instead of the default being a body that does not move.
   idle.gain = opts.motionGain ?? 1;
+  // Speech-rhythm gains. A pose unit is a different angle on every rig — peep's
+  // head travels 17 px per unit of pitch, a mesh head turns a few degrees — so
+  // the rig's own module sets these once rather than the library guessing.
+  // Defaults to the uncalibrated scale; `prosody.js` has what that stands for.
+  const prosodyHeadGain = opts.prosodyHeadGain ?? UNCALIBRATED_HEAD_GAIN;
+  const prosodyFaceGain = opts.prosodyFaceGain ?? 1;
+  // Fixational-saccade gain, the same idea for the eyes: how far a scan
+  // step, a drift or a line of reading travels. Sized for a line face's
+  // pupils at 1; a photographic eye needs several times that to move at all.
+  // Aversions get their own gain: a look-away must read as one from across
+  // the call, where a fixation step must not, so one number cannot size both.
+  const saccadeGain = opts.saccadeGain ?? 1;
+  // How far this face may hold its head off centre, per axis, in pose units.
+  // A pose unit is an angle on a mesh head and a pixel count on a drawing, and
+  // what a 2.5-D face can hold before the photograph gives it away is a
+  // measurement of that face and of nothing else — so the number is the rig's
+  // to supply and is nowhere in this library. An axis left out is unbudgeted,
+  // which is every SVG and Canvas face and is the behaviour they have always
+  // had.
+  const headHold = opts.headHold || {};
+  // Per-axis gain on the head's *continuous* drive, in front of the budget.
+  //
+  // The two layers that hold a head somewhere — speech phrasing and idle —
+  // are sized in pose units for a line drawing, and a 2.5-D face measured its
+  // own limits afterwards. Measuring found the drive spending well under them:
+  // a third of the pitch a speaking human uses and nearly twice the yaw, on a
+  // face whose pitch budget has room for all of it. That is one number per
+  // axis, not a rewrite of either layer, and it belongs here rather than in
+  // the rig because it scales a *drive* — a rig scale would multiply the nods
+  // and beats too, and those are authored at amplitudes that already read.
+  //
+  // Before 6b deliberately: the budget is what stops a scaled-up drive from
+  // leaving the envelope, so a gain that skipped it would be measuring the
+  // face's failure rather than the layer's range. A number, or one per axis.
+  const headGain = typeof opts.headGain === 'number'
+    ? { headYaw: opts.headGain, headPitch: opts.headGain, headRoll: opts.headGain }
+    : { headYaw: 1, headPitch: 1, headRoll: 1, ...(opts.headGain || {}) };
+  gaze.scanGain = saccadeGain;
+  gaze.avertGain = opts.aversionGain ?? 1;
+  // A rig that says what its pose units are in degrees gets the eye-head
+  // system sized for it (gaze.js): its own look targets, how an aversion
+  // splits between eyes and head, lids that follow the eye both ways, and the
+  // reflex in step 8b. A face that does not say keeps the line-face behaviour
+  // exactly.
+  const ocu = opts.oculomotor || {};
+  if (ocu.targets) gaze.targets = { ...GAZE_TARGETS, ...ocu.targets };
+  if (ocu.avert) gaze.avertSplit = ocu.avert;
+  if (ocu.angles) gaze.angles = ocu.angles;
+  if (ocu.lidFollow) gaze.lidFollow = ocu.lidFollow;
+  if (ocu.head) { gaze.headAccel = ocu.head.accel; gaze.headSpeed = ocu.head.speed; }
+  // Pupil units of counter-rotation per head unit: the reflex's gain times
+  // the ratio of what one unit of each is in degrees. The gain may differ by
+  // axis ({x, y}): a face whose pitch reads weaker than its yaw wants less
+  // of the eyes' answer to it.
+  const vorGain = typeof ocu.vor === 'object' ? ocu.vor : { x: ocu.vor, y: ocu.vor };
+  const vor = ocu.vor && ocu.angles
+    ? { x: vorGain.x * ocu.angles.head.x / ocu.angles.eye.x,
+        y: vorGain.y * ocu.angles.head.y / ocu.angles.eye.y }
+    : null;
+  // How far the reflex may carry the eye in its socket, in pupil units. A
+  // person looking 8° up does not roll the eyes to the lid and wait for the
+  // head: the eye stops well short of its mechanical limit and the head makes
+  // up the rest (Guitton & Volle's effective oculomotor range). On a
+  // photographic eye an iris pinned under the upper lid with white showing
+  // beneath it reads as an eye-roll, not a thought. Down is looser — the lid
+  // follows the eye down and hides the sclera there.
+  const reach = ocu.range || { x: 1, up: 1, down: 1 };
+  const reflexX = (px) => clamp(px + vor.x * (aim.x - cur.headYaw), -reach.x, reach.x);
+  const reflexY = (py) => clamp(py + vor.y * (aim.y - cur.headPitch), -reach.up, reach.down);
+  // The head the eyes' target was authored against, smoothed at the eye's
+  // own tau so a shift's compensation moves with the saccade, not ahead of it.
+  const aim = { x: 0, y: 0 };
   let wanderAt = 0;
-  let slowBlinkAt = 0;
+  let driftAt = 0;
+  let trunkYaw = 0;
+  let turnStartPending = false;
   let glanceAt = 0;
   let glanceUntil = 0;
+  let lastBack = null;
+  // THINKING's second look inside a look away: when it moves, where to, and
+  // how long the brows stay up for it.
+  let dartAt = 0, dartBrowUntil = 0;
+  const dart = { x: 0, y: 0 };
+  // THINKING -> SPEAKING mid-look: when the eyes go back to the user, and
+  // when that handoff happened (it stands in for the turn-start look).
+  let returnAt = 0;
+  let carriedAt = -Infinity;
+  // The state whose gaze is showing, and when the current state takes it
+  // over if that is still pending (GAP_SETTLE). Usually the same state.
+  let gazeState = 'IDLE';
+  let settleAt = 0;
+  // Reading scan: position in the line and the block, see readStep.
+  let readCol = 0, readCols = 0, readRow = 0, readRows = 0;
   let attendUntil = 0;
   let speakClock = null;
   let speakStart = 0;
 
   const cur = Object.assign({}, REST);
   const target = Object.assign({}, REST);
+  // The three head axes again, carrying only what is held (step 6b).
+  const hold = { headYaw: 0, headPitch: 0, headRoll: 0 };
+  // What the rig is handed: `cur` with the reflex applied to the eyes. The
+  // same object when there is no reflex.
+  const shown = vor ? Object.assign({}, REST) : cur;
 
-  function applyGaze() {
+  function applyGaze(blink) {
     const g = gazeOverrideByClip || gazeName;
-    gaze.set(g, gazeOverrideByClip ? null : gazeCustom);
+    gaze.set(g, gazeOverrideByClip ? null : gazeCustom, blink);
   }
 
   // --- the frame ------------------------------------------------------------
@@ -384,23 +676,42 @@ export function createAvatar(opts = {}) {
     //    firing this frame shapes this frame.
     performTrack.update();
 
-    const st = STATES[stateName] || STATES.IDLE;
+    if (settleAt && elapsed >= settleAt) { settleAt = 0; enterGaze(stateName, {}, true); }
+    const st = states[stateName] || states.IDLE;
+    // What the eyes are doing belongs to the state that has the gaze.
+    const gst = states[gazeState] || st;
 
     // 1. base pose: rest + emotion + state-specific overlay
     for (const c of CHANNELS) target[c] = REST[c];
     const ep = emotionPose(emotion, emotionAmt);
     for (const k in ep) target[k] = REST[k] + ep[k];
     if (st.pose) for (const k in st.pose) target[k] = (target[k] || 0) + st.pose[k];
+    // The head the state and emotion hold is an attitude, and the eyes are
+    // authored inside it: the reflex (8b) keeps them on their target against
+    // everything that moves the head except this.
+    const poseYaw = target.headYaw, posePitch = target.headPitch;
+    // What the head *holds*, accumulated alongside the pose as each layer that
+    // holds one adds to it: the attitude above, the gaze, a phrase's pose and
+    // the idle posture. Strokes, beats and clip deltas stay out — see 6b.
+    for (const c of HEAD_AXES) hold[c] = target[c];
 
     // 2. gaze (absolute: pupils + partial head follow, plus the lid that rides
     //    with the eye — looking down without it bares sclera and reads as alarm)
     const g = gaze.update(elapsed, dt);
     for (const k in g) {
-      if (k === 'lidBias') continue;
+      if (k === 'trunkYaw' || k === 'aimYaw' || k === 'aimPitch') continue;
       target[k] = (k.startsWith('head') ? target[k] : 0) + g[k];
     }
-    target.lidL += g.lidBias;
-    target.lidR += g.lidBias;
+    for (const c of HEAD_AXES) hold[c] += g[c];
+    // The lid follows the eye as drawn, reflex and all — last frame's reading
+    // of it, since the head it corrects for is not smoothed yet.
+    const lid = gaze.lidBias(vor ? reflexY(g.pupilY) : g.pupilY);
+    target.lidL += lid;
+    target.lidR += lid;
+    if (vor) {
+      aim.x = approach(aim.x, poseYaw + g.aimYaw, TAU.pupilX, dt);
+      aim.y = approach(aim.y, posePitch + g.aimPitch, TAU.pupilY, dt);
+    }
 
     // 2b. the trunk follows the head. Sampled HERE, after gaze and before the
     //     clip layer, on purpose: a sustained turn toward the screen recruits
@@ -408,40 +719,111 @@ export function createAvatar(opts = {}) {
     //     with every gesture reads as a mannequin on a turntable. The lag is
     //     not authored anywhere; torsoTurn simply chases the same target at
     //     nearly 3x the head's time constant (TAU in params.js), so the trunk
-    //     leaves late and settles late for free.
-    target.torsoTurn += target.headYaw * TRUNK_FOLLOW;
+    //     leaves late and settles late for free. It follows where the head is
+    //     going and not the looks riding on it, and it holds through a glance:
+    //     checking on the user is a look, not a turn toward them.
+    if (!glanceUntil) trunkYaw = target.headYaw - g.headYaw + g.trunkYaw;
+    target.torsoTurn += trunkYaw * TRUNK_FOLLOW;
 
     // 3. state-driven autonomous behaviour
-    if (st.wander && elapsed > wanderAt) {
-      const w = st.wander;
-      wanderAt = elapsed + w.every[0] + Math.random() * (w.every[1] - w.every[0]);
-      setGaze(w.targets[(Math.random() * w.targets.length) | 0]);
+    if (gst.wander && elapsed > wanderAt) {
+      const w = gst.wander;
+      // Dwell first, and sometimes for two periods. A dwell of exactly one
+      // period every time is the metronome the eye reads as mechanical. The
+      // old code broke that up by accident: a draw landing on the target
+      // already held left the eyes still for another period. The freeze was a
+      // bug — the schedule counted a hop that moved nothing — but the dwell
+      // variety it produced was not, so it is kept deliberately, at the rate
+      // it used to happen: 1/n, the odds a uniform draw repeats the target.
+      const linger = Math.random() < 1 / w.targets.length ? 2 : 1;
+      wanderAt = elapsed + linger * (w.every[0] + Math.random() * (w.every[1] - w.every[0]));
+      // Then look somewhere the eyes are not. A wander set names a target more
+      // than once deliberately — SEARCHING_SCREEN's repeats are its revisits,
+      // the hunt coming back to the middle — but a revisit is arriving
+      // somewhere again, not never having left it. Same bounded redraw as
+      // pickBack, so a one-target set still terminates.
+      let g = pick(w.targets);
+      for (let i = 0; i < 4 && g === gazeName; i++) g = pick(w.targets);
+      setGaze(g);
     }
-    if (stateName === 'THINKING' && elapsed > slowBlinkAt) {
-      slowBlinkAt = elapsed + 2.4 + Math.random() * 2.5;
-      idle.slowBlink();
+    // Periodic glance (WORKING's look-up-at-you beat, THINKING's check-in
+    // between two looks away). The return leg goes to the state's own gaze, or
+    // to a fresh pick from `back` — a thinker does not look away at the same
+    // spot every time. Either leg's gaze-evoked blink is the shift's odds
+    // unless the state says (`blinkTo`, `blinkBack`), because which leg blinks
+    // is part of what the glance means.
+    if (returnAt && elapsed > returnAt) {
+      returnAt = 0;
+      setGaze(gst.gaze);
     }
-    // Periodic glance (TYPING's look-up-at-you beat). The return leg goes back
-    // to the state's own gaze; the gaze layer's large-shift blink fires on
-    // both legs for free, which is exactly the blink a real glance carries.
-    if (st.glance) {
-      const gl = st.glance;
+    if (gst.glance && !returnAt) {
+      const gl = gst.glance;
       if (glanceUntil && elapsed > glanceUntil) {
         glanceUntil = 0;
-        glanceAt = elapsed + gl.every[0] + Math.random() * (gl.every[1] - gl.every[0]);
-        setGaze(st.gaze);
+        const away = rand(gl.every);
+        glanceAt = elapsed + away;
+        setGaze(gl.back ? pickBack(gl.back, gl.stick) : gst.gaze, null, gl.blinkBack);
+        // At most one second look per look away, somewhere in its middle: a
+        // move at the start is the same look landing, and one at the end runs
+        // into the glance back.
+        dartAt = gl.dart && Math.random() < gl.dart.p ? elapsed + away * (0.35 + Math.random() * 0.3) : 0;
       } else if (!glanceUntil && elapsed > glanceAt) {
-        glanceUntil = elapsed + gl.hold[0] + Math.random() * (gl.hold[1] - gl.hold[0]);
-        setGaze(gl.to);
+        glanceUntil = elapsed + rand(gl.hold);
+        setGaze(gl.to, null, gl.blinkTo);
+        dartAt = 0;
+        dart.x = dart.y = 0;
       }
+      if (dartAt && elapsed > dartAt) {
+        // On from where the eyes are, not back toward the user or across to
+        // the other side: the thought moves, it does not turn round.
+        dartAt = 0;
+        const t = gaze.target;
+        const a = Math.atan2(t.py, t.px) + (Math.random() < 0.5 ? -1 : 1) * DART_TURN;
+        const m = gl.dart.mag * saccadeGain;
+        dart.x = Math.cos(a) * m;
+        dart.y = Math.sin(a) * m;
+        dartBrowUntil = elapsed + DART_BROW;
+      }
+      const brow = (glanceUntil ? gl.brow || 0 : 0)
+        + (gl.dart && elapsed < dartBrowUntil ? gl.dart.brow : 0);
+      target.browRaiseL += brow;
+      target.browRaiseR += brow;
+    }
+    gaze.scanEvery = gst.scan || null;
+    // A state that reads scans a line; one with a dart holds its second look.
+    // Neither during a glance: a check-in on the user is steady or it is not
+    // one.
+    if (gst.read && !glanceUntil) {
+      if (elapsed > driftAt) readStep(gst.read);
+    } else {
+      gaze.drift.x = glanceUntil ? 0 : dart.x;
+      gaze.drift.y = glanceUntil ? 0 : dart.y;
     }
     // Aversion is a property of the state, but it is held off around a turn
     // boundary: the floor is handed over under mutual gaze, and an avatar that
     // looks away exactly as the user finishes has declined it. `attend` is the
     // mixer's one-frame veto — anything that means "the user is checking
     // whether I am with them" sets it (see api.attend).
-    gaze.setAversion(st.aversion ? AVERSION[st.aversion] : null);
-    gaze.hold = attendUntil > elapsed || clip.playing;
+    gaze.setAversion(gst.aversion ? AVERSION[gst.aversion] : null);
+    // A speaking turn ends under mutual gaze: no look in the last 2.4 s of the
+    // cue track as far as it has arrived, nor once it has run out (§4.2). The
+    // mid-turn looks wait for a silent cue, which is a phrase boundary. Both
+    // read last frame's sample, a frame late and harmlessly so.
+    let floorReturn = false;
+    gaze.gate = true;
+    if (gst.aversion === 'SPEAK') {
+      const cues = speech.cues;
+      floorReturn = !speech.playing || !cues.length
+        || cues[cues.length - 1].t - speech.now < FLOOR_RETURN_MS;
+      const cue = cues[speech.index];
+      gaze.gate = !!cue && cue.v === SILENT;
+    }
+    gaze.hold = attendUntil > elapsed || clip.playing || floorReturn;
+    if (turnStartPending) {
+      turnStartPending = false;
+      // A reply that began mid-think has had its planning look already.
+      if (elapsed - carriedAt > 1.5) gaze.startTurn();
+    }
 
     engagement.enabled = !!st.engagement && !clip.playing;
     engagement.update(dt);
@@ -450,7 +832,19 @@ export function createAvatar(opts = {}) {
     // research (docs/research-biomechanics.md §6.3) puts sustained attentive
     // lean at +0.15–0.25; engage glides, and torsoLean's 0.24s tau smooths
     // the state gate, so the lean arrives and leaves like weight shifting.
-    if (st.engagement) target.torsoLean += 0.16 * engagement.engage;
+    if (st.engagement) {
+      target.torsoLean += 0.16 * engagement.engage;
+      // The shoulders come with it. A lean is a whole upper body arriving, and
+      // in a head-and-shoulders crop the shoulder line is the part of it that
+      // is actually on screen — §6.1 calls a shoulder rise the most legible
+      // thing this framing can draw. Without this the listening shoulders were
+      // the posture shift's ±0.07 and nothing else, so the one channel that
+      // could show attention sat still through every turn the user took.
+      // It rides `engage`, so it is contingent on the user's voice rather than
+      // on the state: quick in, slow out, and gone a few seconds into silence.
+      target.shoulderL += ENGAGE_SHOULDER * engagement.engage;
+      target.shoulderR += ENGAGE_SHOULDER * engagement.engage;
+    }
     // Straining leans harder while there is actually a faint voice to strain
     // after. engage already tracks "the user is (barely) talking", so this
     // costs nothing; with no user signal the static pose carries the state.
@@ -489,6 +883,57 @@ export function createAvatar(opts = {}) {
       }
     }
 
+    // 4b. speech prosody: pause blinks, inbreaths, a head held per phrase and
+    //     moved between them, beats and turn-edge warmth, read off the cue
+    //     track (prosody.js has the research, head.js the hold-and-move). Off while a clip is gesturing, since the clip is
+    //     already the head's and the brows' story. The warmth is withheld
+    //     under an emotion whose corners are down: a smile starting a turn of
+    //     concern is the wrong face, whatever the rhythm says.
+    const pro = prosody.update(speech, mouthOwner === 'speech' && !clip.playing, dt);
+    // The warmth rides over a clip, because an acknowledgement's smile is
+    // *with* its nod: behind the clip gate it arrived as the nod finished, a
+    // smile at nothing. It is withheld under a clip whose own corners go down
+    // (a shake, a sorry) for the same reason as under a concerned emotion.
+    const clipFrowns = !!clipOut.delta
+      && Math.min(clipOut.delta.mouthCornerL || 0, clipOut.delta.mouthCornerR || 0) < 0;
+    const warm = clipFrowns || ((EMOTIONS[emotion] || EMOTIONS.neutral).mouthCornerL || 0) < 0
+      ? 0 : prosodyFaceGain;
+    target.mouthCornerL += pro.mouthCornerL * warm;
+    target.mouthCornerR += pro.mouthCornerR * warm;
+    target.squintL += pro.squintL * warm;
+    target.squintR += pro.squintR * warm;
+    if (!clip.playing) {
+      target.headPitch += pro.headPitch * prosodyHeadGain * headGain.headPitch;
+      target.headYaw += pro.headYaw * prosodyHeadGain * headGain.headYaw;
+      target.headRoll += pro.headRoll * prosodyHeadGain * headGain.headRoll;
+      for (const c of HEAD_AXES) hold[c] += pro.hold[c] * prosodyHeadGain * headGain[c];
+      // The trunk follows a speech pose the way it follows a gaze turn (2b),
+      // and for a second reason on a 2.5-D head: a turn the shoulders take
+      // part of is a turn the neck does not have to stretch for, and the
+      // stretch is the one thing a video reviewer saw on every pose change.
+      // Scaled with the yaw it follows: a trunk that kept its old share of a
+      // wider turn would be the neck stretching again, which is the defect
+      // this line exists to fix.
+      target.torsoTurn += pro.trunkYaw * prosodyHeadGain * headGain.headYaw * TRUNK_FOLLOW;
+      target.browRaiseL += pro.browRaiseL * prosodyFaceGain;
+      target.browRaiseR += pro.browRaiseR * prosodyFaceGain;
+      target.browInnerL += pro.browInnerL * prosodyFaceGain;
+      target.browInnerR += pro.browInnerR * prosodyFaceGain;
+      target.browAngleL += pro.browAngleL * prosodyFaceGain;
+      target.browAngleR += pro.browAngleR * prosodyFaceGain;
+      target.lidL += pro.lidL * prosodyFaceGain;
+      target.lidR += pro.lidR * prosodyFaceGain;
+      target.breath += pro.breath * idle.gain;
+      // The trunk's share of speech rhythm. Scaled by `idle.gain` and not by
+      // `prosodyHeadGain`, because this is body liveness and that is the knob a
+      // host turns down when it is re-encoding the avatar into an outgoing
+      // stream — the same factor `idle.js`'s shoulders and lean already take.
+      target.shoulderL += pro.shoulderL * idle.gain;
+      target.shoulderR += pro.shoulderR * idle.gain;
+      target.torsoLean += pro.torsoLean * idle.gain;
+    }
+    if (pro.blink) idle.phraseBlink();
+
     // 5. gesture deltas (additive, so a nod survives whatever else is happening)
     if (clipOut.delta) {
       for (const k in clipOut.delta) {
@@ -505,7 +950,40 @@ export function createAvatar(opts = {}) {
     idle.talk = approach(idle.talk, mouthOwner ? 1 : 0, 0.25, dt);
     idle.setProfile(st.idle);
     const il = idle.update(dt);
-    for (const k in il.add) target[k] = (target[k] || 0) + il.add[k];
+    for (const k in il.add) target[k] = (target[k] || 0) + il.add[k] * (headGain[k] ?? 1);
+    for (const c of HEAD_AXES) hold[c] += (il.add[c] || 0) * headGain[c];
+
+    // 6b. the held-head budget. Every layer above holds its own small pose and
+    //     they are independent, so now and then they all point the same way and
+    //     the head arrives somewhere no one layer asked for and the face cannot
+    //     go. Only the excess over `soften` comes off, and only off the hold:
+    //     a nod, a beat and a clip keep every degree they were authored with,
+    //     which is why this is subtracted here rather than applied to the pose.
+    for (const c of HEAD_AXES) {
+      if (headHold[c] === undefined) continue;
+      target[c] -= hold[c] - soften(hold[c], headHold[c]);
+    }
+
+    // 6c. the body answers a held tilt (SHOULDER_TILT). The trunk takes the
+    //     same share of it that it takes of a turn in 2b — Live2D gives its
+    //     body the same fraction of AngleZ as of AngleX (research-head-rotation
+    //     .md §3) — and the shoulder line tips with the head. Both channels are
+    //     slower than the head (TAU: 0.44 and 0.19 against 0.16), so the body
+    //     leaves late and settles late, and that follow-through is most of what
+    //     separates a neck bending from a hinge.
+    //     Only the *held* roll, and after the budget: a stroke or a clip's roll
+    //     is a gesture riding on the pose, and a body that answers those is 2b's
+    //     mannequin on a turntable. The idle layer's own posture is already
+    //     coupled the other way round, from the weight shift to the head that
+    //     counter-tips on it (idle.js `nextPosture`); this is that arrangement
+    //     read from the head's end, and where both are in play they agree in
+    //     sign — weight onto a side, head over that side, that shoulder up.
+    const heldRoll = headHold.headRoll === undefined
+      ? hold.headRoll
+      : soften(hold.headRoll, headHold.headRoll);
+    target.torsoTurn += heldRoll * TRUNK_FOLLOW;
+    target.shoulderR += heldRoll * SHOULDER_TILT;
+    target.shoulderL -= heldRoll * SHOULDER_TILT;
 
     // 7. clamp, then blink wins outright over whatever the lids were doing
     for (const c of CHANNELS) {
@@ -522,11 +1000,32 @@ export function createAvatar(opts = {}) {
     // 8. smooth toward the target — this is where co-articulation happens
     for (const c of CHANNELS) cur[c] = approach(cur[c], target[c], TAU[c], dt);
 
+    // 8b. The vestibulo-ocular reflex. Eyes held still in a moving head look
+    //     wherever the head points, so without this every nod, speech pose and
+    //     sway was also a small look somewhere else — and on a face whose head
+    //     turns further than its eyes, a look at a different spot each time.
+    //     Real eyes counter-rotate against the head within ~10 ms and stay on
+    //     what they look at. Here and not in the gaze layer because only here
+    //     is the head that is actually drawn known: prosody, clips and idle all
+    //     land after gaze. It also gives a large shift its real shape for free:
+    //     the eyes jump to the target, past where they will sit, and roll back
+    //     in the head as it arrives under them. A pupil a tuning UI overrides is
+    //     left where it was put.
+    if (vor) {
+      Object.assign(shown, cur);
+      if (!overrides || overrides.pupilX === undefined) {
+        shown.pupilX = clamp(reflexX(cur.pupilX), RANGE.pupilX[0], RANGE.pupilX[1]);
+      }
+      if (!overrides || overrides.pupilY === undefined) {
+        shown.pupilY = clamp(reflexY(cur.pupilY), RANGE.pupilY[0], RANGE.pupilY[1]);
+      }
+    }
+
     // 9. First-class hand control. The semantic frame is generated here, above
     // every renderer, so SVG, WebGL, and video rigs receive exactly the same
     // gesture/progress information. A handless rig simply ignores `frame.hand`.
     const handFrame = updateHandAction(elapsed * 1000);
-    rig.apply(avatarFrame(cur, handFrame || undefined));
+    rig.apply(avatarFrame(shown, handFrame || undefined));
   }
 
   const REST_SHAPE = shapeFor(SILENT, 1);
@@ -534,8 +1033,16 @@ export function createAvatar(opts = {}) {
   // How much of a sustained head turn the trunk takes up. Well under 1: people
   // under-rotate the head and then under-rotate the trunk again behind it, and
   // at a head-and-shoulders crop the trunk's share is the part you register
-  // without noticing.
-  const TRUNK_FOLLOW = 0.45;
+  // without noticing. A rig may pass its own `trunkFollow`: on a mesh head whose
+  // neck twists, the trunk's sway is most of what moves the neck's outline, so
+  // the share that reads as a body on a line face reads there as the neck
+  // sliding.
+  const TRUNK_FOLLOW = opts.trunkFollow ?? 0.45;
+
+  // Speakers are back on the listener's eyes this long before they stop
+  // (Andrist, docs/research-biomechanics.md §4.2): the floor is handed over
+  // under mutual gaze, and a look away there declines it.
+  const FLOOR_RETURN_MS = 2400;
 
   // The channels speech owns outright — exactly the params.js mouth group
   // (mouth corners stay free: a clip may smile over a sentence).
@@ -545,42 +1052,144 @@ export function createAvatar(opts = {}) {
   // ~a third keeps the face warm without the corners fighting the visemes;
   // full warmth returns the moment the track ends, which is exactly the
   // episodic onset/offset a credible smile needs (research-perception.md §3).
-  const SPEAK_SMILE_RETAIN = 0.35;
+  /** The shoulders' share of the attentive posture, against `torsoLean`'s 0.16.
+ *  Two thirds of the lean: the shoulders come up with it, they do not lead it. */
+const ENGAGE_SHOULDER = 0.10;
+const SPEAK_SMILE_RETAIN = 0.35;
+
+  // How long a reply that starts mid-think keeps the look before it comes
+  // back. Speakers look away to find the words and back to deliver them
+  // (§4.2); a reply that snapped to the user on its first syllable and then,
+  // three times in four, left again for the turn-start look did both halves
+  // twice.
+  const THINK_CARRY = [0.25, 0.6];
+
+  // Between the user's turn and the reply the server's claim can change
+  // several times a second — THINKING, a tool's WORKING, THINKING again, a
+  // grace timer's CANT_HEAR — and every change used to retarget the eyes and
+  // restart the state's looks: one fast tool call was away, down at the
+  // screen, back to the user and away again inside a second, a blink at each.
+  // Among these states the eyes change over only once the new one has held
+  // this long, and a claim that returns before then moves nothing. The pose
+  // still changes at once — it is the eyes that make a flicker visible.
+  // SPEAKING and LISTENING are never held back: those are the floor.
+  const GAP_STATES = new Set(['THINKING', 'WORKING', 'CANT_HEAR']);
+  const GAP_SETTLE = 0.5;
+
+  // A dart leaves at up to 40° off the line of the look it is inside, and
+  // lifts the brows for half a second — a thought arriving, not a stare.
+  const DART_TURN = 0.7;
+  const DART_BROW = 0.5;
+
+  /** A look away for the return leg of a glance. `stick` of the time it keeps
+   *  the side the last one took, spot and all — the side a person thinks
+   *  toward is theirs, and it outlasts one thinking pause. Otherwise any look
+   *  but the one just taken: a thinker who goes back to the same patch of
+   *  wall every time *without* meaning to is a loop. */
+  function pickBack(xs, stick = 0) {
+    const side = (n) => Math.sign(gaze.targets[n].px);
+    let g;
+    if (lastBack && Math.random() < stick) {
+      const same = xs.filter((n) => side(n) === side(lastBack));
+      g = pick(same.length ? same : xs);
+    } else {
+      g = pick(xs);
+      for (let i = 0; i < 4 && g === lastBack; i++) g = pick(xs);
+    }
+    lastBack = g;
+    return g;
+  }
+
+  /**
+   * One fixation of a reading scan: a step along the line, or at its end a
+   * sweep back to the start of the next, or at the end of the block a pause
+   * on the result. That is what busy-at-a-screen looks like from the other
+   * side of a webcam — an irregular left-to-right march with returns, which
+   * a random drift about a point is not. Steps are held, like a reader's
+   * fixations, and the head sits out all of it (DRIFT_HEAD in gaze.js).
+   */
+  function readStep(r) {
+    const n = ([a, b]) => a + ((Math.random() * (b - a + 1)) | 0);
+    if (readCol < readCols) {
+      readCol++;
+      driftAt = elapsed + rand(r.fix);
+    } else {
+      readCol = 0;
+      readCols = n(r.steps);
+      if (++readRow >= readRows) {
+        readRow = 0;
+        readRows = n(r.lines);
+        driftAt = elapsed + rand(r.pause);
+      } else {
+        driftAt = elapsed + rand(r.fix) * 1.4;
+      }
+    }
+    gaze.drift.x = (readCol / readCols - 0.5) * r.width * saccadeGain;
+    gaze.drift.y = (readRow - (readRows - 1) / 2) * r.line * saccadeGain;
+  }
 
   // --- API ------------------------------------------------------------------
 
   function setState(name, o = {}) {
-    if (!STATES[name]) throw new Error(`unknown state: ${name}`);
+    if (!states[name]) throw new Error(`unknown state: ${name}`);
     const changed = name !== stateName;
     stateName = name;
-    const st = STATES[name];
+    const st = states[name];
     if (o.emotion !== undefined) emotion = o.emotion;
     else if (changed) emotion = st.emotion;
     if (o.intensity !== undefined) emotionAmt = o.intensity;
-
-    if (!o.keepGaze) setGaze(o.gaze || st.gaze);
     idle.setProfile(st.idle);
-    // Arm the glance scheduler fresh so entering a glancing state doesn't
-    // fire a stale timestamp immediately.
-    glanceUntil = 0;
-    glanceAt = elapsed + (st.glance ? st.glance.every[0] + Math.random() * (st.glance.every[1] - st.glance.every[0]) : 0);
     // SVG's desaturation filter is a legacy renderer detail. A generic rig
     // receives the same state pose and may express degradation its own way.
     if (face) {
       face.svg.style.filter = st.filter || '';
       face.svg.style.transition = 'filter .5s ease';
     }
-    if (changed) { idle.blink(); emit('state', name); }
+    // The eyes wait out a flicker between gap states (GAP_SETTLE), and a
+    // repeat of the state still settling leaves it settling.
+    const deferrable = !o.gaze && !o.keepGaze && GAP_STATES.has(gazeState) && GAP_STATES.has(name);
+    if (deferrable && changed) settleAt = name === gazeState ? 0 : elapsed + GAP_SETTLE;
+    else if (!(deferrable && settleAt)) { settleAt = 0; enterGaze(name, o, changed); }
+    if (changed) emit('state', name);
     return api;
+  }
+
+  /** The state `name` takes the gaze: its target and its schedules. */
+  function enterGaze(name, o, blink) {
+    const prev = gazeState;
+    gazeState = name;
+    const st = states[name];
+    const gl = st.glance;
+    // A reply that starts while THINKING is looking away finishes that look
+    // first, and the look stands in for the turn-start one.
+    const carry = prev === 'THINKING' && name === 'SPEAKING'
+      && !o.gaze && !o.keepGaze && gazeName !== st.gaze && !glanceUntil;
+    returnAt = carry ? elapsed + rand(THINK_CARRY) : 0;
+    if (carry) carriedAt = elapsed;
+    // A state with an `opening` enters as though its check-in on the user is
+    // already under way, and leaves it when that runs out.
+    if (!o.keepGaze && !carry) setGaze(o.gaze || (gl && gl.opening ? gl.to : st.gaze));
+    // Arm every scheduler fresh, so entering a state never fires a timestamp
+    // left over from the last one — the wander in particular, which used to
+    // pick a new target on the first frame and override the state's own gaze.
+    glanceUntil = gl && gl.opening && !o.gaze && !o.keepGaze ? elapsed + rand(gl.opening) : 0;
+    glanceAt = elapsed + (gl ? rand(gl.every) : 0);
+    wanderAt = elapsed + (st.wander ? rand(st.wander.every) : 0);
+    driftAt = elapsed + (st.read ? rand(st.read.fix) : 0);
+    readCol = readCols = readRow = readRows = 0;
+    dartAt = dartBrowUntil = 0;
+    dart.x = dart.y = 0;
+    if (blink) idle.blink(false, true);
   }
 
   function setEmotion(name, intensity = 1) { emotion = name; emotionAmt = intensity; return api; }
 
-  /** @param {string} name  @param {{x:number,y:number}} [custom] normalized -1..1 */
-  function setGaze(name, custom) {
+  /** @param {string} name  @param {{x:number,y:number}} [custom] normalized -1..1
+   *  @param {boolean} [blink] the mixer's own say over the evoked blink; see GazeLayer.set */
+  function setGaze(name, custom, blink) {
     gazeName = GAZE_TARGETS[name] ? name : 'USER';
     gazeCustom = custom || null;
-    applyGaze();
+    applyGaze(blink);
     return api;
   }
 
@@ -594,6 +1203,10 @@ export function createAvatar(opts = {}) {
     // Speech owns the mouth in the mixer, but a server action still gets to
     // complete its physical landing on the other channels. Do not cancel it
     // here: a hand or head cannot disappear simply because playout began.
+    // A new clock is a new turn. The same clock handed back is the accurate
+    // leg rewriting this one (AvatarClient re-speaks a splice), and that must
+    // not roll the turn-start look a second time.
+    const newTurn = !o.clock || o.clock !== speakClock;
     speakStart = performance.now();
     speakClock = o.clock
       ? o.clock
@@ -601,6 +1214,8 @@ export function createAvatar(opts = {}) {
         ? () => o.audio.currentTime * 1000
         : () => performance.now() - speakStart;
     speech.start(o.cues || [], speakClock);
+    prosody.reset(newTurn);
+    if (newTurn) turnStartPending = true;
     if (stateName !== 'SPEAKING') setState('SPEAKING', { keepGaze: true });
     if (o.audio && o.audio.paused) o.audio.play().catch(() => {});
     return api;
@@ -674,19 +1289,46 @@ export function createAvatar(opts = {}) {
   /** One self-completing server action. State continues to resolve underneath;
    * face and hand layers queue their next movement so an in-flight physical
    * gesture always gets to land. */
-  function action(id) {
+  function action(wireId) {
+    // `ACKNOWLEDGE` is the whole backchannel family in one word, and which of
+    // them a face makes is a rendering decision the server is not holding the
+    // drawing for. The floor decides: a nod while the user still has it is a
+    // continuer, "go on"; once they have stopped it is a receipt, and a nod
+    // there reads as agreement with whatever they just said. Both are only ever
+    // this explicit action — nothing here starts one on its own.
+    const id = wireId === 'ACKNOWLEDGE'
+      ? (engagement.speaking ? 'ACK_NOD' : 'ACK_RECEIVE')
+      : wireId;
     const handDef = HAND_GESTURES[id];
     if (handDef) {
       startHandAction(id, handDef);
       if (handDef.face) {
-        const faceClip = ACTIONS[handDef.face];
+        const faceClip = actionShapes[handDef.face] || ACTIONS[handDef.face];
         if (faceClip) clip.play(faceClip, faceClip.audioEl, { queue: true });
       }
       return api;
     }
-    const faceClip = ACTIONS[id];
-    if (!faceClip) throw new Error(`unknown action: ${id}`);
+    // Own renderings first, always. An avatar may *add* to what a server can
+    // ask for and may never redefine a core intent: `ACKNOWLEDGE` has to mean
+    // the same thing on every face or it is not a protocol. It may draw that
+    // meaning in its own shape (`actionShapes`), which is a rendering, not a
+    // redefinition — the id and the intent are fixed before this line.
+    //
+    // Unknown is a no-op, not a throw. The wire's action vocabulary is open, so
+    // a server asking this face for a motion it does not have is the expected
+    // case and not somebody's broken build — the same forward-compat rule an
+    // unknown `cmd` gets. This is also where a sequence used to arrive by its
+    // own method; one open vocabulary means one door.
+    const faceClip = actionShapes[id] || ACTIONS[id] || sequences[id];
+    if (!faceClip) return api;
     clip.play(faceClip, faceClip.audioEl, { queue: true });
+    // The two acknowledgements smile. Only these, and only ever because the
+    // server sent one: a smile the renderer timed for itself would be an
+    // acknowledgement nobody sent.
+    if (id === 'ACK_NOD' || id === 'ACK_RECEIVE') prosody.acknowledge();
+    // Now that warmth rides over clips, the reply's opening smile would
+    // otherwise carry on through the interrupted face.
+    if (id === 'RESPONSE_INTERRUPTED') prosody.cool();
     return api;
   }
 
@@ -773,7 +1415,7 @@ export function createAvatar(opts = {}) {
   }
 
   const api = {
-    setState, setEmotion, setGaze, speak, pushCues, stopSpeaking, attend,
+    setState, setEmotion, setGaze: (name, custom) => setGaze(name, custom), speak, pushCues, stopSpeaking, attend,
     action, perform,
     /** Which hand the character gestures with: +1 the viewer's right (its own
      *  left), -1 the other. Both are anatomically real — the thumb splays away
@@ -804,7 +1446,7 @@ export function createAvatar(opts = {}) {
     get clip() { return clip.id; },
     /** Semantic hand gesture in flight, independent of renderer capability. */
     get gesturing() { return handAction ? handAction.id : null; },
-    get params() { return cur; },
+    get params() { return shown; },
     get userSpeaking() { return engagement.speaking; },
     // Legacy SVG inspection fields. New AvatarRig implementations should not
     // rely on or provide them; the renderer-neutral contract is apply/destroy.
@@ -826,6 +1468,11 @@ export function createAvatar(opts = {}) {
   return api;
 }
 
+// The parameter space itself. A renderer-neutral rig has to answer "what is
+// this channel's neutral value" before it can map the channel onto whatever it
+// controls — a morph target's influence is `(pose - rest) / (1 - rest)`, and a
+// rig that hard-codes those rests has quietly forked `params.js`.
+export { REST, CHANNELS, RANGE } from './params.js';
 export { ACTION_IDS, ACTIONS, attachAudio } from './interjections.js';
 export { GAZE_NAMES, GAZE_TARGETS } from './gaze.js';
 export { normalizeActions } from './perform.js';

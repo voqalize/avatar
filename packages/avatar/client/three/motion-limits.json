@@ -1,0 +1,115 @@
+{
+ "what": "The head angles each character's projection survives, in degrees, measured by eye. Not a clamp and not read by anything yet: a record of where each asset stops reading as a head that turned.",
+ "units": "degrees from rest, either side, per axis driven alone from rest",
+ "surface": {
+  "cssWidth": 400,
+  "cssHeight": 300,
+  "devicePixelRatio": 2,
+  "magnification": 1
+ },
+ "measured": {
+  "on": "2026-09-18",
+  "by": "owner",
+  "using": "apps/studio/lab/head.html",
+  "how": "static held pose, one axis at a time from rest, judged by eye at the shipping surface",
+  "safe": "reads as a head that turned, with nothing to notice",
+  "limit": "the last angle before something is visibly wrong"
+ },
+ "characters": {
+  "tara": {
+   "yaw": {
+    "safe": 6,
+    "limit": 7
+   },
+   "pitch": {
+    "safe": 5,
+    "limit": 6
+   },
+   "roll": {
+    "safe": 6,
+    "limit": 7
+   },
+   "defects": [
+    {
+     "axis": "yaw",
+     "from": 7,
+     "what": "the eye does not foreshorten or narrow; it is what gives the turn away first"
+    },
+    {
+     "axis": "roll",
+     "from": 0,
+     "what": "the transition reads as a hinge rather than a neck bending, at any angle"
+    }
+   ]
+  },
+  "tushar": {
+   "yaw": {
+    "safe": 6,
+    "limit": 7
+   },
+   "pitch": {
+    "safe": 5,
+    "limit": 6
+   },
+   "roll": {
+    "safe": 6,
+    "limit": 7
+   },
+   "defects": [
+    {
+     "axis": "yaw",
+     "from": 7,
+     "what": "the eye does not foreshorten or narrow; it is what gives the turn away first"
+    },
+    {
+     "axis": "roll",
+     "from": 0,
+     "what": "the transition reads as a hinge rather than a neck bending, at any angle"
+    }
+   ]
+  },
+  "tanya": {
+   "yaw": {
+    "safe": 5,
+    "limit": 5.5,
+    "remeasure": "every defect this was measured from was fixed on 2026-09-19 (8ba16e8 the neck under the jaw, 6c5c141 the hair that hangs past it), so the number is a record of the old asset and not of this one. Nothing may gate on it until the owner drives her again."
+   },
+   "pitch": {
+    "safe": 5,
+    "limit": 6
+   },
+   "roll": {
+    "safe": 1,
+    "limit": 1,
+    "remeasure": "every defect this was measured from was fixed on 2026-09-19 (8ba16e8 the neck under the jaw, 6c5c141 the hair that hangs past it), so the number is a record of the old asset and not of this one. Nothing may gate on it until the owner drives her again."
+   },
+   "defects": [
+    {
+     "axis": "yaw",
+     "from": 5.5,
+     "what": "a black area opens along the jaw line",
+     "fixed": "2026-09-19"
+    },
+    {
+     "axis": "yaw",
+     "from": 5.5,
+     "what": "something around the neck moves incorrectly",
+     "fixed": "2026-09-19"
+    },
+    {
+     "axis": "roll",
+     "from": 1,
+     "what": "a gap opens between the neck and the face on the far side",
+     "fixed": "2026-09-19"
+    },
+    {
+     "axis": "roll",
+     "from": 2,
+     "what": "the hair breaks up",
+     "fixed": "2026-09-19"
+    }
+   ]
+  }
+ },
+ "remeasure": "An axis carrying `remeasure` was measured on an asset that has since changed. It stays as written \u2014 a measurement is not edited by someone who did not make it \u2014 and a gate skips it and says so."
+}

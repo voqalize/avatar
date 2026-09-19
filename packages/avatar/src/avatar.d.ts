@@ -60,6 +60,7 @@ export type AvatarGazeName =
   | "AWAY_THINKING"
   | "AWAY_RIGHT"
   | "AWAY_DOWN"
+  | "AWAY_SIDE"
   | "CUSTOM";
 
 /** The complete server-addressable action contract. Names are semantic, not
@@ -174,8 +175,15 @@ export interface AvatarApi {
   speak(o?: SpeakOptions): AvatarApi;
   pushCues(cues: Cue[]): AvatarApi;
   stopSpeaking(): AvatarApi;
-  /** Self-completing action: states resolve underneath while motion lands. */
-  action(id: AvatarActionId): AvatarApi;
+  /**
+   * Self-completing action: states resolve underneath while motion lands.
+   *
+   * One core intent, one of `actions`, or one of `sequences` — the vocabulary
+   * is open, so an id this face has no word for is a no-op rather than a
+   * throw. `ACKNOWLEDGE` resolves to whichever of this body's acknowledgements
+   * the moment calls for.
+   */
+  action(id: string): AvatarApi;
   setHandSide(dir: HandSide): AvatarApi;
   perform(actions: AvatarAction[], o?: PerformOptions): PerformHandle;
   setUserSpeaking(speaking: boolean | null): AvatarApi;
@@ -253,12 +261,53 @@ export interface CreateAvatarOptions {
   mouthGain?: Gain;
   gestureGain?: Gain;
   motionGain?: Gain;
+  /** Speech-rhythm head motion (beats, phrase drift), 0..2. A per-rig
+   * calibration: the same pose unit is a different angle on every rig. */
+  prosodyHeadGain?: Gain;
+  /** Speech-rhythm face motion (brows, lids, turn-edge warmth), 0..2. */
+  prosodyFaceGain?: Gain;
+  /** The share of a sustained head turn the trunk takes up, 0..1. Default
+   * 0.45; a per-rig calibration, like `prosodyHeadGain`. */
+  trunkFollow?: number;
+  /**
+   * How far this face may *hold* its head off centre, per axis, in pose units.
+   * The layers that hold a pose — attitude, gaze, a phrase's pose, the idle
+   * posture — are folded into this together; strokes, beats and clip deltas
+   * are not, so a nod keeps its peak. An axis left out is unbudgeted.
+   *
+   * A per-rig fact and a measured one: what a face can hold before its
+   * rendering gives it away is a property of that drawing or that photograph,
+   * and the library has no way to guess it.
+   */
+  headHold?: Readonly<Partial<Record<"headYaw" | "headPitch" | "headRoll", number>>>;
   /** Disable only the bundled SVG hand renderer. A custom rig still receives
    * first-class `frame.hand` controls for every gesture action. Default true. */
   hand?: boolean;
   handSide?: HandSide;
   /** Withhold the rAF loop so a tool can drive frames itself via `step(dt)`. */
   manual?: boolean;
+  /**
+   * This avatar's own addressable motions, on top of the core intents. A
+   * server names one with the wire's `action` command, same as a core one; a
+   * face that does not have the name ignores it. Keyed by id, each value a clip
+   * in the same shape `ACTIONS` uses. Cannot shadow one of this renderer's own
+   * — `ACTIONS` wins.
+   */
+  sequences?: Readonly<Record<string, unknown>>;
+  /**
+   * This avatar's own shape for one of this renderer's actions, keyed by its
+   * id. Same id, same intent, a rendering sized for this body — the shared
+   * clips are authored for a line face. An id this renderer does not publish
+   * throws: this can reshape the vocabulary, never add to it.
+   */
+  actions?: Readonly<Record<string, unknown>>;
+  /**
+   * This avatar's own rendering of a state, keyed by state name. Each value
+   * replaces that state's fields whole (`pose`, `idle`, …); the rest are the
+   * shared table's. A name that is not a state throws: this can re-render the
+   * vocabulary, never add to it.
+   */
+  states?: Readonly<Partial<Record<AvatarStateName, Readonly<Record<string, unknown>>>>>;
 }
 
 export function createAvatar(opts: CreateAvatarOptions): AvatarApi;
@@ -279,10 +328,18 @@ export function checkHandFraming(meta: AvatarMeta): {
   outboardLimit: number;
   worst: Record<string, number>;
 };
+/** The neutral pose: every channel's resting value (`src/params.js`). */
+export const REST: Readonly<Record<PoseChannel, number>>;
+/** Every channel name, in `REST` order. */
+export const CHANNELS: readonly PoseChannel[];
+/** Post-mix clamp per channel, `[min, max]`. */
+export const RANGE: Readonly<Record<PoseChannel, readonly [number, number]>>;
 export const VISEME_LETTERS: readonly VisemeLetter[];
 export const VISEME_SHAPES: Readonly<Record<VisemeLetter, PoseOverrides>>;
 /** Cues lead the audio by this many ms — perceptual tolerance is asymmetric. */
 export const LEAD_MS: number;
+/** The shoulder line's share of a held `headRoll`, per pose unit. */
+export const SHOULDER_TILT: number;
 export const ARPABET_TO_VISEME: Readonly<Record<string, VisemeLetter>>;
 export const AZURE_VISEME_TO_LETTER: Readonly<Record<number, VisemeLetter>>;
 

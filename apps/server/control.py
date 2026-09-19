@@ -13,7 +13,7 @@ would be more code in service of a case that does not exist here, and the
 endpoints would then need to say *which* call they meant.
 
 The misbehaviours below are the reason this file is worth having at all. The
-authority model says the client never obeys a server claim that contradicts what
+authority model says the client never obeys a server state that contradicts what
 it can observe (`docs/pipecat-lifecycle-protocol.md` § Authority model), and that
 is a claim about the *renderer*, not about the server. Nothing proved it: every
 message this server sent was a well-formed message sent at the right moment. So
@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from loguru import logger
 from pipecat.frames.frames import UserMuteStartedFrame, UserMuteStoppedFrame
 from pipecat.pipeline.worker import PipelineWorker
-from voqalize_avatar import AvatarAction, AvatarClaim, AvatarControlFrame, AvatarMessage
+from voqalize_avatar import AvatarAction, AvatarControlFrame, AvatarMessage, AvatarState
 
 from canned import CannedLines, CannedLLMService, Line
 
@@ -36,20 +36,20 @@ from canned import CannedLines, CannedLLMService, Line
 #: should do instead. The value is the sentence shown next to the button — these
 #: are only useful if you know what to watch for while they run.
 MISBEHAVIOURS: dict[str, str] = {
-    "claim-during-speech": (
-        "Says a line, then immediately claims THINKING. The face must keep "
+    "state-during-speech": (
+        "Says a line, then immediately sends THINKING. The face must keep "
         "speaking: observed playout outranks server intent."
     ),
-    "stale-claim": (
-        "Claims THINKING, then clears it a beat after the turn it belonged to "
-        "has ended. A claim that arrives late must not resurface."
+    "stale-state": (
+        "Sends THINKING, then clears it a beat after the turn it belonged to "
+        "has ended. A state that arrives late must not resurface."
     ),
     "unknown-action": (
         "Sends an action name that does not exist. The face must ignore it and "
         "keep rendering, not stall on a command it cannot map."
     ),
-    "unknown-claim": (
-        "Claims a state that is not in the vocabulary. Same bar: ignored, not "
+    "unknown-state": (
+        "Sends a state that is not in the vocabulary. Same bar: ignored, not "
         "rendered, not fatal."
     ),
     "action-storm": (
@@ -57,6 +57,21 @@ MISBEHAVIOURS: dict[str, str] = {
         "queue of twelve nods long after the burst ended."
     ),
 }
+
+#: Names the *mounted face* has that the wire does not: this demo runs the
+#: bundled SVG renderer, so it can offer a button for each of that renderer's
+#: own actions alongside the two every avatar owes a server. Published by
+#: `/api/lines` and the only thing `/api/action` checks against — a list here is
+#: this server's knowledge of what is on the other end, never the protocol's
+#: vocabulary, which is open (`docs/contract-wire.md`).
+RENDERER_ACTIONS: list[str] = [
+    "ACK_RECEIVE",
+    "ACK_NOD",
+    "GESTURE_GREET",
+    "GESTURE_GOODBYE",
+    "GESTURE_APPROVE",
+    "GESTURE_WAIT",
+]
 
 #: Pause between the two halves of a two-step misbehaviour. Long enough that a
 #: human sees them as separate events, short enough to stay inside one turn.
@@ -71,7 +86,7 @@ class Session:
     llm: CannedLLMService
     worker: PipelineWorker
     #: Serialises multi-step misbehaviours so two overlapping requests cannot
-    #: interleave their halves and produce a sequence neither one describes.
+    #: interleave their halves and produce an order neither one describes.
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def send(self, message: AvatarMessage) -> None:
@@ -86,22 +101,22 @@ class Session:
         await self.llm.say(line)
         return line
 
-    async def claim(self, state: AvatarClaim | None) -> None:
-        await self.send(AvatarMessage.claim(state))
+    async def state(self, state: AvatarState | None) -> None:
+        await self.send(AvatarMessage.state(state))
 
     def beats(self, *, think_ms: int, work_ms: int) -> None:
         """Set how long the server holds each state before it starts speaking.
 
         Not a message and not a command — it changes what the *next* turn does,
         which is the honest shape of it. A caller who wants a state right now
-        sends a claim; these are what an application's own latency looks like
+        sends one; these are what an application's own latency looks like
         from the face's side, and the only way to see them is to have the server
         take as long as a real one would.
         """
         self.llm.think_ms = max(0, think_ms)
         self.llm.work_ms = max(0, work_ms)
 
-    async def action(self, action: AvatarAction) -> None:
+    async def action(self, action: AvatarAction | str) -> None:
         await self.send(AvatarMessage.action(action))
 
     async def mute(self, on: bool) -> None:
@@ -130,32 +145,34 @@ class Session:
         logger.info("misbehaving: {}", kind)
 
         async with self._lock:
-            if kind == "claim-during-speech":
+            if kind == "state-during-speech":
                 await self.llm.say(self.lines.lines[0], preamble=False)
                 await asyncio.sleep(_BEAT_S)
-                await self.claim(AvatarClaim.THINKING)
+                await self.state(AvatarState.THINKING)
 
-            elif kind == "stale-claim":
-                await self.claim(AvatarClaim.THINKING)
+            elif kind == "stale-state":
+                await self.state(AvatarState.THINKING)
                 await self.llm.say(self.lines.lines[0], preamble=False)
                 await asyncio.sleep(_BEAT_S)
-                await self.claim(None)
+                await self.state(None)
 
             elif kind == "unknown-action":
-                # Straight through the builder, because a real bug looks like
-                # this: a newer server naming an action this widget's vocabulary
-                # does not have yet. `AvatarMessage.action` takes a plain string
-                # for exactly that reason.
+                # Straight through the builder, because this is not a malformed
+                # message: the action vocabulary is open, so a name no mounted
+                # face has is a legal thing to send and a dropped one is the
+                # forward-compat rule working. `AvatarMessage.action` takes a
+                # plain string for exactly that reason.
                 await self.send(AvatarMessage.action("GESTURE_SOMERSAULT"))
 
-            elif kind == "unknown-claim":
-                # Not through `AvatarMessage.claim`, which only accepts the enum.
-                # A raw payload is what a version skew actually puts on the wire.
-                await self.send(AvatarMessage(cmd="claim", payload={"state": "NAPPING"}))
+            elif kind == "unknown-state":
+                # Not through `AvatarMessage.state`, which only accepts the enum.
+                # The state list *is* closed, so this one really is malformed —
+                # a raw payload is what a version skew actually puts on the wire.
+                await self.send(AvatarMessage(cmd="state", payload={"state": "NAPPING"}))
 
             elif kind == "action-storm":
                 for _ in range(12):
-                    await self.action(AvatarAction.ACK_NOD)
+                    await self.action(AvatarAction.ACKNOWLEDGE)
 
 
 #: The one live call, or `None`. Module state because there is one server

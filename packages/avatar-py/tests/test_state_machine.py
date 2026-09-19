@@ -1,7 +1,7 @@
-"""The reduced backend contract: claims/actions and explicit control only.
+"""The reduced backend contract: states/actions and explicit control only.
 
 Pipecat's browser client projects its own lifecycle events. These tests protect
-the pieces that cannot be reconstructed there: lower-priority claims,
+the pieces that cannot be reconstructed there: the lower-priority states,
 interruption-safe actions, and application-authored commands.
 """
 
@@ -24,7 +24,7 @@ from pipecat.frames.frames import (
     UserStoppedSpeakingFrame,
 )
 
-from voqalize_avatar import AvatarAction, AvatarClaim, AvatarControlFrame, AvatarMessage
+from voqalize_avatar import AvatarAction, AvatarControlFrame, AvatarMessage, AvatarState
 from voqalize_avatar.state_machine import AvatarStateMachine
 from tests.helpers import sentence, sequence
 
@@ -46,18 +46,18 @@ def machine() -> AvatarStateMachine:
 def test_thinking_spans_the_whole_wait_for_words(machine) -> None:
     """The reported bug, as a test.
 
-    `LLMFullResponseStartFrame` used to clear the claim — so the model+TTS
-    latency window, which is the longest silence in a call, was claimless and the
+    `LLMFullResponseStartFrame` used to clear the state — so the model+TTS
+    latency window, which is the longest silence in a call, was stateless and the
     widget fell through its ladder to IDLE. It re-arms the wait instead, and
     nothing retires it until words are actually audible.
     """
     assert machine.start() == []
     assert drive(machine, UserStartedSpeakingFrame(), UserStoppedSpeakingFrame()) == [
-        "claim:THINKING"
+        "state:THINKING"
     ]
     assert drive(machine, LLMFullResponseStartFrame()) == []
-    assert machine.claim is AvatarClaim.THINKING
-    assert drive(machine, BotStartedSpeakingFrame()) == ["claim:None"]
+    assert machine.state is AvatarState.THINKING
+    assert drive(machine, BotStartedSpeakingFrame()) == ["state:None"]
 
 
 def test_a_turn_with_nothing_behind_it_strains_rather_than_waits(machine) -> None:
@@ -67,36 +67,61 @@ def test_a_turn_with_nothing_behind_it_strains_rather_than_waits(machine) -> Non
     reach this seat, so `waited()` is the leg that has to work everywhere.
     """
     drive(machine, UserStartedSpeakingFrame(), UserStoppedSpeakingFrame())
-    assert sequence(machine.waited()) == ["claim:STRAINING"]
+    assert sequence(machine.waited()) == ["state:CANT_HEAR"]
     # The wait is over, so a second expiry has nothing left to give up on.
     assert machine.waited() == []
     assert not machine.awaiting_reply
     # And the next turn clears it, whatever came of the last one.
-    assert drive(machine, UserStartedSpeakingFrame()) == ["claim:None"]
+    assert drive(machine, UserStartedSpeakingFrame()) == ["state:None"]
+
+
+def test_a_slow_reply_is_not_an_empty_turn(machine) -> None:
+    """The owner's "weird lean", as a test.
+
+    Once the model has the turn, a reply is coming however long it takes. The
+    grace clock used to run on through model and TTS latency, so any reply
+    slower than two seconds to reach audio strained — the face lurched forward
+    to hear, then spoke. The wait holds as THINKING; only the clock stops.
+    """
+    drive(machine, UserStartedSpeakingFrame(), UserStoppedSpeakingFrame())
+    assert machine.awaiting_reply
+    drive(machine, LLMFullResponseStartFrame())
+    assert not machine.awaiting_reply
+    assert machine.waited() == []
+    assert machine.state is AvatarState.THINKING
+    # A tool's result goes back to the model, which has the turn again.
+    drive(machine, FunctionCallInProgressFrame(function_name="f", tool_call_id="a", arguments={}))
+    drive(machine, FunctionCallResultFrame(function_name="f", tool_call_id="a", arguments={}, result=None))
+    assert machine.state is AvatarState.THINKING
+    assert machine.waited() == []
+    # The next turn starts a clock of its own.
+    drive(machine, UserStartedSpeakingFrame(), UserStoppedSpeakingFrame())
+    assert machine.awaiting_reply
+    assert sequence(machine.waited()) == ["state:CANT_HEAR"]
 
 
 def test_an_empty_transcript_strains_without_waiting_for_the_clock(machine) -> None:
     drive(machine, UserStartedSpeakingFrame(), UserStoppedSpeakingFrame())
     assert drive(machine, TranscriptionFrame(user_id="u", timestamp="t", text="   ")) == [
-        "claim:STRAINING"
+        "state:CANT_HEAR"
     ]
 
 
 def test_a_transcript_with_words_leaves_the_wait_alone(machine) -> None:
     drive(machine, UserStartedSpeakingFrame(), UserStoppedSpeakingFrame())
     assert drive(machine, TranscriptionFrame(user_id="u", timestamp="t", text="hello")) == []
-    assert machine.claim is AvatarClaim.THINKING
+    assert machine.state is AvatarState.THINKING
 
 
-def test_speech_outranks_every_claim(machine) -> None:
-    """Both speech states resolve to *no* claim: the browser has them as Pipecat
+def test_speech_outranks_all_three(machine) -> None:
+    """Both speech states resolve to *nothing*: the browser has them as Pipecat
     facts already, and restating one here would be the library speaking with less
     authority than the copy that is already there."""
     drive(machine, FunctionCallInProgressFrame(function_name="f", tool_call_id="a", arguments={}))
-    assert drive(machine, UserStartedSpeakingFrame()) == ["claim:None"]
+    assert drive(machine, UserStartedSpeakingFrame()) == ["state:None"]
     # The tool is still running underneath, but the turn that just ended is the
     # more recent thing to be waiting on, so the ladder answers with it.
-    assert drive(machine, UserStoppedSpeakingFrame()) == ["claim:THINKING"]
+    assert drive(machine, UserStoppedSpeakingFrame()) == ["state:THINKING"]
     assert machine.tools_in_flight == 1
 
 
@@ -121,14 +146,14 @@ def test_interruption_emits_one_action_without_a_lifecycle_duplicate(machine) ->
     assert drive(machine, BotStoppedSpeakingFrame()) == []
 
 
-def test_tool_calls_claim_working_until_the_last_parallel_call_finishes(machine) -> None:
-    assert drive(machine, FunctionCallInProgressFrame(function_name="lookup", tool_call_id="a", arguments={})) == ["claim:WORKING"]
+def test_tool_calls_take_working_until_the_last_parallel_call_finishes(machine) -> None:
+    assert drive(machine, FunctionCallInProgressFrame(function_name="lookup", tool_call_id="a", arguments={})) == ["state:WORKING"]
     assert machine.tools_in_flight == 1
     assert drive(machine, FunctionCallInProgressFrame(function_name="lookup", tool_call_id="a", arguments={})) == []
     assert machine.tools_in_flight == 1
     # The result goes back to the model, so the wait resumes rather than ending —
     # there is no silence between the tool and the answer worth showing as IDLE.
-    assert drive(machine, FunctionCallResultFrame(function_name="lookup", tool_call_id="a", arguments={}, result={})) == ["claim:THINKING"]
+    assert drive(machine, FunctionCallResultFrame(function_name="lookup", tool_call_id="a", arguments={}, result={})) == ["state:THINKING"]
     assert machine.tools_in_flight == 0
 
 
@@ -140,9 +165,9 @@ def test_working_is_reachable_even_though_it_is_the_bottom_of_the_ladder(machine
     a state nothing in a real pipeline ever reaches.
     """
     drive(machine, UserStartedSpeakingFrame(), UserStoppedSpeakingFrame(), LLMFullResponseStartFrame())
-    assert machine.claim is AvatarClaim.THINKING
+    assert machine.state is AvatarState.THINKING
     assert drive(machine, FunctionCallInProgressFrame(function_name="f", tool_call_id="a", arguments={})) == [
-        "claim:WORKING"
+        "state:WORKING"
     ]
 
 
@@ -156,26 +181,26 @@ def test_a_cancelled_tool_call_is_not_a_finished_one(machine) -> None:
     """
     drive(machine, FunctionCallInProgressFrame(function_name="f", tool_call_id="a", arguments={}))
     assert drive(machine, FunctionCallCancelFrame(function_name="f", tool_call_id="a")) == [
-        "claim:None"
+        "state:None"
     ]
     assert machine.tools_in_flight == 0
 
 
-def test_batched_tool_calls_emit_one_working_claim(machine) -> None:
+def test_batched_tool_calls_emit_one_working_state(machine) -> None:
     frame = FunctionCallsStartedFrame(function_calls=[
         type("Call", (), {"tool_call_id": "a"})(),
         type("Call", (), {"tool_call_id": "b"})(),
     ])
-    assert drive(machine, frame) == ["claim:WORKING"]
+    assert drive(machine, frame) == ["state:WORKING"]
     assert machine.tools_in_flight == 2
 
 
-def test_explicit_application_controls_are_claims_and_actions(machine) -> None:
-    claim = AvatarControlFrame(AvatarMessage.claim(AvatarClaim.WORKING))
-    nod = AvatarControlFrame(AvatarMessage.action(AvatarAction.ACK_NOD))
-    assert drive(machine, claim, nod) == ["claim:WORKING", "action:ACK_NOD"]
-    assert machine.claim is AvatarClaim.WORKING
-    assert sequence(machine.resync()) == ["claim:WORKING"]
+def test_explicit_application_controls_are_states_and_actions(machine) -> None:
+    state = AvatarControlFrame(AvatarMessage.state(AvatarState.WORKING))
+    nod = AvatarControlFrame(AvatarMessage.action(AvatarAction.ACKNOWLEDGE))
+    assert drive(machine, state, nod) == ["state:WORKING", "action:ACKNOWLEDGE"]
+    assert machine.state is AvatarState.WORKING
+    assert sequence(machine.resync()) == ["state:WORKING"]
 
 
 def test_errors_are_projected_by_the_browser_and_fatal_stops_future_output(machine) -> None:

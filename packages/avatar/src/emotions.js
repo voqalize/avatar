@@ -14,8 +14,10 @@ export const EMOTIONS = {
   neutral: {},
   warm: {
     mouthCornerL: 0.48, mouthCornerR: 0.48,
-    // A real smile squints. Without this it reads as a mask.
-    squintL: 0.30, squintR: 0.30, lidL: 0.04, lidR: 0.04,
+    // A real smile squints. Without this it reads as a mask. From below —
+    // the cheek pushes the lower lid up (AU6) — with no upper lid dropped on
+    // top, which on a photographic eye read as sleepy rather than warm.
+    squintL: 0.30, squintR: 0.30,
     browRaiseL: 0.10, browRaiseR: 0.10,
   },
   curious: {

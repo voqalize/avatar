@@ -40,9 +40,9 @@ Or `pm2 start ecosystem.config.cjs` from the repo root, which serves this at
 Open the URL and click **Start call**. Grant the microphone when
 Chrome asks — the call cannot connect until you do. The bot speaks first.
 
-The right-hand panel is the avatar wire as it arrives: `claim` for state,
-`action` for a nod or a receipt, `cues` for lipsync. A turn typically shows one
-`claim`, then a run of `cues` messages rewriting the same span from a low
+The right-hand panel is the avatar wire as it arrives: `state` for what the
+agent is doing, `action` for a nod or a receipt, `cues` for lipsync. A turn
+typically shows one `state`, then a run of `cues` messages rewriting the same span from a low
 `from_ms` — that is the accurate leg overwriting the predicted one, and it is
 supposed to look like that.
 
@@ -51,14 +51,16 @@ Flags: `--tts`, `--port`, `--host`.
 ## Driving it by hand
 
 Waiting for the round-robin to reach the line you wanted is a bad way to look at
-a gesture. The **Drive the call** panel says one line by name, claims a state,
-sends any action in the vocabulary, and — the part worth the code — sends the
-wrong thing on purpose.
+a gesture. The **Drive the call** panel says one line by name, sends a state,
+sends any action this server knows the mounted face by, and — the part worth the
+code — sends the wrong thing on purpose.
 
 Every button is an HTTP request to the server, never a message the page
-composes: `POST /api/say`, `/api/claim`, `/api/action`, `/api/misbehave`, all
-acting on the one call in progress, with `GET /api/lines` returning the corpus
-and both vocabularies so the buttons cannot drift from the Python enums. A page
+composes: `POST /api/say`, `/api/state`, `/api/action`, `/api/misbehave`, all
+acting on the one call in progress, with `GET /api/lines` returning the corpus,
+the three states, and the action names this server offers — the two every avatar
+owes a server plus the bundled renderer's own — which is a list of buttons worth
+offering rather than a list of what will be accepted. A page
 that could make the avatar nod on its own would be a client deciding what the
 agent is doing, which is the one thing this project does not allow. So what
 lands in the wire log is what the *server* sent — which is how you tell a
@@ -72,15 +74,20 @@ button names what to watch for.
 
 | kind | what should happen |
 |---|---|
-| `claim-during-speech` | the face keeps speaking — observed playout outranks server intent |
-| `stale-claim` | a claim arriving after its turn ended does not resurface |
+| `state-during-speech` | the face keeps speaking — observed playout outranks server intent |
+| `stale-state` | a state arriving after its turn ended does not resurface |
 | `unknown-action` | ignored, and the face keeps rendering |
-| `unknown-claim` | same bar: ignored, not rendered, not fatal |
+| `unknown-state` | same bar: ignored, not rendered, not fatal |
 | `action-storm` | no queue of twelve nods still draining after the burst |
 
 `curl` works too, and the endpoints answer `409` with no call up and `404` for a
-name that is not in the vocabulary — including on `/api/action`, so a typo there
-does not quietly become a conformance test.
+name they do not have. `/api/action` is the exception, because the wire's action
+vocabulary is open: it checks the id's *shape* and sends anything well-formed,
+including a name this server never published. It has to — Studio mounts the
+face, so a Blender avatar's own `NOD_ASSESS` is a legitimate thing to ask for
+and only the face can resolve it. A name nothing can render is ignored by the
+widget, which is the forward-compatibility rule; `unknown-action` is how you
+watch that happen on purpose.
 
 ## What it says
 

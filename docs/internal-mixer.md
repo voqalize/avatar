@@ -8,11 +8,11 @@
 > [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md).
 >
 > What follows is the imperative surface underneath all of that — the one the
-> `apps/authoring/` rig pages and the headless tools drive directly, and the one a
+> rig pages and the headless tools drive directly, and the one a
 > behavior author works against. It ships under `@voqalize/avatar/internal`
-> with no semver promise. Studio pointedly does *not* use it: Studio is the
-> surface an integrator copies from, so it takes the published `createAvatar`
-> and nothing else ([apps/studio/README.md](../apps/studio/README.md)).
+> with no semver promise. Our own review IDE pointedly does *not* use it: it is
+> the surface an integrator copies from, so it takes the published
+> `createAvatar` and nothing else.
 
 Everything below is reachable from one import:
 
@@ -28,7 +28,17 @@ a name: a name would need a table, and a table would pull all three drawings
 into a consumer's bundle to render one. The rest are optional:
 `theme` (palette overrides), `rig` + `rigOptions` (a non-SVG renderer, which
 suppresses `face`), `hand: false` and `handSide` (the frame-edge hand),
-`mouthGain`, `gestureGain`, `motionGain`, and `manual` (no internal rAF loop —
+`sequences` (the renderer's own addressable motions, which can only add to
+this renderer's published ones) and `actions` (the renderer's own *shape* for a
+published action — same id, same intent, keys sized for its body; an id this
+renderer does not publish throws, so it can reshape the catalogue and never grow
+it),
+`mouthGain`, `gestureGain`, `motionGain`, `prosodyHeadGain`, `prosodyFaceGain`,
+`saccadeGain` and `aversionGain` (eye-movement sizes for a face whose pupil
+units are small), `trunkFollow` (the trunk's share of a sustained head turn,
+0.45 unless a rig sizes it), `oculomotor` (the eye-head calibration, § Gaze),
+`states` (a rig's own rendering of a state: each entry replaces that state's
+fields whole, and an unknown state throws), and `manual` (no internal rAF loop —
 you call `tick` yourself, which is how the headless tools get deterministic
 frames).
 
@@ -45,17 +55,18 @@ overrides the bundle; `keepGaze: true` preserves whatever gaze was already set.
 **The state list lives in `STATES` (`packages/avatar/src/avatar.js`), and that is the only
 copy.** Each entry carries the perceptual reasoning for its own numbers in a
 comment above it — why `THINKING` averts *downward*, why `CANT_HEAR`'s brows go
-down rather than up, why `WORKING` looks at `SCREEN_WORK` and not `NOTES`. A
+down rather than up, why `WORKING` looks at `OWN_SCREEN` and not `SCREEN_WORK`. A
 table here would be a second copy that nothing forces anyone to update, and the
 one that used to be here rotted exactly that way: it documented a `TYPING` state
 for weeks after the state was renamed `WORKING`.
 
 The enum is exported as `STATE_NAMES`, and every recipe as `STATES`.
 
-Seven of them cross the wire as behavior vocabulary — `IDLE`, `LISTENING`,
-`THINKING`, `WORKING`, `SPEAKING`, `DEGRADED`, `OFFLINE`
-([contract-behavior.md](contract-behavior.md)). The rest are render states
-reachable only through `setState`, which is whose states they are.
+Nine of them are the behavior vocabulary — `IDLE`, `LISTENING`, `CANT_HEAR`,
+`THINKING`, `WORKING`, `MUTED`, `SPEAKING`, `DEGRADED`, `OFFLINE`
+([contract-behavior.md](contract-behavior.md)), of which a server may send three.
+The rest are render states reachable only through `setState`, which is whose
+states they are.
 
 ## Emotion — `setEmotion(name, intensity = 1)`
 
@@ -69,7 +80,9 @@ one explicitly.
 ## Gaze — `setGaze(name, custom?)`
 
 Semantic directions; the client does the oculomotor work (ballistic eyes,
-lagging under-rotated head, gaze-evoked blink). Twelve names (`GAZE_NAMES`):
+lagging under-rotated head, a blink whose odds grow with the size of the shift —
+Evinger: small shifts rarely carry one, large ones nearly always do). Fourteen
+names (`GAZE_NAMES`):
 
 | target | meaning |
 |---|---|
@@ -78,9 +91,11 @@ lagging under-rotated head, gaze-evoked blink). Twelve names (`GAZE_NAMES`):
 | `SCREEN_CENTER` / `SCREEN_LEFT` / `SCREEN_RIGHT` / `SCREEN_TOP` / `SCREEN_BOTTOM` | regions of the shared screen |
 | `SCREEN_WORK` | lower-left work area of the shared screen |
 | `NOTES` | down-right glance at the agent's own notes |
+| `OWN_SCREEN` | the agent's own display, just under the camera — eyes a little down, head nearly level. Where `WORKING` reads and `OFFLINE` waits |
 | `AWAY_THINKING` | up-left "recalling" break of eye contact — the stylized "let me think" beat |
 | `AWAY_RIGHT` | up-right variant |
-| `AWAY_DOWN` | down-left considering — measured cognitive aversion is mostly downward, so this is the one long THINKING dwells use |
+| `AWAY_DOWN` | down-left considering — measured cognitive aversion is mostly downward, but on a realistic face a down look reads as downcast, so `THINKING` keeps it to a fifth of its looks |
+| `AWAY_SIDE` | level, to the right — the sideways third of cognitive aversions |
 
 Escape hatch: `setGaze('CUSTOM', { x, y })` with normalized −1..1 screen
 coordinates, for when the server knows exactly where something is. (Any name
@@ -90,9 +105,41 @@ plus a `custom` object works; the coordinates win.)
 final ~2.4 s of the agent's own utterance. Human speakers return to mutual
 gaze before they stop talking; an agent that ends its turn looking away fails
 to pass the floor, and the user sits waiting for a signal that never comes.
+The mixer holds `SPEAKING`'s own looks away to the same rule, reading the end
+of the cue track as far as it has arrived.
 
 Gaze is also set implicitly by states; an action may temporarily override it,
-then releases it when the action lands.
+then releases it when the action lands. Between turns the state the server
+sends can change several times a second (`THINKING`, `WORKING`, `CANT_HEAR`), so among
+those three the eyes change over only once the new state has held for half a
+second (`GAP_SETTLE` in `packages/avatar/src/avatar.js`); the pose changes at
+once. `SPEAKING` and `LISTENING` are never held back.
+
+**The table is drawn for a line face.** A peep pupil crosses most of its eye,
+so a look can live in the eyes. On a face whose eye turns a few degrees a
+pupil unit, the same numbers park the iris in the corner of the socket —
+side-eye, not thought. The `oculomotor` option sizes the system per rig
+(tara's is `TARA_TUNING` in `packages/avatar/client/three/tara-rig.ts`, with the
+reasoning for each number):
+
+- `angles` — degrees per pupil unit and per head unit, so blink odds and the
+  reflex work in real angles.
+- `targets` — replaces entries in the table; the head carries most of each
+  look, the eyes a third of the way off centre.
+- `avert` — how a conversational look away splits between eyes and neck.
+- `head` — the follow's launch and cruise; a real head lands a 7–8° shift in
+  about 0.4 s.
+- `vor` — the vestibulo-ocular reflex, applied after every layer so it sees
+  the head that is actually drawn: eyes counter-rotate against nods, speech
+  pose and sway, and stay on what they look at. It also gives a large shift
+  its real shape — the eye leads, the head arrives under it. One gain, or
+  `{x, y}` for a face whose pitch reads weaker than its yaw.
+- `range` — how far the reflex may carry the eye in the socket. Without it an
+  up-look's onset put the whole look in the eye before the neck moved, which
+  on a photographic eye reads as an eye-roll.
+- `lidFollow` — how far the upper lid follows the eye down and up.
+
+A face that passes none of it keeps the line-face behaviour exactly.
 
 ## Actions — `action(id)`
 
@@ -100,16 +147,21 @@ Finite authored clips with baked plausible timings, so they are convincing with
 **no audio attached**. `packages/avatar/src/interjections.js` holds two lists, each clip's
 duration and keyframes beside its intent:
 
-- `ACTION_IDS` / `ACTIONS` — the seven a *server* may send, and the only ids
-  `action(id)` accepts. Same seven as [contract-wire.md](contract-wire.md);
-  anything else throws, and `parseAvatarCommand` drops it before it gets that
-  far.
+- `ACTION_IDS` / `ACTIONS` — the seven *this renderer* publishes, which is not
+  the wire's vocabulary: that one is open and requires only `ACKNOWLEDGE` and
+  `RESPONSE_INTERRUPTED` ([contract-wire.md](contract-wire.md) § Action).
+  `ACKNOWLEDGE` is absent from the list because it is not a clip — `action()`
+  resolves it on the floor, to `ACK_NOD` while the user is speaking and
+  `ACK_RECEIVE` once they have stopped. An id in neither list and in no
+  `sequences`/`actions` an avatar passed is a **no-op**, not a throw, because an
+  open vocabulary makes a name this face cannot draw the expected case.
 - `INTERNAL_CLIPS` — the full authoring library the seven are drawn from, ~33
   clips. It is a *timeline* library, not a second action vocabulary: nothing on
-  the mixer's surface takes one of its ids, and the authoring pages that review
-  them (`apps/authoring/clip-strip.html`) drive a bare `ClipPlayer` instead. That
-  asymmetry is on purpose — promoting a clip to an action is a decision, and it
-  should cost an edit to `ACTION_IDS`.
+  the mixer's surface takes one of its ids, and the authoring page that reviews
+  them — the clip strip — drives a bare `ClipPlayer` instead. That
+  asymmetry is on purpose — publishing a clip says a server that knows this
+  renderer is mounted may ask for it, and that should cost an edit to
+  `ACTION_IDS`.
 
 The rules that are not visible in the keyframes:
 
@@ -216,6 +268,49 @@ accept that fixture.
 `speak()` auto-enters `SPEAKING` (keeping the current gaze) and kills any
 spoken action in flight. `speakEnd` fires when the track completes.
 
+**Around the mouth.** The same track drives the speaker's head, brows and
+breath, none of which is the mouth (`packages/avatar/src/prosody.js`, which has
+the citations; the numbers it is sized against are
+[research-biomechanics.md §3.8](research-biomechanics.md)):
+
+- a blink at each pause of 250 ms or more and at the end of the utterance,
+  which re-arms the free-running blink timer;
+- a head that is **held, and moved**, never drifting (`head.js`). Each phrase
+  gets a pose — usually on the other side from the last, yaw and roll together
+  — and the head goes there on a minimum-jerk path that starts inside the pause
+  before the phrase, so it moves before the voice. Between moves the head
+  output does not change at all;
+- into a pause of 400 ms or more, an in-breath that peaks at the resumption;
+- beats, at most about one a second, on open vowels whose length × `i` stands
+  clearly above their neighbours, in phrases long enough to carry one. A beat
+  is brows up and, usually, a head stroke: a nod down and back in about 0.4 s,
+  sometimes with some yaw, or — after a long hold — a swing to a new pose
+  (Graf's one-way movement). Some beats leave the head alone;
+- a chin settle on the final vowel of each phrase, held into the pause. That
+  vowel is never a beat candidate, since final lengthening marks a boundary
+  rather than an accent;
+- warmth — corners up, a hint of squint — in episodes, never through the middle
+  of a turn. A small one as the turn opens; a real smile, about 2.6 s held,
+  as it plays out and the floor passes; and a short one with an explicit
+  `ACK_NOD` or `ACK_RECEIVE`, at most one per 4 s so a run of continuers does
+  not hold the face up. Overlapping episodes take the larger, not the sum.
+  `RESPONSE_INTERRUPTED` drops it at once: a smile that survives being cut off
+  has not noticed. It is suppressed while the emotion or the playing clip turns
+  the corners down.
+
+A flat phrase gets no beat, because random brow raises do not help. The layer
+only reads the track, so it cannot move the mouth. Its head and brows are
+silent while an action's clip is playing, since the clip already owns them;
+the warmth is not, because an acknowledgement's smile comes with its nod. A
+rig whose units are smaller than peep's scales it with `prosodyHeadGain` and
+`prosodyFaceGain`; the poses, beats and warmth then stay in proportion.
+
+The shape before this one summed a lead-in, a phrase drift and beat envelopes
+into a head that was in motion from the first word to the last. Each part was a
+movement the literature measured; on a recorded call the sum read as a
+screensaver. Motion is judged from a recorded call now, not from per-sentence
+statistics alone.
+
 ### The mouth priority rule (invariant)
 
 **Server viseme track > clip mouth track.** While a server track plays, it
@@ -256,8 +351,7 @@ and tuned on the rig.
 
 **A server cannot send one of these.** `perform` is not on the wire, and
 deliberately so; this is a local authoring surface only.
-`apps/authoring/perf-clips.json` scripts its turns this way and
-`apps/authoring/expression-lab.html` plays them:
+Our own expression lab scripts a turn as data and plays it through them:
 
 ```js
 avatar.speak({ cues, audio });          // the utterance
@@ -313,6 +407,30 @@ them is**, and the gap is large enough to author against:
 The practical rule: **author a deliberate lead or lag on top of what the mixer
 already supplies, not from zero.** A gesture that "feels late" in the keyframes
 is usually a channel whose τ you have paid for twice.
+
+## The held-head budget — `headHold`
+
+Four layers hold a head pose and none of them knows about the others: the
+state's attitude, the gaze (a look's head share, and its drift), a phrase's
+pose while speaking, and the idle posture. Each stays small; every so often
+they all point the same way, and the head arrives somewhere no one layer asked
+for. On a drawing that is merely a large turn. On a 2.5-D photograph it is
+past where the asset holds together — and since the two conversational states
+are almost the whole of a call, it is where the face is judged.
+
+`headHold` is per axis, in pose units, and the rig supplies it, because how far
+a face can hold its head off centre is a measurement of *that* drawing or
+photograph. The sum of the held layers is folded into it by `soften`
+([head.js](../packages/avatar/src/head.js)): identity below 70 % of the
+budget — where a recorded minute of either state spends its median — and an
+exponential approach above, so the limit is reached only in the limit and the
+head never stops dead at a stop. Only the excess is taken off, and only off the
+hold: a nod, a beat and a clip delta are transients, they are read as movement
+rather than as a pose, and they keep every degree they were authored with.
+
+An axis left out is unbudgeted, which is every face that has never been
+measured. `packages/avatar/test/three/presence.test.ts` is where the two states
+are measured against it, in degrees.
 
 ## Events, gains, introspection
 

@@ -11,7 +11,8 @@
  * See the jsdom rAF note in `mount.smoke.test.ts`; same gap, same stub.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createAvatar, type AvatarFactory } from "../client/index.js";
+import { createAvatar, supports, type AvatarFactory } from "../client/index.js";
+import { ACTION_IDS, ACTIONS, CORE_ACTION_IDS } from "../client/internal.js";
 
 let rafPolyfilled = false;
 
@@ -152,5 +153,30 @@ describe("a third-party avatar", () => {
     avatar.destroy();
     expect(fake.subscriptions).toBe(0);
     expect(mount.childElementCount).toBe(0);
+  });
+});
+
+describe("the supports declaration", () => {
+  // Nothing enforces `supports` at runtime — it is what an avatar *says* it
+  // answers to, read only by a UI that drives one. So the drift it can suffer
+  // is silent, and this is the only place that looks: a name with no clip
+  // behind it, or a clip the list forgot, both produce a button that lies.
+  it("is the two required ids plus every clip this renderer publishes", () => {
+    for (const id of CORE_ACTION_IDS) expect(supports.actions).toContain(id);
+    for (const id of ACTION_IDS) expect(supports.actions).toContain(id);
+    expect(new Set(supports.actions).size).toBe(supports.actions.length);
+
+    for (const id of supports.actions) {
+      if ((CORE_ACTION_IDS as readonly string[]).includes(id)) continue;
+      // `ACKNOWLEDGE` is the one name with no clip, because it resolves on the
+      // floor to one of two that have one — hence the skip above, not here.
+      expect(ACTIONS[id as keyof typeof ACTIONS], id).toBeDefined();
+    }
+  });
+
+  it("claims all nine states by omitting them", () => {
+    // The narrower claim is the optional one: every avatar must accept all
+    // nine, and these faces draw all nine apart.
+    expect(supports.states).toBeUndefined();
   });
 });

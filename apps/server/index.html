@@ -91,7 +91,7 @@
   }
   #log li { display: flex; gap: 8px; white-space: nowrap; }
   #log .t { color: #5b616b; }
-  #log .claim { color: var(--live); }
+  #log .state { color: var(--live); }
   #log .action { color: var(--ok); }
   #log .cues { color: var(--dim); }
 
@@ -128,7 +128,7 @@
         <select id="lines" aria-label="Line to say"></select>
         <button id="say" class="go">Say</button>
       </div>
-      <div class="row" id="claims" aria-label="Claim a state"></div>
+      <div class="row" id="states" aria-label="Send a state"></div>
       <div class="row" id="actions" aria-label="Send an action"></div>
       <div class="row">
         <select id="misbehaviours" aria-label="Misbehaviour"></select>
@@ -186,7 +186,7 @@ function say(kind, text) {
 function logAvatar(raw) {
   const msg = raw?.type === "avatar" ? raw : raw?.data;
   if (msg?.type !== "avatar") return;
-  if (msg.cmd === "claim") say("claim", `claim ${msg.state ?? "null"}`);
+  if (msg.cmd === "state") say("state", `state ${msg.state ?? "null"}`);
   else if (msg.cmd === "action") say("action", `action ${msg.id}`);
   else if (msg.cmd === "cues") {
     say("cues", `cues from ${msg.from_ms}ms ×${msg.cues?.length ?? 0}${msg.final ? " final" : ""}`);
@@ -245,15 +245,17 @@ options(lines, corpus.lines.map((n) => [n.id, `${n.tag} · ${n.text}`]));
 document.getElementById("say")
   .addEventListener("click", () => post("/api/say", { id: lines.value }));
 
-// `null` clears the claim, and clearing is a real command rather than a missing
+// `null` clears the state, and clearing is a real command rather than a missing
 // one — the face has to be told the agent stopped thinking.
-for (const state of corpus.claims) {
-  control("claims", state.toLowerCase(), () => post("/api/claim", { state }));
+for (const state of corpus.states) {
+  control("states", state.toLowerCase(), () => post("/api/state", { state }));
 }
-control("claims", "clear", () => post("/api/claim", {}));
+control("states", "clear", () => post("/api/state", {}));
 
 for (const action of corpus.actions) {
-  // The vocabulary prefixes are what group them; the verb is what you press.
+  // The name prefixes are what group them; the verb is what you press. Two of
+  // these are wire actions and the rest are the mounted face's own, which is a
+  // distinction the button cannot show and the server's list already made.
   const label = action.replace(/^(ACK|GESTURE|RESPONSE)_/, "").toLowerCase();
   control("actions", label, () => post("/api/action", { action }));
 }
@@ -285,7 +287,7 @@ const client = new PipecatClient({
       badge.textContent = "offline"; badge.className = "";
       driveable(false);
     },
-    onBotReady: () => say("claim", "bot ready"),
+    onBotReady: () => say("state", "bot ready"),
     onTrackStarted: (track, participant) => {
       if (participant?.local || track.kind !== "audio") return;
       botAudio.srcObject = new MediaStream([track]);

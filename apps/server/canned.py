@@ -387,7 +387,7 @@ class CannedLLMService(LLMService):
     #: How long to hold each pre-speech beat, in ms. `0` skips it.
     #:
     #: A real LLM takes a second to think and longer to run a tool, and the whole
-    #: point of the claim vocabulary is what the face does during that second.
+    #: point of the state vocabulary is what the face does during that second.
     #: This service answers instantly, so without a deliberate pause the states
     #: exist on the wire and never on screen — the first run showed a face that
     #: only ever listened and spoke, and nobody could tell the difference between
@@ -489,7 +489,7 @@ class CannedLLMService(LLMService):
         if self._tool_call_id is not None:
             # A cancelled task never reaches its own result frame, and nothing
             # else retires a call. Left unsaid, the avatar spends the rest of
-            # the session claiming `WORKING` on a tool that stopped existing.
+            # the session holding `WORKING` on a tool that stopped existing.
             await self.push_frame(
                 FunctionCallCancelFrame(
                     function_name="canned_tool", tool_call_id=self._tool_call_id
@@ -498,9 +498,9 @@ class CannedLLMService(LLMService):
             self._tool_call_id = None
 
     async def preamble(self) -> None:
-        """Hold the pre-speech beats — as the frames a real LLM emits, not as claims.
+        """Hold the pre-speech beats — as the frames a real LLM emits, not as commands.
 
-        These used to be `AvatarControlFrame` claims, on the reasoning that
+        These used to be `AvatarControlFrame` states, on the reasoning that
         thinking is not a frame. It is, near enough. `LLMFullResponseStartFrame`
         goes out *before* the model is asked, so the stretch from there to the
         first audible word is the wait itself, and `AvatarProcessor` infers
@@ -510,16 +510,16 @@ class CannedLLMService(LLMService):
 
         Faking both meant this server exercised the one path a real deployment
         never takes while the inference every deployment depends on went unrun.
-        That is how a claimless model-latency window survived to be reported from
+        That is how a stateless model-latency window survived to be reported from
         a live call rather than caught here.
 
-        There is no clear any more, and none is missing: a claim raised by
+        There is no clear any more, and none is missing: a state raised by
         inference is retired by inference. `BotStartedSpeakingFrame` ends the
         wait; the tool's result ends the work.
 
         The call is cancelled rather than left dangling if the turn is abandoned
         — see `_abandon_turn`. A tool with no result and no cancel is a `WORKING`
-        claim with nothing left to retire it.
+        state with nothing left to retire it.
         """
         if self.think_ms > 0:
             await asyncio.sleep(self.think_ms / 1000)
@@ -553,7 +553,7 @@ class CannedLLMService(LLMService):
         is synthesised late or not at all.
 
         `preamble=False` is for the misbehaviours, which author a precise
-        sequence of their own and would be describing a different one if a beat
+        order of their own and would be describing a different one if a beat
         were injected into it.
         """
         await self.push_frame(LLMFullResponseStartFrame())

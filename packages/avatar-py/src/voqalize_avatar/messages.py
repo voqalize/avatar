@@ -2,7 +2,7 @@
 
 Everything travels as one RTVI `server-message` shape:
 
-    {"type": "avatar", "cmd": "claim", "state": "THINKING"}
+    {"type": "avatar", "cmd": "state", "state": "THINKING"}
 
 `type` is the whole envelope. There is no version field: RTVI carries the payload
 opaquely, so a version would have been ours to invent and ours to check, and
@@ -22,28 +22,39 @@ from typing import Any
 AVATAR_MESSAGE_TYPE = "avatar"
 
 
-class AvatarClaim(StrEnum):
+class AvatarState(StrEnum):
     """Durable server intent below Pipecat's factual speech states.
+
+    Three of the nine, and the only three a server may send: the other six are
+    Pipecat facts the browser already holds, and a server spelling of a fact
+    would be a second, lower-authority copy of it.
 
     Ordered most to least urgent, which is also the order the state machine
     resolves them in when more than one condition holds at once.
     """
 
-    STRAINING = "STRAINING"
+    CANT_HEAR = "CANT_HEAR"
     THINKING = "THINKING"
     WORKING = "WORKING"
 
 
 class AvatarAction(StrEnum):
-    """The compact, semantic server action vocabulary."""
+    """The two actions every avatar must answer to.
 
-    ACK_RECEIVE = "ACK_RECEIVE"
-    ACK_NOD = "ACK_NOD"
+    The wire's action vocabulary is **open** — an id is a name resolved against
+    whatever is mounted, and an unknown one is ignored — so this enum is not the
+    vocabulary. It is the part of it a server may send without knowing which
+    face is on the other end, which is why `AvatarMessage.action` accepts a
+    plain string too.
+
+    `ACKNOWLEDGE` is the whole backchannel family in one word: a receipt, a
+    continuer nod, a realisation and an empathy beat are four *shapes* of
+    acknowledging, and which one a face makes is a rendering decision. The
+    server's job is to know that an acknowledgement is due.
+    """
+
+    ACKNOWLEDGE = "ACKNOWLEDGE"
     RESPONSE_INTERRUPTED = "RESPONSE_INTERRUPTED"
-    GESTURE_GREET = "GESTURE_GREET"
-    GESTURE_GOODBYE = "GESTURE_GOODBYE"
-    GESTURE_APPROVE = "GESTURE_APPROVE"
-    GESTURE_WAIT = "GESTURE_WAIT"
 
 
 @dataclass(frozen=True)
@@ -68,13 +79,19 @@ class AvatarMessage:
     # ─── Builders ───────────────────────────────────────────────────────
 
     @classmethod
-    def claim(cls, state: AvatarClaim | None) -> AvatarMessage:
-        """Set or clear a durable lower-priority server claim."""
-        return cls(cmd="claim", payload={"state": None if state is None else str(state)})
+    def state(cls, state: AvatarState | None) -> AvatarMessage:
+        """Set or clear the durable lower-priority server state."""
+        return cls(cmd="state", payload={"state": None if state is None else str(state)})
 
     @classmethod
     def action(cls, action: AvatarAction | str) -> AvatarMessage:
-        """Start a self-completing authored face and/or hand action."""
+        """Start a self-completing authored face and/or hand action.
+
+        A plain string is deliberately allowed: beyond the two core ids the
+        vocabulary is the mounted avatar's own, and a server that knows which
+        face is on the other end may name one of its motions. A face without
+        that name ignores the message.
+        """
         return cls(cmd="action", payload={"id": str(action)})
 
     @classmethod

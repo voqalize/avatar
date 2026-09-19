@@ -32,9 +32,9 @@ write:
 
 - **There is no build step, and that is deliberate.** `packages/avatar/src/` is dependency-free
   ES modules loaded straight into the browser: edit the file, reload the page,
-  look. Your module may import from `packages/avatar/src/` and nothing else — not `packages/avatar/client/`, not
-  `apps/studio/`, no npm package. A face that needs a bundler has broken the shape of
-  the project even if it renders.
+  look. Your module may import from `packages/avatar/src/` and nothing else — not
+  `packages/avatar/client/`, no npm package. A face that needs a bundler has
+  broken the shape of the project even if it renders.
 - **Roughly sixty times a second the mixer hands you one object of ~30 floats
   and you write it into the DOM.** There is no animation in your module: no
   timer, no `requestAnimationFrame`, no easing, no state that survives a frame.
@@ -77,11 +77,10 @@ export const <yourname> = { create: createFace, meta: META };
   a face is passed; there is no registry and no name to resolve
   ([Shipping a face](#shipping-a-face)).
 
-**A face must be callable standalone.** Three rig-tooling pages —
-`apps/authoring/contact-sheet.html`, `apps/authoring/torso-check.html` and
-`apps/authoring/clip-strip.html` — call `FACES[name].create(mount)` directly with no
-mixer and drive `apply()` from a raw vector; a face that only works under
-`createAvatar` is broken.
+**A face must be callable standalone.** The rig-tooling pages — the contact
+sheet, the torso check, the clip strip — call `FACES[name].create(mount)`
+directly with no mixer and drive `apply()` from a raw vector; a face that only
+works under `createAvatar` is broken.
 
 ### What you implement, and what you get free
 
@@ -245,11 +244,11 @@ face.apply(makeParams({ mouthOpen: 0.85, headYaw: 0.4 }));
 
 `makeParams` fills every channel from `REST` and applies your overrides on top,
 so you can name only the channel you are looking at. That is the whole harness
-the rig pages use, and `apps/authoring/control-plane.html` is a ready-made one:
-`packages/avatar/src/face-peep-control-plane.js` is peep with all static art deleted and only
-the elements `apply()` writes left behind, so you can see exactly which nodes a
-frame actually touches. `window.pose({ mouthOpen: .7, teethUpper: 1 })` in the
-console of that page.
+the rig pages use, and `packages/avatar/src/face-peep-control-plane.js` ships for
+the same purpose: peep with all static art deleted and only the elements
+`apply()` writes left behind, so a page that mounts it shows exactly which nodes
+a frame actually touches. Expose your `apply` on `window` and you can pose it
+from the console.
 
 ### What the skeleton does not do
 
@@ -483,9 +482,9 @@ Adding a face to *this* repo is four edits, and the first one is worth doing on
 day one because every review tool enumerates that table:
 
 1. **`packages/avatar/src/faces.js`** — import your module and add a row to `FACES`. That is
-   what makes the face visible to `rig-check`, the contact sheet, the torso
-   check, the clip strip, `apps/authoring/tools/baseline.mjs` and the conformance
-   sweep in `pnpm test`. `FACE_NAMES` and `DEFAULT_FACE` follow from it;
+   what makes the face visible to every review view — the rig check, the contact
+   sheet, the torso check, the clip strip, the headless screenshot set — and to
+   the conformance sweep in `pnpm test`. `FACE_NAMES` and `DEFAULT_FACE` follow from it;
    `DEFAULT_FACE` stays `peep` unless a stakeholder says otherwise.
 2. **A `.d.ts` beside the module**, three lines: `createFace`, `META`, `THEME`
    and the record, typed from `./avatar.js` exactly as `packages/avatar/src/face-peep.d.ts`
@@ -493,8 +492,9 @@ day one because every review tool enumerates that table:
 3. **A `package.json` `exports` entry** for `./faces/<name>`, pointing at the
    `.js` and the `.d.ts`. Separate entry points are why importing one face costs
    one drawing.
-4. **`apps/studio/src/look.ts`**, only if the face should be selectable in Studio —
-   which imports the published subpaths, never `packages/avatar/src/`.
+4. **Your review surface's face list**, only if the face should be selectable
+   there. Ours imports the published subpaths, never `packages/avatar/src/`,
+   which is what keeps it honest about what a consumer can reach.
 
 Both halves of the record are required. `create` without `meta` used to be
 tolerated, with `viewBox` re-read off the produced svg — a face could ship half
@@ -513,8 +513,7 @@ here.
 Palettes: there is no barrel `THEME` export — each face module owns its
 palette, and `api.theme` returns the mounted avatar's. A host needs it whenever
 it paints anything *around* the 4:3 widget, such as the remaining area of a
-16:9 call tile. `apps/server/index.html` and `apps/studio/src/styles.css` do the
-plain version. Reshaping the art to fit a host's box is the wrong fix; the
+16:9 call tile. `apps/server/index.html` does the plain version. Reshaping the art to fit a host's box is the wrong fix; the
 widget does not control the box. peep has
 no dark palette **by decision** (inverting two-value line art recolours the
 hair and ages the character; that is geometry wearing a palette's clothes) —
@@ -551,54 +550,52 @@ then plays the face half alone.
 
 ## Checklist for a new avatar
 
-Setup, once: `pnpm install` at the repository root (for `pnpm test` and the
-headless tools), then serve.
+Setup, once: `pnpm install` at the repository root (for `pnpm test`), then serve
+the tree over HTTP — `packages/avatar/src/` has no build step, so a static server
+at the repository root is the entire development loop.
 
-```sh
-python3 apps/authoring/serve.py   # never python3 -m http.server; open the URL it prints
-                                  # index.html describes every page
-```
+**Serve it with something that sends `Cache-Control: no-store`.** Python's
+`http.server` sends `Last-Modified` and no `Cache-Control`, so browsers apply
+heuristic freshness and stop revalidating modules you have edited. That has cost
+this project three debugging sessions, one of which produced a module error that
+was simply a lie. Do not work around it with `?v=` either — that puts two copies
+of the module in the graph and fails differently and worse.
 
-**Use `serve.py`.** The stdlib server sends `Last-Modified` and no
-`Cache-Control`, so browsers apply heuristic freshness and stop revalidating
-modules you have edited. That has cost this project three debugging sessions,
-one of which produced a module error that was simply a lie. Do not work around
-it with `?v=` either — that puts two copies of the module in the graph and
-fails differently and worse.
+**The seven views below are the review, and each is named by what it shows
+rather than by a file.** The pages that implement them are the maintainers'
+workshop and are not published; the harness in
+[The smallest face that works](#the-smallest-face-that-works) is all any of them
+is — mount a face, write a pose
+vector, look — so an outside author builds the one they need in an afternoon and
+loses nothing but our styling. Each also renders headlessly to a PNG, which is
+how you review a face with no browser open and keep a record of what it looked
+like yesterday. All of them want your face registered in
+`packages/avatar/src/faces.js`, so do that first.
 
-The pages below want your face registered in `packages/avatar/src/faces.js`, so do that first.
-Anything on a page can also be rendered headlessly to a PNG —
-`apps/authoring/tools/shot.mjs` for one page, `baseline.mjs` for the standard set,
-`diff.mjs` to prove a refactor changed no pixel, `motion.mjs` to measure how
-much actually moves ([apps/authoring/tools/README.md](../apps/authoring/tools/README.md)).
-That is how you review a face without a browser open, and how you keep a record
-of what it looked like yesterday.
-
-1. `apps/authoring/rig-check.html` — every registered avatar side by side, driven by
-   one command, so any difference on screen is the drawing and never the
-   driving. First place to open; also carries the **run sweep** button and
-   `window.pose({…})` from the console.
-2. `apps/authoring/contact-sheet.html?face=NAME` — every viseme, emotion, gaze and
+1. **The rig check** — every registered avatar side by side, driven by one
+   command, so any difference on screen is the drawing and never the driving.
+   First place to look; ours also runs the conformance sweep in the page and
+   takes a pose object from the console.
+2. **The contact sheet**, one face — every viseme, emotion, gaze and
    channel extreme. Check the **mouth-detail crop row**, not just full heads:
    two visemes can be numerically distinct and visually identical (`G` vs `B`
    both read as a white strip until `G` was rebuilt as nearly-all-teeth). At
    avatar size a viseme is ~40 px tall; letter collisions are invisible on the
    full-head row. The crop row frames itself from your `META.mouthCrop`.
-3. `apps/authoring/torso-check.html?face=NAME` — shoulders × lean × head pose.
-   These channels only fail *in combination*; this is where a rig leaks
-   background from behind the shirt if it is going to.
-4. `apps/authoring/clip-strip.html?clip=NOD_SMALL&face=NAME` — phase relationships
-   through the mixer's own smoothing, as a filmstrip.
+3. **The torso check** — shoulders × lean × head pose. These channels only fail
+   *in combination*; this is where a rig leaks background from behind the shirt
+   if it is going to.
+4. **The clip strip**, one clip — phase relationships through the mixer's own
+   smoothing, as a filmstrip.
 5. `pnpm test` — the conformance sweep: params finite,
    `|v| ≤ 2`, svg connected, across every state/emotion/gaze/interjection and
    a viseme track, plus `checkHandFraming` against your window and a pass of
-   every hand gesture. (`apps/authoring/rig-check.html`'s **run sweep** button is the
-   same sweep in real time, if you want to watch it land.) It also cannot see
-   *looks*; it reaches shoulders/torso
+   every hand gesture. (The rig check runs the same sweep in the page, if you
+   want to watch it land.) It also cannot see *looks*; it reaches shoulders/torso
    only through clips, so drive those with a `setOverrides` loop over
-   `[-1, 0, 1]` per channel — and look at one hand gesture at peak extension
-   (`apps/authoring/body-lab.html?face=NAME&gesture=GESTURE_GREET&at=0.4`), because figure/ground
-   between hand and shirt is a judgement the framing check cannot make.
+   `[-1, 0, 1]` per channel — and look at one hand gesture held at peak
+   extension, because figure/ground between hand and shirt is a judgement the
+   framing check cannot make.
 6. Auto-traced art has known failure modes to budget for: zero-margin abutting
    contours open seams under parallax; the trace stops at the source crop;
    hard horizontal edges invisible in the source appear under motion.
@@ -644,6 +641,12 @@ Both halves of the old Direction section landed (`packages/avatar/src/face-core.
 `META`), and the recipe has been run end-to-end twice: `wren` as the plumbing
 proof, and `myna` (2026-08-07) as the proof of the *staged* process below —
 which is where the time and the judgement actually went.
+
+This is the SVG recipe. A 2.5-D character has its own, and it is not
+published: the Blender pipeline that compiles one is the part of this project
+that stays private, so a character arrives here as a finished GLB in
+`packages/avatar/assets/`. Stage 0 below applies to it unchanged — the reference
+is the identity spec — and so does everything after production calibration.
 
 ### The staged process
 
@@ -716,8 +719,8 @@ A new face module supplies:
 What you get for free: the mixer, visemes, emotions, gaze, idle, clips,
 interjections, the frame-edge hand (§ The hand — it needs only your viewBox and
 two theme keys), the pose mechanics, the memoizer, and every tool whose job is
-comparing faces — `apps/authoring/rig-check.html`, the contact sheet, the torso
-check, the clip strip and the conformance sweep all enumerate `packages/avatar/src/faces.js`.
+comparing faces — the rig check, the contact sheet, the torso check, the clip
+strip and the conformance sweep all enumerate `packages/avatar/src/faces.js`.
 The wren run measured the split: the
 plumbing steps (2, 4, 5) are mechanical; the art (step 1) and the read of
 every state at tile size (the checklist) are where the judgement — and the

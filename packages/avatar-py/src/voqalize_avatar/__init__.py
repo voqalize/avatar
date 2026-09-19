@@ -28,16 +28,16 @@ from .frames import AvatarControlFrame
 from .messages import (
     AVATAR_MESSAGE_TYPE,
     AvatarAction,
-    AvatarClaim,
     AvatarMessage,
+    AvatarState,
 )
 from .processor import AvatarProcessor
 
 __all__ = [
     "AVATAR_MESSAGE_TYPE",
     "AvatarAction",
-    "AvatarClaim",
     "AvatarControlFrame",
     "AvatarMessage",
     "AvatarProcessor",
+    "AvatarState",
 ]

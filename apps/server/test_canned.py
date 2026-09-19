@@ -198,9 +198,9 @@ class Chain:
         records `LLMFullResponseEndFrame` in the same breath as the push — while
         everything the turn emitted earlier is still sitting in a queue further
         down. Anything read at `out` at that moment is a snapshot of a pipeline
-        mid-flight: a tool result the avatar has not dequeued yet is a claim that
-        has not been inferred yet, and the claim list comes back one beat short
-        about half the time.
+        mid-flight: a tool result the avatar has not dequeued yet is a state
+        that has not been inferred yet, and the state list comes back one beat
+        short about half the time.
 
         The end frame at `out` is the honest barrier, and it is the same argument
         `__aenter__` makes about `StartFrame`. Both it and every frame the LLM
@@ -362,23 +362,23 @@ async def test_turns_advance_through_the_corpus(lines: CannedLines) -> None:
 
 
 async def test_the_beats_are_inferred_rather_than_announced(lines: CannedLines) -> None:
-    """`THINKING`, then `WORKING`, and nobody claimed either one.
+    """`THINKING`, then `WORKING`, and the application authored neither one.
 
     The point of the whole test is the seat it reads from. This server used to
-    push the two states as `AvatarControlFrame` claims, so what it proved was
-    that a claim travels — which was never in doubt. Reading the avatar's own
+    push the two states as `AvatarControlFrame` messages, so what it proved was
+    that a state travels — which was never in doubt. Reading the avatar's own
     output instead measures the path a real deployment takes: an ordinary LLM
     response frame and an ordinary tool call, inferred into the same two states
     by a processor nothing told.
 
-    Order is the rest of the assertion. A claim is durable, so one that lands
+    Order is the rest of the assertion. A state is durable, so one that lands
     after the sentence it belonged to leaves the face in it.
     """
     async with Chain(lines, avatar=True, think_ms=40, work_ms=40) as chain:
         await chain.push(UserStoppedSpeakingFrame())
         await chain.completed()
 
-        assert _claims(chain) == ["THINKING", "WORKING", "THINKING"]
+        assert _states(chain) == ["THINKING", "WORKING", "THINKING"]
         # The application authored no avatar traffic at all.
         assert chain.mid.of(AvatarControlFrame) == []
 
@@ -397,11 +397,11 @@ async def test_a_beat_of_zero_is_skipped_entirely(lines: CannedLines) -> None:
         await chain.push(UserStoppedSpeakingFrame())
         await chain.completed()
 
-        assert _claims(chain) == ["THINKING"]
+        assert _states(chain) == ["THINKING"]
         assert not chain.mid.of(FunctionCallInProgressFrame)
 
 
-async def test_an_interruption_mid_tool_retires_the_working_claim(
+async def test_an_interruption_mid_tool_retires_the_working_state(
     lines: CannedLines,
 ) -> None:
     """The one way a canned tool call can end without a result.
@@ -412,7 +412,7 @@ async def test_an_interruption_mid_tool_retires_the_working_claim(
     """
     async with Chain(lines, avatar=True, work_ms=5_000) as chain:
         await chain.push(UserStoppedSpeakingFrame())
-        await chain.until(lambda: _claims(chain) == ["THINKING", "WORKING"])
+        await chain.until(lambda: _states(chain) == ["THINKING", "WORKING"])
 
         await chain.push_up(BotStartedSpeakingFrame())
         await chain.push(InterruptionFrame())
@@ -422,14 +422,14 @@ async def test_an_interruption_mid_tool_retires_the_working_claim(
         # The end of playout is where a stranded call would show itself: with
         # nothing else set, `WORKING` is what the ladder resolves to. Cancelled,
         # it resolves to nothing and the last thing said stands.
-        assert _claims(chain) == ["THINKING", "WORKING", None]
+        assert _states(chain) == ["THINKING", "WORKING", None]
 
 
-def _claims(chain: Chain) -> list[str | None]:
+def _states(chain: Chain) -> list[str | None]:
     return [
         f.data["state"]
         for f in chain.out.of(RTVIServerMessageFrame)
-        if f.data.get("cmd") == "claim"
+        if f.data.get("cmd") == "state"
     ]
 
 

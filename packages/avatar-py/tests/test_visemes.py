@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
+from array import array
 from dataclasses import dataclass
 from itertools import pairwise
 from pathlib import Path
@@ -36,6 +38,8 @@ from voqalize_avatar.avatarsync import (
     AvatarsyncEngine,
     AvatarsyncPaths,
     Cue,
+    LoudnessTrack,
+    with_intensity,
 )
 from voqalize_avatar.visemes import (
     VisemeEngine,
@@ -121,10 +125,24 @@ def assert_wire_valid(cues: list[Cue]) -> None:
     times = [cue.t for cue in cues]
     assert times == sorted(times), "cues are not sorted"
     assert len(set(times)) == len(times), "duplicate cue times"
-    assert all(b - a >= MIN_VISIBLE_CUE_MS for a, b in pairwise(times)), (
-        "a cue is shorter than the widget's minimum"
-    )
-    assert all(a.v != b.v for a, b in pairwise(cues)), "repeated shape"
+    # Every invariant below is about *mouth positions*, which is not the same
+    # thing as cues any more: consecutive cues may repeat a shape and differ
+    # only in the phone underneath it. So a repeat has to say something new,
+    # and the widget's minimum — a statement about what the eye can resolve —
+    # is measured between the moments the mouth actually moves. A cue 10 ms
+    # before a shape change is legal when nothing is visible at it, which is
+    # the same distinction `normalize_cues` makes over its run heads.
+    for a, b in pairwise(cues):
+        if a.v == b.v:
+            assert a.p != b.p, f"repeated shape at {b.t} with nothing new under it"
+    changed = cues[0].t
+    for a, b in pairwise(cues):
+        if a.v == b.v:
+            continue
+        assert b.t - changed >= MIN_VISIBLE_CUE_MS, (
+            f"the mouth changes at {b.t}, {b.t - changed} ms after the last change"
+        )
+        changed = b.t
 
 
 def assert_wire_clean(cues: list[Cue]) -> None:
@@ -142,16 +160,21 @@ def assert_wire_clean(cues: list[Cue]) -> None:
 
 
 def test_normalize_matches_the_cross_runtime_fixture() -> None:
-    """Python owns optional phones; the browser owns local intensity defaults.
+    """The browser owns local intensity defaults; everything else must agree.
 
-    Both must otherwise make the identical visible `(t, v)` decision. The
-    shared fixture is deliberately outside either runtime's test tree so a
+    Both runtimes must make the identical visible `(t, v)` decision and the
+    identical `p` one, so each case is compared on the keys its expected output
+    declares: the shape cases stay about shapes and the phone cases assert both.
+    The shared fixture is deliberately outside either runtime's test tree so a
     future normalizer change cannot update just its own expectations.
     """
     fixture = json.loads(NORMALIZATION_FIXTURE.read_text())
     for case in fixture["cases"]:
-        actual = [{"t": cue.t, "v": cue.v} for cue in normalize_cues([Cue(**cue) for cue in case["input"]])]
-        assert actual == case["output"], case["name"]
+        keys = list(dict.fromkeys(k for cue in case["output"] for k in cue))
+        got = normalize_cues([Cue(**cue) for cue in case["input"]])
+        actual = [{k: getattr(cue, k) for k in keys} for cue in got]
+        expected = [{k: cue.get(k) for k in keys} for cue in case["output"]]
+        assert actual == expected, case["name"]
 
 
 def test_clip_track_carries_the_shape_in_force_rather_than_dropping_it() -> None:
@@ -188,6 +211,103 @@ def test_cues_to_wire_shape() -> None:
         {"t": 0, "v": "A", "p": "M"},
         {"t": 30, "v": "X"},
     ]
+
+
+def test_cues_to_wire_carries_the_level_when_something_measured_it() -> None:
+    assert cues_to_wire([Cue(0, "C", "AA", 0.5), Cue(30, "X")]) == [
+        {"t": 0, "v": "C", "p": "AA", "i": 0.5},
+        {"t": 30, "v": "X"},
+    ]
+    # Rounded: three decimals is already finer than the mouth renders, and the
+    # digits past it are decode noise paid for on every cue of every turn.
+    assert cues_to_wire([Cue(0, "C", None, 1 / 3)])[0]["i"] == 0.333
+
+
+# ── loudness ─────────────────────────────────────────────────────────────────
+
+
+def square(dbfs: float, ms: int, rate: int = RATE) -> bytes:
+    """A zero-mean square wave at exactly `dbfs` — its amplitude is its RMS."""
+    amplitude = round(10 ** (dbfs / 20) * 32768)
+    samples = array(
+        "h", (amplitude if n % 2 == 0 else -amplitude for n in range(ms * rate // 1000))
+    )
+    if sys.byteorder == "big":
+        samples.byteswap()
+    return samples.tobytes()
+
+
+def test_loudness_track_measures_a_known_level() -> None:
+    """The intensity window is stated in dBFS, so the accumulator underneath it
+    has to agree with that unit — an energy sum that is merely monotonic would
+    put the floor and the ceiling in the wrong places."""
+    for level in (-6.0, -20.0, -32.0):
+        track = LoudnessTrack()
+        track.feed(square(level, 200), RATE)
+        measured = track.dbfs(0, 200)
+        assert measured is not None
+        assert abs(measured - level) < 0.1, f"{level} dBFS read back as {measured}"
+
+
+def test_loudness_is_the_same_however_the_frames_are_cut() -> None:
+    """A TTS picks its own frame size and the mouth may not depend on it.
+
+    The track infers a frame's position from what preceded it, so the case worth
+    pinning is a frame length that does not divide into the blocks — 70 ms lands
+    mid-block at both ends of every chunk after the first.
+    """
+    pcm = square(-20.0, 500)
+    levels = []
+    for chunk_ms in (70, 200, 500):
+        track = LoudnessTrack()
+        step = chunk_ms * RATE // 1000 * 2
+        for at in range(0, len(pcm), step):
+            track.feed(pcm[at : at + step], RATE)
+        level = track.dbfs(100, 400)
+        assert level is not None
+        levels.append(level)
+    assert max(levels) - min(levels) < 0.01, f"frame size changed the level: {levels}"
+
+
+def test_loudness_reads_nothing_past_the_fed_edge() -> None:
+    """What keeps `i` off a cue no audio has reached.
+
+    The hold-back means the accurate leg always has the audio under its own
+    cues, but the predicted tail rides in the same emission and must come out
+    unmeasured rather than measured as silence — silence is a real level, and a
+    floored mouth is not the same as an unstated one.
+    """
+    track = LoudnessTrack()
+    track.feed(square(-20.0, 200), RATE)
+    assert track.dbfs(0, 200) is not None
+    assert track.dbfs(400, 600) is None
+    assert LoudnessTrack().dbfs(0, 100) is None, "no audio at all cannot be a level"
+
+
+def test_trimming_a_settled_sentence_keeps_later_lookups_correct() -> None:
+    """Bounding the memory must not bound the correctness: cue times stay on the
+    turn's timeline after a trim, not on the surviving buffer's."""
+    track = LoudnessTrack()
+    track.feed(square(-30.0, 300), RATE)
+    track.feed(square(-16.0, 300), RATE)
+    before = track.dbfs(300, 600)
+    track.trim(300)
+    assert track.dbfs(300, 600) == before
+
+
+def test_with_intensity_fills_the_window_and_leaves_silence_alone() -> None:
+    track = LoudnessTrack()
+    track.feed(square(-16.0, 300), RATE)
+    track.feed(square(-32.0, 300), RATE)
+    out = with_intensity([Cue(0, "C", "AA"), Cue(300, "B", "S"), Cue(600, "X")], track, 600)
+
+    assert out[0].i == pytest.approx(1.0, abs=0.02), "the ceiling is the top of the window"
+    assert out[1].i == pytest.approx(0.0, abs=0.02), "the floor is the bottom of it"
+    # Silence carries no level for the same reason it carries no phone: there is
+    # no shape whose size a level could describe.
+    assert out[2].i is None
+    # Shape and phone ride through untouched.
+    assert [(cue.t, cue.v, cue.p) for cue in out] == [(0, "C", "AA"), (300, "B", "S"), (600, "X", None)]
 
 
 async def test_the_wire_carries_the_phone_under_every_spoken_shape(
@@ -377,6 +497,48 @@ async def test_recognition_arrives_while_the_audio_is_still_arriving(
         assert all(cue.t >= call.from_ms for cue in call.cues)
         assert_wire_valid(call.cues)
 
+    await engine.end_turn(CTX)
+
+
+async def test_the_accurate_leg_puts_a_level_on_every_recognised_shape(
+    aligner: AvatarsyncEngine,
+) -> None:
+    """The point of the field, end to end and through every rebuild.
+
+    A flat track is the mouth the reviewers called *"repetitive… like a puppet's
+    mouth"*: every syllable the same size however hard it was said. So presence
+    is not what is asserted here — a constant `i` would satisfy that and change
+    nothing on the face — but *spread*, which is the thing the eye reads.
+
+    The predicted leg is checked in the same test because the two must differ:
+    it describes audio nobody has generated, so it has nothing to measure and
+    must say so by omission rather than by guessing a level.
+    """
+    recorder = Recorder()
+    engine = VisemeEngine(recorder, aligner)
+    pcm, text, _ = load_clip("thank-you-for-your-time-today")
+
+    await engine.on_sentence_queued(CTX, text)
+    await engine.flush(CTX)
+    assert all(cue.i is None for cue in recorder.calls[0].cues), (
+        "the predicted leg put a level on audio that does not exist yet"
+    )
+
+    await feed(engine, pcm + PAD_BYTES)
+    await engine.on_context_closed(CTX)
+    await engine.flush(CTX)
+
+    levels = [
+        cue.i
+        for call in recorder.calls
+        for cue in call.cues
+        if cue.v != "X" and cue.i is not None
+    ]
+    assert len(levels) > 10, "recognised shapes went out with no level at all"
+    assert all(0.0 <= level <= 1.0 for level in levels)
+    assert max(levels) - min(levels) > 0.2, (
+        f"every shape came out the same size ({min(levels):.2f}-{max(levels):.2f})"
+    )
     await engine.end_turn(CTX)
 
 

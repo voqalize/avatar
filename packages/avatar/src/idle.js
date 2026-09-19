@@ -17,6 +17,7 @@
  */
 
 import { approach } from './params.js';
+import { HeadPose } from './head.js';
 
 /**
  * An idle profile. Every state carries one (sparse — missing keys mean these
@@ -24,7 +25,13 @@ import { approach } from './params.js';
  * the layer, because an oscillator whose amplitude steps is a visible pop.
  *
  *   sway        0..~1.2  head-drift / brow-drift / shoulder / torso amplitude
- *   blinkGap    [min,max] seconds between spontaneous blinks
+ *   blinkGap    [min,max] seconds between blinks — ALL blinks. A blink the
+ *               face is made to do (a gaze shift, a state change, a pause in
+ *               speech) replaces the next timed one instead of adding to it,
+ *               so this is the state's rate whatever else is going on.
+ *   slowBlink   0..1 share of timed blinks drawn slow (0.34 s) — the heavy,
+ *               deliberate blink of someone thinking. A share of the budget,
+ *               not a second clock on top of it.
  *   breathRate  multiplier on the 0.23 Hz resting cycle (13.8/min)
  *   breathAmp   breath excursion scale; cognitive load = faster AND shallower
  *   hold        { every:[s,s], dur:[s,s] } — freeze the sway (breath continues).
@@ -41,10 +48,15 @@ import { approach } from './params.js';
  *               perfectly still. Amplitude rides on `sway`, which is how the
  *               cognitive states get the measured sway *suppression* under
  *               load (§6.2) without a second knob.
+ *   settle      [s,s] gap between the head's own small re-positionings, or
+ *               null for a head that only moves when something moves it.
+ *               Amplitude rides on `sway` too.
  */
 export const DEFAULT_PROFILE = {
   sway: 1.0,
+  settle: [1.8, 4.6],
   blinkGap: [1.9, 5.4],
+  slowBlink: 0,
   breathRate: 1.0,
   breathAmp: 1.0,
   hold: null,
@@ -54,6 +66,26 @@ export const DEFAULT_PROFILE = {
 };
 
 const rand = ([a, b]) => a + Math.random() * (b - a);
+
+// No evoked blink within this long of the last blink. A glance out and back
+// is two large gaze shifts a second apart and carries one blink, not two; and
+// a state change that lands on a gaze shift is one event to the eyelids.
+const BLINK_REFRACTORY = 1.5;
+
+// How far into the current gap an odds-rolled evoked blink may land, as a
+// fraction of that gap. A state that moves its gaze oftener than it blinks —
+// SEARCHING_SCREEN hops 42 times a minute against a 10/min budget, and nearly
+// every hop clears the ramp — would otherwise blink at its gaze's rate rather
+// than its own. This lets such a blink only *move* the next one onto a shift,
+// which is the half worth keeping (research-biomechanics.md §5.4: a blink at a
+// boundary is worth several placed at random), and not add one.
+//
+// 0.80 is where the trade turns, measured on tara's targets at 30 min a state:
+// SEARCHING_SCREEN falls from 2.12x its authored rate to 1.06x and
+// REVIEWING_SCREEN from 1.36x to 1.01x, while 54% of the former's blinks still
+// land on a hop. Tighter values buy hundredths of rate and halve that
+// placement — 0.90 holds only 26%.
+const EVOKED_EARLIEST = 0.80;
 
 /**
  * Postural weight shift: the one part of this layer that is not periodic, and
@@ -107,6 +139,58 @@ function nextPosture(prev) {
   };
 }
 
+/**
+ * The head's settle: where a person's head goes while nothing is moving it.
+ *
+ * It used to be a pair of slow sines per axis, and on tara that was two
+ * failures at once. At 0.05-0.09 Hz and under a degree it was too slow to see
+ * as motion, so a listening face read as frozen — "a dead stare, only blinks",
+ * in the video review that found it — and what could be seen of it was a head
+ * that never stops gliding, which is the other failure. A listener's head does
+ * neither: it is held, and every few seconds it re-positions — one to two
+ * degrees, over about half a second — and is held again (head.js). Pose units
+ * at sway 1; on tara a unit of yaw is 10.7°, of pitch 17.1°, of roll 5.7°. The
+ * first cut asked for about a degree and a recorded call measured it at 3 px
+ * of head travel, which is the frozen listener it was meant to fix.
+ *
+ * None of these is a nod. The renderer does not acknowledge on its own
+ * (CLAUDE.md), so a settle is one move, never a down-and-back — that property,
+ * and not a small number, is what keeps pitch off the wire's vocabulary. It was
+ * held to under a degree as well, which measured as a listening head with no
+ * pitch in it at all (1.05° peak over thirty seconds, against yaw's 5.5°), and
+ * a head that only ever turns is a head on a turntable. The range is wider now
+ * and still biased upward: a chin that drifts down and stays there is the
+ * downcast read, which on a photographed face arrives long before any other.
+ */
+const SETTLE = { yaw: [0.16, 0.34], pitch: [-0.11, 0.08], roll: [0.10, 0.28], dur: [0.45, 0.8], switchP: 0.7 };
+const HOME = { headYaw: 0, headPitch: 0, headRoll: 0 };
+
+/**
+ * The moving hold: what keeps a held head alive.
+ *
+ * Hold-and-move fixed the floating head, and the same reviewer then found the
+ * holds themselves uncanny — "absolute 0-velocity holds", a head locked while
+ * only the mouth moves. Animators met this long ago: a character that stops
+ * dead reads as a still frame, so a held pose keeps drifting by a fraction of
+ * its size: here a few tenths of a degree, small enough that a move still
+ * reads as the event. It runs in every state, speech included, and yields to
+ * a static hold, which is stillness on purpose.
+ *
+ * **It is not a sum of sines.** The first cut was, at 0.2-0.6 Hz, and the next
+ * review read it at once as floating underwater: a periodic sway is a loop,
+ * and people see loops. Human postural sway is a random walk, and it stops —
+ * a head drifts for a few seconds, then is quiet for a couple. So each axis
+ * glides to a new random offset every 0.6-2.2 s through two smoothing stages
+ * (an S-shaped approach, no overshoot, no rhythm), and a gate alternates
+ * drifting stretches with near-still ones. The body's idle drift takes the
+ * same gate, so a quiet head does not sit on a torso still rocking under it.
+ */
+const LIVE = {
+  yaw: 0.05, pitch: 0.02, roll: 0.05, breathPitch: 0.006,
+  retarget: [0.6, 2.2], tau: 0.38,
+  drift: [2.0, 5.0], still: [1.2, 3.5], stillGain: 0.12,
+};
+
 /** Ease so the shift has no corners at either end — a weight shift accelerates
  *  and settles, and a linear ramp between two postures reads as a slide. */
 const smoothstep = (x) => x * x * (3 - 2 * x);
@@ -125,8 +209,18 @@ export class IdleLayer {
     this._blinkT = -1;
     this._blinkDur = 0.13;
     this._double = false;
+    this._lastBlinkAt = -Infinity;
     // Two incommensurate frequencies per axis so the sway never visibly loops.
     this._ph = [Math.random() * 9, Math.random() * 9, Math.random() * 9];
+    // The moving hold (LIVE): per axis a random target, a first stage chasing
+    // it and the output chasing that; and the drift/still gate.
+    this._liveTo = [0, 0, 0];
+    this._liveA = [0, 0, 0];
+    this._liveB = [0, 0, 0];
+    this._liveAt = 0;
+    this._liveOn = true;
+    this._liveFlip = rand(LIVE.drift);
+    this._liveGate = 1;
     // Glided amplitudes (profiles set the target, these chase it).
     this._sway = 1;
     this._breathAmp = 1;
@@ -151,6 +245,11 @@ export class IdleLayer {
     this._shiftAt = 8;
     this._shiftT0 = -1;
     this._shiftDur = 2;
+    // Settle machine: the head's held pose, and when it next moves.
+    this._head = new HeadPose();
+    this._settleAt = 1 + Math.random() * 2;
+    this._settleSide = Math.random() < 0.5 ? -1 : 1;
+    this._settled = false;
     // Speech phrasing: a slow gain the talking body's excursion rides on, so
     // it comes in waves rather than as a steady hum.
     this._phrase = 0;
@@ -179,20 +278,53 @@ export class IdleLayer {
     }
   }
 
-  /** Force a blink now — used on gaze shifts and state transitions. */
-  blink(double = false) {
+  /**
+   * Blink now. `evoked` is a blink the face is made to do by something else —
+   * a large gaze shift, a state change, a pause in speech — and it is refused
+   * inside BLINK_REFRACTORY of the last one, and again before EVOKED_EARLIEST
+   * of the way through the current gap. Every blink, evoked or not, restarts
+   * the timer: people blink at a rate, and an event moves a blink earlier
+   * rather than adding one. Without that, a state that glances or wanders
+   * blinks at its timer's rate plus its gaze's, far past the rates in
+   * docs/research-biomechanics.md §5 that the gaps are set from.
+   *
+   * `forced` is a beat the state asked for by name — `glance.blinkTo` and
+   * `blinkBack`, the re-engagement the author wanted seen. It clears the budget
+   * gate but not the refractory: a state whose authored beats overrun its own
+   * rate is a decision to revisit in that state, not something for the eyelids
+   * to drop silently.
+   */
+  blink(double = false, evoked = false, forced = false) {
+    if (evoked) {
+      if (this.t - this._lastBlinkAt < BLINK_REFRACTORY) return;
+      const gap = this._nextBlink - this._lastBlinkAt;
+      if (!forced && this.t - this._lastBlinkAt < EVOKED_EARLIEST * gap) return;
+    }
+    this._startBlink(0.11 + Math.random() * 0.04, double);
+  }
+
+  _startBlink(dur, double) {
     if (this._blinkT >= 0) return;
     this._blinkT = 0;
     this._double = double;
-    this._blinkDur = 0.11 + Math.random() * 0.04;
+    this._blinkDur = dur;
+    this._lastBlinkAt = this.t;
+    this._nextBlink = this.t + rand(this.profile.blinkGap);
+  }
+
+  /**
+   * A blink placed by speech, at a pause. It also restarts the timer: a speaker
+   * who blinks at a clause boundary does not blink again a moment later
+   * because a clock said so, and the timer is only there to fill a long run
+   * of speech with no pauses in it.
+   */
+  phraseBlink() {
+    this.blink(false, true);
   }
 
   /** A slow, deliberate blink — reads as thinking or fatigue. */
   slowBlink() {
-    if (this._blinkT >= 0) return;
-    this._blinkT = 0;
-    this._double = false;
-    this._blinkDur = 0.34;
+    this._startBlink(0.34, false);
   }
 
   _blinkValue(dt) {
@@ -216,9 +348,13 @@ export class IdleLayer {
     const pr = this.profile;
 
     if (t >= this._nextBlink) {
+      // Re-armed here as well as in _startBlink, for the frame the timer comes
+      // due in the middle of a blink already running.
       this._nextBlink = t + rand(pr.blinkGap);
-      // Roughly one blink in six comes in a pair.
-      this.blink(Math.random() < 0.16);
+      // A share of them slow if the state asks for it; roughly one in six of
+      // the rest comes in a pair.
+      if (Math.random() < pr.slowBlink) this.slowBlink();
+      else this.blink(Math.random() < 0.16);
     }
     const blink = this._blinkValue(dt);
 
@@ -327,6 +463,49 @@ export class IdleLayer {
       this._flickT = -1;
     }
 
+    // The settle. Not while talking — speech holds and moves the head itself
+    // (prosody.js), and two layers each re-positioning it is a head with two
+    // minds — and never inside a static hold, which is stillness on purpose.
+    if (pr.settle && this.talk < 0.5) {
+      if (t >= this._settleAt && t >= this._holdUntil) {
+        this._settleAt = t + rand(pr.settle);
+        if (Math.random() < SETTLE.switchP) this._settleSide = -this._settleSide;
+        const m = this._sway * this.gain;
+        this._head.moveTo({
+          headYaw: this._settleSide * rand(SETTLE.yaw) * m,
+          headPitch: rand(SETTLE.pitch) * m,
+          headRoll: (Math.random() < 0.5 ? -1 : 1) * rand(SETTLE.roll) * m,
+        }, t * 1000, rand(SETTLE.dur) * 1000);
+        this._settled = true;
+      }
+    } else if (this._settled) {
+      this._settled = false;
+      this._head.moveTo(HOME, t * 1000, 600);
+    }
+    const hs = this._head.sample(t * 1000);
+    // The moving hold (LIVE). Only half of it rides on `sway`: a state that
+    // turns its drift down still has a living head.
+    if (t >= this._liveAt) {
+      this._liveAt = t + rand(LIVE.retarget);
+      for (let i = 0; i < 3; i++) this._liveTo[i] = Math.random() * 2 - 1;
+    }
+    if (t >= this._liveFlip) {
+      this._liveOn = !this._liveOn;
+      this._liveFlip = t + rand(this._liveOn ? LIVE.drift : LIVE.still);
+    }
+    this._liveGate = approach(this._liveGate, this._liveOn ? 1 : LIVE.stillGain, 0.5, dt);
+    for (let i = 0; i < 3; i++) {
+      this._liveA[i] = approach(this._liveA[i], this._liveTo[i], LIVE.tau, dt);
+      this._liveB[i] = approach(this._liveB[i], this._liveA[i], LIVE.tau, dt);
+    }
+    const live = this.gain * this._holdAmp * (0.5 + 0.5 * this._sway) * this._liveGate;
+    const [ly, lp, lr] = this._liveB;
+    hs.headYaw += ly * LIVE.yaw * live;
+    hs.headPitch += (lp * LIVE.pitch - Math.sin(this._breathPh) * LIVE.breathPitch * this._breathAmp) * live;
+    hs.headRoll += lr * LIVE.roll * live;
+    // The body's idle drift, quieted with the head (the speech term is not).
+    const ad = a * (0.35 + 0.65 * this._liveGate);
+
     // Speech moves the body more, and in waves. `talk` says whether sound is
     // being produced, `_phrase` says how hard this stretch of it is being
     // pushed.
@@ -344,11 +523,14 @@ export class IdleLayer {
         // below the 0.04-0.6 Hz seated trunk band, still calm, but now
         // actually present on screen. `gain` is where a deployment that
         // really is paying for the pixels turns it back down.
-        headYaw: (s(0, 0.094) * 0.6 + s(0, 0.058) * 0.4) * 0.075 * a
-          + flickYaw + post.headYaw * ps,
-        headPitch: (s(1, 0.072) * 0.6 + s(1, 0.046) * 0.4) * 0.055 * a + workPitch,
-        headRoll: s(2, 0.061) * 0.048 * a + post.headRoll * ps,
-        breath: breath * this.gain,
+        // The head is the exception: it settles rather than sways (SETTLE).
+        headYaw: hs.headYaw + flickYaw + post.headYaw * ps,
+        headPitch: hs.headPitch + workPitch,
+        headRoll: hs.headRoll + post.headRoll * ps,
+        // Speech reorganises breathing: a quick inbreath at a pause and a long
+        // outbreath over the phrase (research-biomechanics.md §6.1), which the
+        // prosody layer draws. Quiet breathing steps mostly back under it.
+        breath: breath * this.gain * (1 - 0.6 * this.talk),
         // The brows are never quite still either.
         browRaiseL: s(0, 0.089) * 0.020 * a,
         browRaiseR: s(1, 0.083) * 0.020 * a,
@@ -368,11 +550,20 @@ export class IdleLayer {
         // torso band's mean luminance range falls 28 -> 24. Sway suppression is
         // a statement about drift. Speech reorganises the body; it does not
         // park it.
-        shoulderL: (s(1, 0.11) * 0.5 + s(2, 0.22) * 0.5) * (0.040 * a + 0.10 * say * this.gain)
+        // The speech term is smaller than it was, and that is a handover rather
+        // than a reduction. `prosody.js` now puts the body's share of an accent
+        // and of a phrase's posture on the shoulders and the lean, timed off
+        // the words; this is a pair of sine waves timed off nothing. Two
+        // unrelated sources at full strength read as a body that is busy
+        // without being about anything, and the one that knows what is being
+        // said should be the louder. What is left here is the part prosody
+        // cannot supply: motion in the gaps *between* phrases, where there is
+        // no accent to hang anything on.
+        shoulderL: (s(1, 0.11) * 0.5 + s(2, 0.22) * 0.5) * (0.040 * ad + 0.045 * say * this.gain)
           + workL + post.shoulderL * ps,
-        shoulderR: (s(2, 0.10) * 0.5 + s(0, 0.19) * 0.5) * (0.040 * a + 0.10 * say * this.gain)
+        shoulderR: (s(2, 0.10) * 0.5 + s(0, 0.19) * 0.5) * (0.040 * ad + 0.045 * say * this.gain)
           + workR + post.shoulderR * ps,
-        torsoLean: s(0, 0.085) * (0.028 * a + 0.075 * say * this.gain) + post.torsoLean * ps,
+        torsoLean: s(0, 0.085) * (0.028 * ad + 0.035 * say * this.gain) + post.torsoLean * ps,
         // The trunk's own drift, small next to the weight shift that dominates
         // this channel. It exists so the body is not perfectly still *between*
         // shifts, which would make each shift read as a discrete event.

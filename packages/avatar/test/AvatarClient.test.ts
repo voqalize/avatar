@@ -1,28 +1,67 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AvatarClient, RTVI_EVENTS, VISUAL_LEAD_MS as LEAD } from "../client/AvatarClient.js";
 import { createFakeAvatar } from "./fakeAvatar.js";
+import { parseAvatarCommand } from "../client/types.js";
 
 describe("AvatarClient dispatch", () => {
-  it("accepts a durable lower-priority server claim", () => {
+  it("accepts a durable lower-priority server state", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api);
 
-    client.dispatch({ type: "avatar", cmd: "claim", state: "THINKING" });
-    client.dispatch({ type: "avatar", cmd: "claim", state: "WORKING" });
-    client.dispatch({ type: "avatar", cmd: "claim", state: null });
+    client.dispatch({ type: "avatar", cmd: "state", state: "THINKING" });
+    client.dispatch({ type: "avatar", cmd: "state", state: "WORKING" });
+    client.dispatch({ type: "avatar", cmd: "state", state: null });
 
     expect(calls.setState).toHaveLength(3);
     expect(calls.setState.map(({ name }) => name)).toEqual(["THINKING", "WORKING", "LISTENING"]);
   });
 
-  it("routes all one-shot sequences through action()", () => {
+  it("routes every one-shot motion through action(), core or the avatar's own", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api);
 
-    client.dispatch({ type: "avatar", cmd: "action", id: "ACK_RECEIVE" });
-    client.dispatch({ type: "avatar", cmd: "action", id: "GESTURE_GREET" });
+    // One command, one method, whether the id is an intent every renderer owes
+    // a server or a name out of the mounted avatar's own catalogue. There is
+    // nothing to name a rendering independently of the face.
+    client.dispatch({ type: "avatar", cmd: "action", id: "ACKNOWLEDGE" });
+    client.dispatch({ type: "avatar", cmd: "action", id: "NOD_REALIZE" });
 
-    expect(calls.action).toEqual([{ id: "ACK_RECEIVE" }, { id: "GESTURE_GREET" }]);
+    expect(calls.action).toEqual([{ id: "ACKNOWLEDGE" }, { id: "NOD_REALIZE" }]);
+  });
+
+  it("passes an action id it has never heard of, because only the avatar knows", () => {
+    const { api, calls } = createFakeAvatar();
+    const client = new AvatarClient(api);
+
+    // The protocol deliberately does not hold a list. Validating here would
+    // make the wire know every renderer's catalogue — so the parse is shape-only
+    // and the mixer no-ops on a name it does not have.
+    client.dispatch({ type: "avatar", cmd: "action", id: "SOMETHING_ONLY_A_FUTURE_FACE_HAS" });
+
+    expect(calls.action).toEqual([{ id: "SOMETHING_ONLY_A_FUTURE_FACE_HAS" }]);
+  });
+
+  it("drops a malformed action id rather than forwarding it", () => {
+    const { api, calls } = createFakeAvatar();
+    const client = new AvatarClient(api);
+
+    for (const id of ["nod_small", "", "NOD SMALL", "N", "../etc", 7, null]) {
+      client.dispatch({ type: "avatar", cmd: "action", id } as never);
+    }
+
+    expect(calls.action, "shape is still checked even though the name is not").toEqual([]);
+  });
+
+  it("still answers the pre-rename `sequence` command, as an action", () => {
+    const { api, calls } = createFakeAvatar();
+    const client = new AvatarClient(api);
+
+    // `sequence` was a second command for exactly this: a name resolved against
+    // the mounted avatar. Now that `action` is that, a server older than the
+    // merge keeps working — and only the parse boundary knows the old spelling.
+    client.dispatch({ type: "avatar", cmd: "sequence", id: "NOD_NO" });
+
+    expect(calls.action).toEqual([{ id: "NOD_NO" }]);
   });
 
   it("ignores an unknown cmd silently — a newer server talking to an older widget", () => {
@@ -47,9 +86,9 @@ describe("AvatarClient dispatch", () => {
     expect(() => client.dispatch({ notACmd: true })).not.toThrow();
     // A bare command with no envelope is somebody else's message that happens
     // to have a `cmd` field. The envelope is the whole membership test.
-    expect(() => client.dispatch({ cmd: "claim", state: "THINKING" })).not.toThrow();
+    expect(() => client.dispatch({ cmd: "state", state: "THINKING" })).not.toThrow();
     // ...and so is a foreign envelope carrying one.
-    expect(() => client.dispatch({ type: "llm", cmd: "claim", state: "THINKING" })).not.toThrow();
+    expect(() => client.dispatch({ type: "llm", cmd: "state", state: "THINKING" })).not.toThrow();
     expect(calls.setState).toHaveLength(0);
   });
 
@@ -70,12 +109,12 @@ describe("AvatarClient dispatch", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api);
 
-    // A newer server naming an action, a claim or a letter this build does not
-    // have. Each is dropped at the parse boundary — which is what lets every
-    // type below it be a closed union.
-    client.dispatch({ type: "avatar", cmd: "action", id: "BOGUS" });
-    client.dispatch({ type: "avatar", cmd: "claim", state: "BRAINSTORMING" });
-    expect(calls.action).toHaveLength(0);
+    // A newer server naming a state or a letter this build does not have. Each
+    // is dropped at the parse boundary — which is what lets every type below it
+    // be a closed union. An action id is *not* in this list: that vocabulary is
+    // open, so an unknown name is a legal message and is dropped by the face
+    // rather than by the wire.
+    client.dispatch({ type: "avatar", cmd: "state", state: "BRAINSTORMING" });
     expect(calls.setState).toHaveLength(0);
 
     client.dispatch({ type: "avatar", cmd: "cues", ctx: "turn-1", from_ms: 0, cues: [] });
@@ -88,6 +127,31 @@ describe("AvatarClient dispatch", () => {
 });
 
 describe("AvatarClient Pipecat-bound cue lifecycle", () => {
+  it("keeps a cue's phone label, and rejects one that is not a name", () => {
+    // `p` is deliberately not checked against a list: the set belongs to
+    // whatever recognised the audio. Bounded as an identifier is the whole
+    // check, so an unheard-of label survives and a payload does not.
+    const cmd = parseAvatarCommand({
+      type: "avatar",
+      cmd: "cues",
+      ctx: "c1",
+      from_ms: 0,
+      cues: [
+        { t: 0, v: "B", p: "TH" },
+        { t: 10, v: "E", p: "Schwa" },
+        { t: 20, v: "A", p: "P!" },
+        { t: 30, v: "X" },
+      ],
+    });
+    expect(cmd?.cmd).toBe("cues");
+    expect((cmd as { cues: { p?: string }[] }).cues.map((c) => c.p)).toEqual([
+      "TH",
+      "Schwa",
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("buffers cues by base-TTS context, then starts the FIFO context at bot output", () => {
     const { api, calls } = createFakeAvatar();
     const client = new AvatarClient(api, { now: () => 1000 });
@@ -542,7 +606,7 @@ describe("AvatarClient authority resolver", () => {
     return { ...fake, adapter, emit };
   }
 
-  it("uses Pipecat user speech for listening and server claims for the lower states", () => {
+  it("uses Pipecat user speech for listening and server states for the lower ones", () => {
     const { calls, emit } = attached();
 
     emit(RTVI_EVENTS.userStartedSpeaking);
@@ -552,10 +616,10 @@ describe("AvatarClient authority resolver", () => {
     expect(calls.setState.map((call) => call.name)).toEqual(["LISTENING"]);
   });
 
-  it("makes bot speech win over user VAD and all server claims", () => {
+  it("makes bot speech win over user VAD and every server state", () => {
     const { calls, emit, adapter } = attached();
 
-    adapter.dispatch({ type: "avatar", cmd: "claim", state: "WORKING" });
+    adapter.dispatch({ type: "avatar", cmd: "state", state: "WORKING" });
     emit(RTVI_EVENTS.botStartedSpeaking);
     emit(RTVI_EVENTS.userStartedSpeaking);
 
@@ -649,7 +713,7 @@ describe("AvatarClient authority resolver", () => {
     vi.useRealTimers();
   });
 
-  it("renders a mute strategy without the server claiming anything", () => {
+  it("renders a mute strategy without the server sending anything", () => {
     // "Has muted you" needs no wire verb: Pipecat's mute frames reach the
     // browser client as ordinary events, so the fact arrives with the same
     // authority as the speech states above it.
@@ -679,22 +743,34 @@ describe("AvatarClient authority resolver", () => {
     vi.useRealTimers();
   });
 
-  it("renders a straining claim below speech and above thinking's silence", () => {
+  it("renders a CANT_HEAR below speech and above thinking's silence", () => {
     const { calls, emit, adapter } = attached();
 
-    adapter.dispatch({ type: "avatar", cmd: "claim", state: "STRAINING" });
+    adapter.dispatch({ type: "avatar", cmd: "state", state: "CANT_HEAR" });
     expect(calls.setState.at(-1)?.name).toBe("CANT_HEAR");
 
-    // Precedence among claims is the server's, since only one can be in
-    // flight; what this side owes is that observed speech still outranks it.
+    // Precedence among the server's three is the server's, since only one can
+    // be in flight; what this side owes is that observed speech still outranks
+    // it.
     emit(RTVI_EVENTS.userStartedSpeaking);
     expect(calls.setState.at(-1)?.name).toBe("LISTENING");
   });
 
+  it("still answers the pre-rename `claim` command and STRAINING, as CANT_HEAR", () => {
+    // A server older than the rename is the case the translation exists for,
+    // and the only place it may live is the parse boundary: nothing above it
+    // knows the old spelling, so this is the one test that can prove the
+    // acceptance is still wired.
+    const { calls, adapter } = attached();
+
+    adapter.dispatch({ type: "avatar", cmd: "claim", state: "STRAINING" });
+    expect(calls.setState.at(-1)?.name).toBe("CANT_HEAR");
+  });
+
   it("plays an acknowledgement only when the backend sends its explicit action", () => {
     const { calls, adapter } = attached();
-    adapter.dispatch({ type: "avatar", cmd: "action", id: "ACK_NOD" });
+    adapter.dispatch({ type: "avatar", cmd: "action", id: "ACKNOWLEDGE" });
 
-    expect(calls.action).toEqual([{ id: "ACK_NOD" }]);
+    expect(calls.action).toEqual([{ id: "ACKNOWLEDGE" }]);
   });
 });

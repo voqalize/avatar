@@ -50,6 +50,13 @@ extern "C" {
  * for "tongue between the teeth" cannot ask for it from `shape` and can from
  * `phone`. Carrying it costs nothing — both legs hold a phone timeline and used
  * to discard it here.
+ *
+ * **Consecutive cues may repeat a shape and differ only in `phone`**, because
+ * the cue list is one entry per intersection of the two timelines rather than
+ * one per mouth position: a quarter-second of held B spans several phones and
+ * says so. A caller that reads only `shape` must merge equal neighbours, and
+ * then sees exactly the shape track, with its changes at the same milliseconds.
+ * A caller that reads `phone` gets the finer timeline for free.
  */
 typedef struct {
 	int32_t t_ms;

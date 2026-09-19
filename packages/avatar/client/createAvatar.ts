@@ -41,6 +41,7 @@
 import type { PipecatClient } from "@pipecat-ai/client-js";
 import { createAvatar as createSvgWidget } from "../src/avatar.js";
 import type { Face, FaceTheme, Gain, HandSide } from "../src/avatar.js";
+import type { BehaviorStateId } from "../src/behavior.js";
 import { peep } from "../src/face-peep.js";
 import { AvatarClient } from "./AvatarClient.js";
 
@@ -74,6 +75,43 @@ export interface AvatarInstance {
  */
 export type AvatarFactory<O extends AvatarOptions = AvatarOptions> =
   (options: O) => AvatarInstance;
+
+/**
+ * What a mounted avatar answers to — the one *optional* export beside
+ * `createAvatar`.
+ *
+ * A page that drives an avatar has a problem an ordinary consumer does not.
+ * The wire's action id is open and an unknown one is ignored in silence
+ * (docs/contract-wire.md § Action), which is right for a protocol and useless
+ * for a control surface: a button per name cannot tell "this face has no such
+ * motion" from "nothing happened". This is the avatar answering that question
+ * for a driving UI, and nothing else reads it — `createAvatar` does not take
+ * it, the library never consults it, and an avatar that omits it is fully
+ * conforming. It is a *declaration*: nobody verifies it, so a list that has
+ * drifted from the drawing is a bug in the avatar and not something the
+ * library can catch.
+ */
+export interface AvatarSupport {
+  /**
+   * Every action id this avatar answers to, the two required ones included.
+   * An id absent from here is a documented no-op, never an error.
+   */
+  readonly actions: readonly string[];
+  /**
+   * Which of the nine states this avatar draws *distinguishably*.
+   *
+   * Every avatar must accept all nine; a renderer that draws `CANT_HEAR` as
+   * ordinary listening is conforming (docs/contract-behavior.md). So this is
+   * the narrower claim — which of them a reviewer can expect to tell apart on
+   * the face — and omitting it claims all nine, which is what every avatar in
+   * this repo does.
+   */
+  readonly states?: readonly BehaviorStateId[];
+}
+
+/** The bundled avatars' own `supports` value is in `supports.ts`, not here: it
+ *  is a value, so this module's `peep` import would follow it into the bundle of
+ *  anything that read it — including the canvas avatars, which draw no SVG face. */
 
 /**
  * Options for the bundled SVG avatars — ours alone; nothing outside this

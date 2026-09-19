@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from pipecat.frames.frames import Frame, LLMTextFrame
-from voqalize_avatar import AvatarAction, AvatarClaim, AvatarControlFrame
+from voqalize_avatar import AvatarAction, AvatarControlFrame, AvatarState
 
 import control
 import server
@@ -103,15 +103,15 @@ def spoken(session: control.Session) -> list[str]:
 # --- the session ------------------------------------------------------------
 
 
-async def test_a_claim_reaches_the_pipeline_as_a_control_frame(
+async def test_a_state_reaches_the_pipeline_as_a_control_frame(
     session: control.Session,
 ) -> None:
-    await session.claim(AvatarClaim.WORKING)
-    await session.claim(None)
+    await session.state(AvatarState.WORKING)
+    await session.state(None)
 
     assert sent(session) == [
-        {"type": "avatar", "cmd": "claim", "state": "WORKING"},
-        {"type": "avatar", "cmd": "claim", "state": None},
+        {"type": "avatar", "cmd": "state", "state": "WORKING"},
+        {"type": "avatar", "cmd": "state", "state": None},
     ]
 
 
@@ -136,7 +136,7 @@ async def test_saying_a_line_by_hand_still_runs_the_beats(session: control.Sessi
 
     What goes on the wire is the ordinary frames those states are inferred
     *from* — no avatar command is authored here at all — so the assertion is on
-    the completion's shape rather than on a claim.
+    the completion's shape rather than on a `state` message.
     """
     session.beats(think_ms=1, work_ms=1)
     await session.say(session.lines.lines[0].id)
@@ -145,7 +145,7 @@ async def test_saying_a_line_by_hand_still_runs_the_beats(session: control.Sessi
     assert kinds.index("LLMFullResponseStartFrame") == 0
     assert kinds.index("FunctionCallInProgressFrame") < kinds.index("LLMTextFrame")
     assert kinds.index("FunctionCallResultFrame") < kinds.index("LLMTextFrame")
-    assert sent(session) == [], "the beats are inferred, not claimed"
+    assert sent(session) == [], "the beats are inferred, not sent"
 
 
 async def test_muting_puts_pipecat_frames_on_the_pipeline_and_nothing_else(
@@ -182,18 +182,21 @@ async def test_every_misbehaviour_actually_sends_something(
     assert sent(session) or spoken(session), kind
 
 
-async def test_the_malformed_ones_are_really_malformed(session: control.Session) -> None:
-    """The whole value of these two is being outside the vocabulary. If the
-    enums grow to include them, they stop testing anything and must be changed."""
+async def test_the_unrenderable_ones_are_really_unrenderable(session: control.Session) -> None:
+    """The whole value of these two is being outside what the other end has.
+    `unknown-state` is malformed — that list is closed — while `unknown-action`
+    is a legal message with a name nothing here can render, which is the open
+    vocabulary's own forward-compatibility rule pointed at the face. If either
+    name becomes something this server offers, they stop testing anything."""
     await session.misbehave("unknown-action")
-    await session.misbehave("unknown-claim")
+    await session.misbehave("unknown-state")
 
     wire = sent(session)
     actions = {m["id"] for m in wire if m["cmd"] == "action"}
-    claims = {m["state"] for m in wire if m["cmd"] == "claim"}
+    states = {m["state"] for m in wire if m["cmd"] == "state"}
 
-    assert actions and not actions & {str(a) for a in AvatarAction}
-    assert claims and not claims & {str(c) for c in AvatarClaim}
+    assert actions and not actions & ({str(a) for a in AvatarAction} | set(control.RENDERER_ACTIONS))
+    assert states and not states & {str(c) for c in AvatarState}
 
 
 async def test_the_storm_is_a_storm(session: control.Session) -> None:
@@ -201,13 +204,13 @@ async def test_the_storm_is_a_storm(session: control.Session) -> None:
     assert len([m for m in sent(session) if m["cmd"] == "action"]) == 12
 
 
-async def test_the_claim_arrives_after_the_speech_it_contradicts(
+async def test_the_state_arrives_after_the_speech_it_contradicts(
     session: control.Session,
 ) -> None:
-    """Order is the entire point of `claim-during-speech`: a claim sent *before*
-    the line would be an ordinary claim, and the renderer would be right to
-    honour it."""
-    await session.misbehave("claim-during-speech")
+    """Order is the entire point of `state-during-speech`: the same message sent
+    *before* the line would be an ordinary state, and the renderer would be
+    right to honour it."""
+    await session.misbehave("state-during-speech")
 
     kinds = [
         type(f).__name__
@@ -229,8 +232,8 @@ def test_the_corpus_endpoint_describes_the_whole_surface(
     body = client.get("/api/lines").json()
 
     assert [n["id"] for n in body["lines"]] == [n.id for n in lines.lines]
-    assert body["claims"] == [str(c) for c in AvatarClaim]
-    assert body["actions"] == [str(a) for a in AvatarAction]
+    assert body["states"] == [str(c) for c in AvatarState]
+    assert body["actions"] == [str(a) for a in AvatarAction] + control.RENDERER_ACTIONS
     assert body["misbehaviours"] == control.MISBEHAVIOURS
     assert body["beats"] == {
         "think_ms": CannedLLMService.DEFAULT_THINK_MS,
@@ -261,8 +264,8 @@ def test_choosing_a_voice_needs_no_call(client: TestClient) -> None:
     ("path", "body"),
     [
         ("/api/say", {"id": "greet"}),
-        ("/api/claim", {"state": "THINKING"}),
-        ("/api/action", {"action": "ACK_NOD"}),
+        ("/api/state", {"state": "THINKING"}),
+        ("/api/action", {"action": "ACKNOWLEDGE"}),
         ("/api/misbehave", {"kind": "action-storm"}),
         ("/api/beats", {"think_ms": 500, "work_ms": 0}),
         ("/api/mute", {"on": True}),
@@ -278,28 +281,46 @@ def test_driving_a_call_that_is_not_happening_is_a_409(
     ("path", "body"),
     [
         ("/api/say", {"id": "no-such-line"}),
-        ("/api/claim", {"state": "NAPPING"}),
-        ("/api/action", {"action": "GESTURE_SOMERSAULT"}),
+        ("/api/state", {"state": "NAPPING"}),
+        ("/api/action", {"action": "somersault please"}),
         ("/api/misbehave", {"kind": "explode"}),
     ],
 )
 def test_a_name_the_server_does_not_know_is_a_404(
     client: TestClient, live: control.Session, path: str, body: dict
 ) -> None:
-    """Including on `/api/action`, whose whole neighbour endpoint exists to send
-    an unknown action deliberately — a typo here must not become that."""
+    """Except on `/api/action`, where the 404 is only about the id's *shape*:
+    the action vocabulary is open, so a well-formed name this server has never
+    heard of is a legal message and the next test sends one."""
     assert client.post(path, json=body).status_code == 404
 
 
+def test_an_action_this_server_never_published_is_still_sent(
+    client: TestClient, live: control.Session
+) -> None:
+    """A caller driving a Blender avatar's own `NOD_ASSESS` is the case.
+
+    This server cannot see which face is mounted — Studio picks one, and the
+    name is resolved there — so validating against the list in `/api/lines`
+    would have been this server inventing a closed vocabulary the wire does not
+    have. What it still refuses is an id no avatar could own."""
+    assert client.post("/api/action", json={"action": "NOD_ASSESS"}).status_code == 200
+    assert {m["id"] for m in sent(live) if m["cmd"] == "action"} == {"NOD_ASSESS"}
+
+
 def test_the_endpoints_drive_the_live_call(client: TestClient, live: control.Session) -> None:
-    assert client.post("/api/claim", json={"state": "WORKING"}).status_code == 200
-    assert client.post("/api/action", json={"action": "ACK_NOD"}).status_code == 200
-    assert client.post("/api/claim", json={}).status_code == 200
+    assert client.post("/api/state", json={"state": "WORKING"}).status_code == 200
+    assert client.post("/api/action", json={"action": "ACKNOWLEDGE"}).status_code == 200
+    # A name from the mounted renderer's own catalogue, which the endpoint takes
+    # for the same reason the wire does: the server knows what is on the end.
+    assert client.post("/api/action", json={"action": "GESTURE_WAIT"}).status_code == 200
+    assert client.post("/api/state", json={}).status_code == 200
 
     assert sent(live) == [
-        {"type": "avatar", "cmd": "claim", "state": "WORKING"},
-        {"type": "avatar", "cmd": "action", "id": "ACK_NOD"},
-        {"type": "avatar", "cmd": "claim", "state": None},
+        {"type": "avatar", "cmd": "state", "state": "WORKING"},
+        {"type": "avatar", "cmd": "action", "id": "ACKNOWLEDGE"},
+        {"type": "avatar", "cmd": "action", "id": "GESTURE_WAIT"},
+        {"type": "avatar", "cmd": "state", "state": None},
     ]
 
 
@@ -312,7 +333,7 @@ def test_the_beats_endpoint_arms_the_next_turn(client: TestClient, live: control
 def test_a_beat_cannot_be_negative(client: TestClient, live: control.Session) -> None:
     """A toggle that is off sends `0`; a slider that has been dragged past its
     own floor must land on off too, not on a `sleep` that returns instantly
-    while the claim it wraps still goes out."""
+    while the state it wraps still goes out."""
     assert client.post("/api/beats", json={"think_ms": -1, "work_ms": -1}).json() == {
         "think_ms": 0,
         "work_ms": 0,
@@ -329,7 +350,7 @@ def test_a_new_call_replaces_the_old_one(
     second = control.Session(lines=lines, llm=FakeLLM(lines=lines, worker=worker), worker=worker)
     control.register(second)
     try:
-        client.post("/api/action", json={"action": "ACK_NOD"})
+        client.post("/api/action", json={"action": "ACKNOWLEDGE"})
         assert sent(second) and not sent(live)
 
         # And the older call hanging up must not take the newer one's slot.

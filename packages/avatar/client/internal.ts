@@ -15,7 +15,7 @@
  *     const track = new VisemeTrack();
  *     track.start(cues, () => performance.now() - t0);
  *     // per frame:
- *     const s = track.sample();   // { letter: "D", intensity: 1 } | null
+ *     const s = track.sample();   // { letter: "D", intensity: 1, phone: "OW" } | null
  *
  * `docs/internal-rig.md` describes the pose-channel model the bundled SVG
  * renderer uses internally. It is *not* the seam to implement — see
@@ -27,6 +27,11 @@ export {
   // all three in every bundle that wanted the viseme clock.
   // `@voqalize/avatar/faces/<name>` is where a face comes from.
   createAvatar as createSvgAvatar,
+  // The pose space a custom `rig` is handed on every frame, and the rests it is
+  // measured against.
+  REST,
+  CHANNELS,
+  RANGE,
   STATES,
   STATE_NAMES,
   ACTIONS,
@@ -40,6 +45,8 @@ export {
   VISEME_SHAPES,
   SILENT,
   LEAD_MS,
+  // The body's share of a held tilt, for a page driving a rig by hand.
+  SHOULDER_TILT,
   shapeFor,
   normalizeCues,
   textToCues,
@@ -62,8 +69,18 @@ export type {
   CreateAvatarOptions as CreateSvgAvatarOptions,
 } from "../src/avatar.js";
 
+// The rig contract, for a renderer that implements `apply(frame)` directly
+// instead of wearing the SVG adapter. `docs/internal-rig.md` — and note that
+// this is the mixer's private seam, not the avatar interface.
+export type {
+  AvatarFrame,
+  AvatarRig,
+  AvatarRigFactory,
+  HandFrame,
+  RigPose,
+} from "../src/rig.js";
+
 export {
-  BEHAVIOR_STATES,
   BEHAVIOR_STATE_IDS,
   BEHAVIOR_ACTIONS,
   BEHAVIOR_ACTION_IDS,
@@ -72,9 +89,20 @@ export {
 
 export type { BehaviorStateId, BehaviorActionId } from "../src/behavior.js";
 
-export { isAvatarMessage } from "./types.js";
+export { isAvatarMessage, CORE_ACTION_IDS } from "./types.js";
+// The optional driving-UI declaration, as a type only. The bundled avatar's own
+// `supports` value lives on the public entry point and importing it here would
+// drag `peep`'s drawing in behind it — the same reason the faces are not
+// exported from this module. Compose yours from `CORE_ACTION_IDS` and
+// `ACTION_IDS` above, which cost nothing.
+export type { AvatarSupport } from "./createAvatar.js";
+// A renderer may reuse the one lifecycle/precedence ladder without gaining a
+// second public avatar interface.
+export { AvatarClient } from "./AvatarClient.js";
 export type {
   AvatarCommand,
   AvatarCue,
   AvatarCuesCmd,
+  CoreActionId,
 } from "./types.js";
+export type { AvatarClientOptions, AvatarDriver, AvatarPresenceState } from "./AvatarClient.js";

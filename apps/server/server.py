@@ -22,7 +22,7 @@ Three jobs, and they are separate on purpose:
   default. Each new peer connection starts one `run_bot` task; when the browser
   goes away the transport's disconnect handler cancels it.
 
-- **The control plane.** `/api/lines`, `/api/say`, `/api/claim`, `/api/action`
+- **The control plane.** `/api/lines`, `/api/say`, `/api/state`, `/api/action`
   and `/api/misbehave`, all acting on the one call in progress. They live on the
   server because intent does: a page that could make the avatar nod by itself
   would be a client deciding what the agent is doing. See control.py, which also
@@ -36,6 +36,7 @@ being demonstrated here.
 from __future__ import annotations
 
 import argparse
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -51,7 +52,7 @@ from pipecat.transports.smallwebrtc.request_handler import (
     SmallWebRTCRequestHandler,
 )
 from pydantic import BaseModel
-from voqalize_avatar import AvatarAction, AvatarClaim
+from voqalize_avatar import AvatarAction, AvatarState
 
 import control
 from bot import DEFAULT_TTS, LINES, TTS_SERVICES, run_bot
@@ -62,13 +63,19 @@ class Say(BaseModel):
     id: str
 
 
-class Claim(BaseModel):
-    #: Absent or null clears the claim — see the endpoint.
+class State(BaseModel):
+    #: Absent or null clears the state — see the endpoint.
     state: str | None = None
 
 
 class Action(BaseModel):
     action: str
+
+
+#: The one thing an action id has to be, copied from the wire contract's own
+#: `ACTION_ID` (`packages/avatar/client/types.ts`) so a typo is still a 404.
+#: Uppercase `CATEGORY_INTENT`, 2..64 characters.
+_ACTION_ID = re.compile(r"[A-Z][A-Z0-9_]{1,63}")
 
 
 class Misbehave(BaseModel):
@@ -196,8 +203,12 @@ def build_app(tts_name: str) -> FastAPI:
                 {"id": n.id, "tag": n.tag, "text": n.text, "ms": sum(s.ms for s in n.sentences)}
                 for n in lines.lines
             ],
-            "claims": [str(c) for c in AvatarClaim],
-            "actions": [str(a) for a in AvatarAction],
+            "states": [str(c) for c in AvatarState],
+            # The two every avatar owes a server, then the names this demo knows
+            # its own mounted face by. The wire's action vocabulary is open, so a
+            # list of them is always somebody's list and never the protocol's;
+            # this one is what the page may offer a button for.
+            "actions": [str(a) for a in AvatarAction] + control.RENDERER_ACTIONS,
             "misbehaviours": control.MISBEHAVIOURS,
             # Who can speak, and who will. Chosen before the call, because the
             # canned path picks a directory of recordings at load.
@@ -240,27 +251,32 @@ def build_app(tts_name: str) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"no line {body.id!r}") from None
         return {"said": line.id, "text": line.text}
 
-    @app.post("/api/claim")
-    async def claim(body: Claim):
+    @app.post("/api/state")
+    async def state(body: State):
         # `None` clears. That is a real command, not a missing one, which is why
         # the field is optional rather than the endpoint being two endpoints.
         try:
-            state = AvatarClaim(body.state) if body.state else None
+            value = AvatarState(body.state) if body.state else None
         except ValueError:
-            raise HTTPException(status_code=404, detail=f"no claim {body.state!r}") from None
-        await _live().claim(state)
-        return {"claimed": body.state}
+            raise HTTPException(status_code=404, detail=f"no state {body.state!r}") from None
+        await _live().state(value)
+        return {"state": body.state}
 
     @app.post("/api/action")
     async def action(body: Action):
-        # Rejected here rather than passed through, because the endpoint that
-        # sends an unknown action on purpose is `/api/misbehave` — a typo in this
-        # one should be a 404, not an unwitting conformance test.
-        try:
-            action = AvatarAction(body.action)
-        except ValueError:
-            raise HTTPException(status_code=404, detail=f"no action {body.action!r}") from None
-        await _live().action(action)
+        # Checked for *shape*, not against a list: the wire's action vocabulary
+        # is open, so "does this name exist" is a question only the mounted face
+        # can answer, and a 404 from here would be this server inventing a closed
+        # set the wire does not have. It used to check the names it publishes in
+        # `/api/lines`, which was wrong as soon as a caller drove a Blender
+        # avatar's own `NOD_ASSESS`: this server cannot see what Studio mounted,
+        # and the face is what resolves the name. Sending a name nothing can
+        # render is a legitimate request — the widget ignores it, which is the
+        # forward-compat rule, and `/api/misbehave` is how you watch it happen
+        # on purpose. What is left is a malformed id, which no avatar could own.
+        if not _ACTION_ID.fullmatch(body.action):
+            raise HTTPException(status_code=404, detail=f"not an action id: {body.action!r}")
+        await _live().action(body.action)
         return {"acted": body.action}
 
     @app.post("/api/beats")

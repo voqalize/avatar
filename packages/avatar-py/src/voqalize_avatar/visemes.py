@@ -138,10 +138,12 @@ from .avatarsync import (
     AvatarsyncError,
     AvatarsyncPaths,
     Cue,
+    LoudnessTrack,
     VisemeRuntime,
     VisemeStream,
     shared_engine,
     shift,
+    with_intensity,
 )
 from .timing import (
     ACCURATE_CUE_HOLD_BACK_MS,
@@ -173,6 +175,26 @@ def wire_ms(pcm: bytes, sample_rate: int = SAMPLE_RATE) -> float:
     return len(pcm) / BYTES_PER_SAMPLE / sample_rate * 1000
 
 
+def _shape_runs(cues: Sequence[Cue]) -> list[list[Cue]]:
+    """Group a time-ordered cue list into runs that share a mouth shape.
+
+    The decoder emits one cue per *intersection* of its shape and phone
+    timelines, so a held shape arrives as several cues that differ only in `p`.
+    Grouping them is what lets the visibility rules below stay a rule about
+    shapes: the head of each run is a mouth position, and its tail is phone
+    detail riding underneath one.
+    """
+    runs: list[list[Cue]] = []
+    for cue in cues:
+        letter = cue.v if cue.v in ("A", "B", "C", "D", "E", "F", "G", "H", "X") else SILENT
+        clean = cue if cue.v == letter else Cue(t=cue.t, v=letter, p=cue.p, i=cue.i)
+        if runs and runs[-1][0].v == letter:
+            runs[-1].append(clean)
+        else:
+            runs.append([clean])
+    return runs
+
+
 def normalize_cues(cues: Sequence[Cue]) -> list[Cue]:
     """The widget's `normalizeCues`, applied server-side so we ship clean tracks.
 
@@ -180,20 +202,34 @@ def normalize_cues(cues: Sequence[Cue]) -> list[Cue]:
     if the two ever disagree, the disagreement is the bug, and having the same
     rule twice makes that visible in tests instead of on someone's face.
 
-    **Deduplication is by shape, not by phone**, for that same reason — the
-    client's rule is the one being mirrored and it has never seen a phone. So a
-    run of cues sharing a shape collapses to its first, and that cue's `p` is the
-    phone at the moment the *shape* changed. A renderer that wants the phone
-    transitions inside a held shape (shape `B` covering S → T, say) is asking for
-    a rule the client does not have yet, and getting it means changing both
-    sides in lockstep. Until then this loses nothing the wire could carry.
+    **Every decision here is a decision about shapes**, taken over the run heads
+    and nothing else. That is not a simplification, it is the correctness
+    argument: `MIN_VISIBLE_CUE_MS` and the closure swap are rules about what the
+    face can be seen to do, and a phone transition inside a held shape is not
+    something the face does at all. Letting one participate would mean a phone
+    changing 15 ms before a real shape change could swallow that change — a
+    lipsync regression bought with a field no renderer here even reads.
+
+    Surviving phone detail is re-attached afterwards, bounded by the mouth
+    positions on either side of it. A cue earlier than the shape it belongs to
+    cannot exist, and neither can one that outlives it.
+
+    A surviving cue keeps its own `i` alongside its own `p`, which is what the
+    client's `{...c}` spread does with the cue it keeps.
     """
+    runs = _shape_runs(sorted(cues, key=lambda c: c.t))
+
+    # Pass one: the shape track, by exactly the rule that predates phone detail.
+    # `kept` maps each surviving cue back to the run it speaks for, which the
+    # closure swap below can change without moving the cue's timestamp.
     out: list[Cue] = []
-    for cue in sorted(cues, key=lambda c: c.t):
-        letter = cue.v if cue.v in ("A", "B", "C", "D", "E", "F", "G", "H", "X") else SILENT
+    kept: list[int] = []
+    for index, run in enumerate(runs):
+        head = run[0]
+        letter = head.v
         if out and out[-1].v == letter:
             continue
-        if out and cue.t - out[-1].t < MIN_VISIBLE_CUE_MS:
+        if out and head.t - out[-1].t < MIN_VISIBLE_CUE_MS:
             if letter in CLOSURES:
                 # A short closure can replace an intervening shape between two
                 # copies of itself (G → F → G). The mouth never visibly left G,
@@ -201,11 +237,33 @@ def normalize_cues(cues: Sequence[Cue]) -> list[Cue]:
                 # duplicate G for the wire/client to rediscover.
                 if len(out) > 1 and out[-2].v == letter:
                     out.pop()
+                    kept.pop()
                 else:
-                    out[-1] = Cue(t=out[-1].t, v=letter, p=cue.p)
+                    out[-1] = Cue(t=out[-1].t, v=letter, p=head.p, i=head.i)
+                    kept[-1] = index
             continue
-        out.append(Cue(t=cue.t, v=letter, p=cue.p))
-    return out
+        out.append(Cue(t=head.t, v=letter, p=head.p, i=head.i))
+        kept.append(index)
+
+    # Pass two: the phone detail inside each surviving mouth position. Silence is
+    # never split — nothing is being articulated under a rest, which is the same
+    # rule the decoder applies when it refuses to label an X.
+    result: list[Cue] = []
+    for slot, (cue, index) in enumerate(zip(out, kept)):
+        result.append(cue)
+        if cue.v == SILENT:
+            continue
+        limit = out[slot + 1].t if slot + 1 < len(out) else None
+        for sub in runs[index][1:]:
+            # Strictly after whatever was last emitted, not merely after the
+            # head: a splice joins two legs' tracks, and both can name the same
+            # millisecond.
+            if sub.t <= result[-1].t or (limit is not None and sub.t >= limit):
+                continue
+            if sub.p == result[-1].p:
+                continue
+            result.append(Cue(t=sub.t, v=cue.v, p=sub.p, i=sub.i))
+    return result
 
 
 def _cue_at(cues: Sequence[Cue], t_ms: int) -> Cue | None:
@@ -232,7 +290,7 @@ def clip_track(cues: Sequence[Cue], from_ms: int) -> list[Cue]:
     held = _cue_at(cues, from_ms)
     if held is None:
         return later
-    return [Cue(t=from_ms, v=held.v, p=held.p), *later]
+    return [Cue(t=from_ms, v=held.v, p=held.p, i=held.i), *later]
 
 
 def lead_track(cues: Sequence[Cue], ms: int = PREDICTED_CUE_LEAD_MS) -> list[Cue]:
@@ -245,23 +303,33 @@ def lead_track(cues: Sequence[Cue], ms: int = PREDICTED_CUE_LEAD_MS) -> list[Cue
     — a shape that is already over — and `normalize_cues` would then discard the
     right one as too short.
     """
-    moved = [Cue(t=cue.t - ms, v=cue.v, p=cue.p) for cue in cues]
+    moved = [Cue(t=cue.t - ms, v=cue.v, p=cue.p, i=cue.i) for cue in cues]
     if not moved or moved[0].t >= 0:
         return moved
     return clip_track(moved, 0)
 
 
 def cues_to_wire(cues: Sequence[Cue]) -> list[dict[str, Any]]:
-    """`{t, v, p?}` dicts, the shape the `cues` server-message carries.
+    """`{t, v, p?, i?}` dicts, the shape the `cues` server-message carries.
 
-    `p` is omitted during silence rather than sent as null — the wire cue is one
-    per shape change in a stream of them, and a key that is absent half the time
-    is smaller than one that is null half the time.
+    `p` and `i` are omitted rather than sent as null — the wire cue is one per
+    shape change in a stream of them, and a key that is absent half the time is
+    smaller than one that is null half the time. A cue with no `i` is a cue
+    nothing measured: the predicted leg, or silence. The widget reads that as 1.
+
+    `i` is rounded because three decimals is already finer than the mouth can
+    render — `shapeFor` maps the whole 0..1 into 0.45..1.0 of the viseme table —
+    and the digits past it are decode noise paid for on every cue of every turn.
     """
-    return [
-        {"t": cue.t, "v": cue.v} if cue.p is None else {"t": cue.t, "v": cue.v, "p": cue.p}
-        for cue in cues
-    ]
+    out: list[dict[str, Any]] = []
+    for cue in cues:
+        wire: dict[str, Any] = {"t": cue.t, "v": cue.v}
+        if cue.p is not None:
+            wire["p"] = cue.p
+        if cue.i is not None:
+            wire["i"] = round(cue.i, 3)
+        out.append(wire)
+    return out
 
 
 @dataclass
@@ -298,6 +366,10 @@ class _Turn:
     # Nothing before this needs re-sending: it is settled, and on the accurate
     # leg it has also already been played.
     published_ms: int = 0
+    # The energy of this turn's audio, for the level under each recognised cue.
+    # Trimmed at every settled sentence boundary, so it stays bounded by one
+    # sentence rather than growing with the turn.
+    loud: LoudnessTrack = field(default_factory=LoudnessTrack)
 
     closed: bool = False
     aborted: bool = False
@@ -547,6 +619,11 @@ class VisemeEngine:
 
     async def _run_accurate_leg(self, turn: _Turn, pcm: bytes) -> None:
         turn.fed_ms += wire_ms(pcm, turn.sample_rate)
+        # Beside `fed_ms` and before the stream check, deliberately: the track
+        # infers a frame's position from what preceded it, so it has to see
+        # every frame that moved `fed_ms`. Feeding it only once a stream exists
+        # would silently shift every lookup on a turn that opened one late.
+        turn.loud.feed(pcm, turn.sample_rate)
         stream = await self._ensure_stream(turn)
         if stream is None:
             return
@@ -576,6 +653,10 @@ class VisemeEngine:
         splice_ms = round(turn.resolved_wire_ms)
         cues = await stream.cues(splice_ms, ACCURATE_CUE_HOLD_BACK_MS)
         turn.decode_ms += (time.monotonic() - began) * 1000
+        # Loudness is ours to add: the decoder reports shape and not level, and
+        # the audio it recognised is already accumulated. Only this leg can —
+        # the predicted tail below describes audio nobody has generated yet.
+        cues = with_intensity(cues, turn.loud, edge_ms)
 
         # `cues` empty means recognition has nothing at all past what is already
         # published, so there is nothing to overwrite it *with*: emitting anyway
@@ -636,6 +717,9 @@ class VisemeEngine:
         if turn.pending:
             turn.pending.popleft()
         turn.resolved_wire_ms = turn.fed_ms
+        # Every later emission splices at the resolved boundary, so audio before
+        # it can no longer be under any cue we will measure.
+        turn.loud.trim(turn.resolved_wire_ms)
 
     async def _close_turn(self, turn: _Turn) -> None:
         """Emit the track that completes the turn, and say so.

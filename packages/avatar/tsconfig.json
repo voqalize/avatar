@@ -11,6 +11,9 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
+    // `client/three/` reads the measured head envelope as a value, and tsc
+    // copies the file into `dist/` alongside the module that imports it.
+    "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,

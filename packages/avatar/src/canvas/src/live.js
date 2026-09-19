@@ -120,8 +120,8 @@ const num = (v, d) => (typeof v === 'number' && v === v ? v : d);
 // degree and a half about the sternum, which is exactly what you get when the
 // torso is one filled path. So the four are spent the way `poseTransforms`
 // spends them, with each avatar's own travels in `face.mjs BODY_LIVE`, and the
-// state that made this visible — STRAINING, which is voqalize's `CANT_HEAR`
-// and holds `torsoLean` at 0.70 — leans in instead of standing straight.
+// state that made this visible — `CANT_HEAR`, which holds `torsoLean` at
+// 0.70 — leans in instead of standing straight.
 //
 // AND THE TRUNK'S SHARE OF THE HEAD'S OWN CHANNELS, which is the rest of what
 // `poseTransforms` does and was left out the first time round. Three things,

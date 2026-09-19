@@ -103,9 +103,14 @@ async def cmd_cues(args: argparse.Namespace) -> int:
 
 
 def _wire(cue: Cue) -> dict[str, object]:
-    """The wire cue, phone included when there is one. Mirrors
+    """The wire cue, phone and level included when there are any. Mirrors
     `visemes.cues_to_wire` — see docs/internal-mixer.md § Speech."""
-    return {"t": cue.t, "v": cue.v} if cue.p is None else {"t": cue.t, "v": cue.v, "p": cue.p}
+    wire: dict[str, object] = {"t": cue.t, "v": cue.v}
+    if cue.p is not None:
+        wire["p"] = cue.p
+    if cue.i is not None:
+        wire["i"] = round(cue.i, 3)
+    return wire
 
 
 async def cmd_info(args: argparse.Namespace) -> int:

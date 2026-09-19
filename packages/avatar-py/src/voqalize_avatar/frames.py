@@ -18,7 +18,7 @@ anything the state machine inferred:
             await super().process_frame(frame, direction)
             if isinstance(frame, MyToolStartedFrame):
                 await self.push_frame(
-                    AvatarControlFrame(AvatarMessage.claim(AvatarClaim.WORKING)),
+                    AvatarControlFrame(AvatarMessage.state(AvatarState.WORKING)),
                     direction,
                 )
             await self.push_frame(frame, direction)
@@ -26,9 +26,9 @@ anything the state machine inferred:
 Place the bridge anywhere upstream of `AvatarProcessor` and the control frames
 arrive in pipeline order, interleaved with the inferred ones.
 
-The browser resolves claims below factual speech states and retires them at real
-turn boundaries so delayed server intent cannot resurface stale. Actions are
-self-completing and return to that current resolved state.
+The browser resolves a server state below the factual speech states and
+retires it at real turn boundaries, so delayed server intent cannot resurface
+stale. Actions are self-completing and return to that current resolved state.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ class AvatarControlFrame(DataFrame):
     instruction that overtakes the sentence it belongs to is a gesture on the
     wrong words.
 
-    Build `message` with `AvatarMessage.claim()` or `AvatarMessage.action()`.
+    Build `message` with `AvatarMessage.state()` or `AvatarMessage.action()`.
     They are the only builders that know the wire payload keys.
     """
 

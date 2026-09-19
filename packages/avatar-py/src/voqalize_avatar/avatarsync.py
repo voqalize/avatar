@@ -56,9 +56,12 @@ person does not re-derive it.
 from __future__ import annotations
 
 import asyncio
+import math
 import platform
+import sys
 import threading
-from collections.abc import Iterable
+from array import array
+from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -82,8 +85,12 @@ DEFAULT_WORKERS = 1
 class Cue:
     """One mouth shape, `t` ms into whatever timeline the caller is building.
 
-    Mirrors the wire cue `{t, v, p?}`. Intensity is omitted: Rhubarb emits shape,
-    not loudness, and the widget reads a missing `i` as 1.
+    Mirrors the wire cue `{t, v, p?, i?}`. `i` is 0..1 loudness, and it is `None`
+    wherever nothing measured it: the recogniser reports shape and not level, so
+    intensity comes from the PCM under the cue, and the predicted leg — which
+    describes audio nobody has generated yet — never has any. The widget reads a
+    missing `i` as 1, which is the every-syllable-the-same mouth this field
+    exists to break up, and still the right answer when nothing can do better.
 
     `p` is the Arpabet phone underneath the shape, or `None` during silence. The
     nine shapes are a lossy projection of ~41 phones and the loss is concentrated
@@ -96,6 +103,155 @@ class Cue:
     t: int
     v: str
     p: str | None = None
+    i: float | None = None
+
+
+# The window of cue-span RMS, in dBFS, that maps onto `Cue.i` 0..1.
+#
+# Measured on the voices we ship rather than chosen: 1059 voiced cues decoded by
+# the accurate leg over `apps/server/`'s corpus (omnivoice/gaurav and
+# omnivoice/gauri, the two ids the picker offers) run p05 -34, median -19.8 and
+# p95 -15 dBFS. The distribution is lopsided because the TTS is peak-limited per
+# sentence: its loud half is squeezed into a few dB while the quiet tail runs
+# long.
+#
+# That lopsidedness is why this is not anchored on the speech stack's own
+# audibility floor (`_AUDIBLE_DBFS = -40.0`, in vql-speech). A -40..-12 window
+# spends nearly all its range where nothing is visible — it renders an
+# interquartile spread of 0.12 in `shapeFor`'s k, and k 0.85 against k 1.00 is
+# indistinguishable on a photographic mouth at the size we ship. -32..-16 gives
+# 0.20, which reads at crop.
+#
+# The floor is not free and the cost was counted: 6.4% of voiced cues reach it,
+# 17 of them sitting between two loud ones. Nine of those are A/G closures,
+# where a stop consonant's silent hold really does shut the mouth, so flooring
+# them is articulation and not an artifact. The remaining eight are B and F —
+# the two smallest-excursion open shapes, 0.76% of all cues — and the wide
+# shapes never floor at all (D 0/37, H 0/24). Widening to -30 doubles the
+# mid-word count to 32 and buys 0.03 more k, which is the trade refused.
+#
+# Absolute, with no per-utterance normalisation: per-file medians span only
+# 7.1 dB across the corpus while the median within-file p10-p90 spread is
+# 12.2 dB, so the variation worth rendering lives *inside* an utterance and
+# rescaling each one would flatten exactly that.
+INTENSITY_FLOOR_DBFS = -32.0
+INTENSITY_CEIL_DBFS = -16.0
+
+# Energy is accumulated at this resolution. No cue is shorter than
+# `timing.MIN_VISIBLE_CUE_MS` (30) and the median production span is 80 ms, so
+# 10 ms of edge error sits below anything a mouth can show.
+ENERGY_BLOCK_MS = 10
+
+_FULL_SCALE = 32768.0
+_SILENT_DBFS = -120.0
+
+
+def intensity_from_dbfs(dbfs: float) -> float:
+    """Where a span's RMS sits in the window, clamped to 0..1."""
+    span = INTENSITY_CEIL_DBFS - INTENSITY_FLOOR_DBFS
+    return max(0.0, min(1.0, (dbfs - INTENSITY_FLOOR_DBFS) / span))
+
+
+class LoudnessTrack:
+    """A turn's audio energy, accumulated, so a cue's level is a subtraction.
+
+    The accurate leg rewrites its whole current sentence on *every* audio frame
+    (`visemes._run_accurate_leg` says why), so measuring each cue by summing the
+    samples under it would re-add the sentence tens of times a second — millions
+    of multiply-accumulates per second of speech, in Python, on the voice path.
+    Accumulating once as audio arrives makes each cue an O(1) lookup instead and
+    leaves the per-frame cost independent of how long the sentence has run.
+
+    Blocks rather than samples because the error is bounded by
+    `ENERGY_BLOCK_MS`, which is under what a mouth can render, and because one
+    float per 10 ms is bounded memory where one per sample is not.
+    """
+
+    __slots__ = ("_cum", "_base_ms", "_tail", "_rate")
+
+    def __init__(self) -> None:
+        # Running sum of squares at each block boundary: `_cum[k]` covers the
+        # first k blocks after `_base_ms`. Never rebased, so trimming drops
+        # entries off the front and every difference stays correct.
+        self._cum: list[float] = [0.0]
+        self._base_ms: float = 0.0
+        self._tail = array("h")
+        self._rate = 0
+
+    def feed(self, pcm: bytes, sample_rate: int) -> None:
+        """Take one frame, in the order it was fed to the decoder.
+
+        Position is implied by what has already been fed rather than passed in,
+        which is why the caller must feed *every* frame it counts in `fed_ms` —
+        skipping one would slide every later cue's lookup by its length.
+        """
+        if sample_rate > 0:
+            self._rate = sample_rate
+        if self._rate <= 0 or not pcm:
+            return
+        samples = array("h")
+        samples.frombytes(pcm[: len(pcm) - (len(pcm) % 2)])
+        if sys.byteorder == "big":
+            samples.byteswap()  # the wire is little-endian s16
+        self._tail.extend(samples)
+        per_block = max(1, round(self._rate * ENERGY_BLOCK_MS / 1000))
+        total = self._cum[-1]
+        used = 0
+        while used + per_block <= len(self._tail):
+            for n in range(used, used + per_block):
+                sample = self._tail[n]
+                total += sample * sample
+            self._cum.append(total)
+            used += per_block
+        if used:
+            del self._tail[:used]
+
+    def dbfs(self, start_ms: float, end_ms: float) -> float | None:
+        """RMS under one cue, or `None` where the track cannot say yet."""
+        if self._rate <= 0:
+            return None
+        first = max(0, int((start_ms - self._base_ms) // ENERGY_BLOCK_MS))
+        last = min(
+            len(self._cum) - 1,
+            int(-(-(end_ms - self._base_ms) // ENERGY_BLOCK_MS)),  # ceil
+        )
+        if last <= first:
+            return None
+        per_block = max(1, round(self._rate * ENERGY_BLOCK_MS / 1000))
+        mean_square = (self._cum[last] - self._cum[first]) / ((last - first) * per_block)
+        rms = math.sqrt(mean_square) / _FULL_SCALE
+        return 20 * math.log10(rms) if rms > 1e-9 else _SILENT_DBFS
+
+    def trim(self, before_ms: float) -> None:
+        """Forget audio before a settled sentence boundary.
+
+        What bounds this to a sentence rather than a turn: a 46 s turn would
+        otherwise hold 4600 floats for audio no later cue can be measured
+        against, since every emission splices at the resolved boundary.
+        """
+        drop = min(max(0, int((before_ms - self._base_ms) // ENERGY_BLOCK_MS)), len(self._cum) - 1)
+        if drop:
+            del self._cum[:drop]
+            self._base_ms += drop * ENERGY_BLOCK_MS
+
+
+def with_intensity(cues: Sequence[Cue], loud: LoudnessTrack, end_ms: float) -> list[Cue]:
+    """Cues with `i` filled in from the audio underneath each one.
+
+    A cue keeps `i=None` when the track cannot answer — before any audio, or
+    past the fed edge — because an absent `i` renders as the full-size mouth
+    these cues already get today. Silence is skipped for the same reason it
+    carries no phone: there is no shape whose size the level could describe.
+    """
+    out: list[Cue] = []
+    for n, cue in enumerate(cues):
+        stop = cues[n + 1].t if n + 1 < len(cues) else end_ms
+        level = None if cue.v == SILENT else loud.dbfs(cue.t, stop)
+        out.append(
+            cue if level is None
+            else Cue(t=cue.t, v=cue.v, p=cue.p, i=intensity_from_dbfs(level))
+        )
+    return out
 
 
 class AvatarsyncError(RuntimeError):
@@ -452,7 +608,14 @@ class AvatarsyncEngine:
         """
         if not pcm:
             return []
-        return await self._run(NativeEngine.audio_cues, pcm, sample_rate)
+        cues = await self._run(NativeEngine.audio_cues, pcm, sample_rate)
+        # The clip is finished, so every cue's span is covered and intensity is
+        # free here. It is attached rather than skipped because this is what a
+        # streamed decode is measured against, and a reference missing the field
+        # the streamed leg carries is the wrong reference.
+        loud = LoudnessTrack()
+        loud.feed(pcm, sample_rate)
+        return with_intensity(cues, loud, len(pcm) / 2 / sample_rate * 1000)
 
     async def open_stream(self, sample_rate: int) -> _NativeVisemeStream | None:
         """A live decode, or `None` when every decoder is out.
@@ -646,4 +809,4 @@ def _cues_from(raw: Iterable[tuple[int, str, str | None]]) -> list[Cue]:
 
 def shift(cues: Iterable[Cue], offset_ms: int) -> list[Cue]:
     """Move a cue track onto the turn's timeline."""
-    return [Cue(t=cue.t + offset_ms, v=cue.v, p=cue.p) for cue in cues]
+    return [Cue(t=cue.t + offset_ms, v=cue.v, p=cue.p, i=cue.i) for cue in cues]
