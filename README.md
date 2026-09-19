@@ -8,9 +8,10 @@ The avatar itself is a JavaScript library, driven by the standard RTVI events
 your client already receives plus one custom RTVI message carrying lipsync
 metadata and semantic cues.
 
-No video track, no per-minute avatar vendor, no second media path. Three SVG
-faces and six professional Canvas2D avatars ship with it — one identity per
-entry point, so you pay for the one you import — and you can author your own.
+No video track, no per-minute avatar vendor, no second media path. Twelve
+avatars ship with it — three hand-drawn SVG faces, six professional Canvas2D
+identities and three 2.5-D characters — one per entry point, so you pay for the
+one you import, and you can author your own.
 
 <p>
   <img src="docs/assets/readme-peep-speaking.png" alt="peep, mid-utterance" width="180">
@@ -26,9 +27,9 @@ the one thing this README cannot show you.
 
 Two minutes, in the browser, nothing to install. It is the library explaining
 itself: ask how the lipsync stays in step and it puts the timeline on screen,
-ask to see it thinking and it holds the claim on its own face, ask what else it
-can look like and it swaps to another of the nine — taking the matching voice
-with it. Every gesture in that call is one of the three commands documented
+ask to see it thinking and it holds that state on its own face, ask what else it
+can look like and it swaps to another of the ten it offers — taking the
+matching voice with it. Every gesture in that call is one of the three commands documented
 below, sent from a server — the same ones your own app would send.
 
 Running it yourself instead: a call with [`apps/server/`](apps/server/README.md)
@@ -304,11 +305,10 @@ fetched when the avatar mounts. Nothing above the renderer changes: same wire,
 same states, same cue-synced mouth, and a server that has never heard of these
 characters drives one correctly.
 
-**On 0.4.0 a build importing one of them emitted all three binaries** — 1.8 MB
-where 504 kB was asked for, because the three asset URLs shared a module and
-bundlers emit `new URL` assets per module. Fixed in 0.4.1, with no change to the
-import. If you are on 0.4.0, that is the reason to move; `optimizeDeps.exclude`
-is the one thing Vite needs either way, and both are in
+Importing one character emits one binary — 504 kB, not 1.8 MB, which is what
+0.4.0 did before the three asset URLs were split across modules. Vite also needs
+`optimizeDeps.exclude`, or the `.glb` request falls through to the SPA fallback
+and arrives as HTML:
 [characters.md](docs/characters.md#the-asset-is-fetched-at-runtime).
 
 **The binaries are artwork under CC-BY 4.0**, separately from the MIT code around
@@ -359,49 +359,21 @@ The rest of this page is about working on the library rather than using it.
 
 ## Working on the library
 
-Two of these layers are contracts — a format someone outside this repo
-implements or depends on. The rest are our own internals, and are named so.
+`packages/avatar/` is `@voqalize/avatar`. `src/` is the widget itself — mixer,
+rig, the drawings — as dependency-free ES modules with no build step, so what
+you screenshot is what ships; `client/` is `AvatarClient` (splice, clock anchor)
+and the React binding, compiled with plain `tsc` into `dist/`, which imports
+`../src/` as an ordinary sibling. `packages/avatar-py/` is `voqalize-avatar`,
+the pipecat backend, and `native/avatarsync/` inside it is our Rhubarb fork,
+built into the shared library that rides inside the wheel. One tree ships
+nowhere: [`apps/server/`](apps/server/README.md), the demo call, which is here
+rather than in the working tree because a call with no API keys in it is the
+first thing anyone runs.
 
-| layer | owns | code | reference |
-|---|---|---|---|
-| **wire** | `state` / `action` / `cues`, nothing else | `packages/avatar/client/AvatarClient.ts` | **[contract-wire.md](docs/contract-wire.md)** |
-| **avatar** | `createAvatar({mount, client})`, the only public seam | `packages/avatar/client/createAvatar.ts` | **[design-avatar-interface.md](docs/design-avatar-interface.md)** |
-| lifecycle | effective-state precedence, cue-clock anchor | `packages/avatar/client/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
-| behavior | states, actions | `packages/avatar/src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
-| backend | state inference from stock pipecat frames, the viseme legs | [`packages/avatar-py/`](packages/avatar-py/README.md) | [`packages/avatar-py/README.md`](packages/avatar-py/README.md) |
-| aligner | A–H+X letters from text *and* from audio | [`packages/avatar-py/native/avatarsync/`](packages/avatar-py/native/avatarsync/README.md) | its own README |
-| mixer | layer order, per-channel smoothing, gaze, idle, clips | `packages/avatar/src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
-| rig | `apply({pose, hand})` / `destroy()`, our SVG renderer's internals | `packages/avatar/src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
-| SVG faces | the drawings | `packages/avatar/src/face-*.js` | [authoring-a-face.md](docs/authoring-a-face.md) |
-| Canvas2D avatars | the six professional identities — an internal Canvas2D renderer whose rig data and wardrobe images ship as implementation details, not as a seam to build on | `packages/avatar/src/canvas/`, `packages/avatar/client/{arjun,meera,vikram,ishita,kabir,naina}.ts` | [README.md § Professional avatars](#professional-avatars) |
-| 2.5-D characters | the three compiled characters and the Three.js renderer that draws them — driven by the mixer above, under the same pose channels as every SVG face | `packages/avatar/client/three/`, `packages/avatar/assets/*.glb` | [characters.md](docs/characters.md) |
-
-The two bold rows are the contracts, and only they carry a semver promise.
-Everything below them is named `internal-*` for the same reason it ships under
-`@voqalize/avatar/internal`: a future renderer must not plug into the wrong
-seam, and one already did.
-
-### Repo map
-
-Two packages ship, both under `packages/`:
-
-| | |
-|---|---|
-| `packages/avatar/` | `@voqalize/avatar`. `src/` is the widget itself — mixer, rig, the three drawings, as dependency-free ES modules with no build step, so what you screenshot is what ships. `client/` is `AvatarClient` (splice, clock anchor) and the React binding, compiled with plain `tsc` into `dist/`, which imports `../src/` as an ordinary sibling. |
-| `packages/avatar-py/` | `voqalize-avatar`, the pipecat backend: state inference from stock frames, and both viseme legs. `native/avatarsync/` inside it is the aligner — our Rhubarb fork, built into the shared library that rides inside the wheel. |
-
-One tree does not ship: [`apps/server/`](apps/server/README.md) — *does it work in
-a real call?* — one pipecat process with canned LLM and TTS behind the real
-interfaces, zero API keys, and the only place lipsync is ever judged. It is here
-rather than in the working tree because a demo call with no keys in it is the
-first thing anyone runs, and because it is what the Python package is for.
-
-`docs/` is the prose half of the contracts, binding on both packages. The full
-tree, path by path: [design-library-split.md § Layout](docs/design-library-split.md),
-which is also why this is a library rather than a product and what each
-published artifact owns.
-
-### Verifying
+How the layers relate and which of them carry a semver promise:
+[docs/architecture.md § The layers](docs/architecture.md). The tree path by
+path, and why this is a library rather than a product:
+[design-library-split.md § Layout](docs/design-library-split.md).
 
 ```sh
 pnpm test                 # client, package boundary, and the rig conformance sweep
@@ -414,7 +386,9 @@ project has found was found by looking at a rendered page — which is what the
 headless render, screenshot and pixel-diff tooling in the working tree is for,
 and why it is not a suite.
 
-Releasing either package: [RELEASING.md](RELEASING.md).
+**What you may change here, and why the browser library and `docs/` are not on
+that list: [CONTRIBUTING.md](CONTRIBUTING.md).** Releasing either package:
+[RELEASING.md](RELEASING.md).
 
 ## Design
 

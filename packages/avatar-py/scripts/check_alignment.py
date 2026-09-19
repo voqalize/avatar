@@ -1,6 +1,14 @@
 """Measure whether a cue track is in phase with the audio it describes.
 
-    cd packages/avatar-py && uv run python scripts/check_alignment.py
+    cd packages/avatar-py && uv run python scripts/check_alignment.py CLIPS.json
+
+**The clips are not in this repository.** They are the rig workshop's eval set,
+which is part of the private working tree (CONTRIBUTING.md), so this takes the
+manifest as an argument and reads the audio relative to it. Any JSON of the same
+shape works: a list of `{id, ms, audio, tracks: {<name>: [{t, v}, ...]}}`, where
+`audio` is a path to a 16-bit mono wav beside the manifest and `ms` is its
+length. The measurement is about the aligner, which is here; only the corpus it
+is measured on lives over there.
 
 The one thing about lipsync that cannot be judged by eye without a controlled
 listening setup: a uniform shift. Every browser plays audio later than
@@ -30,11 +38,10 @@ from __future__ import annotations
 import array
 import json
 import math
+import sys
 import wave
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3]
-AUTHORING = REPO / "apps" / "authoring"
 STEP_MS = 10  # one animation frame at 100 Hz; finer than any shift a viewer sees
 
 # Fraction of peak RMS above which a frame counts as speech. Loose on purpose:
@@ -100,7 +107,11 @@ def best_lag(a: list[int], b: list[int], span: int = 40) -> tuple[int, float]:
 
 
 def main() -> None:
-    clips = json.loads((AUTHORING / "lipsync-clips.json").read_text())
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    manifest = Path(sys.argv[1]).resolve()
+    root = manifest.parent
+    clips = json.loads(manifest.read_text())
     names = list(clips[0]["tracks"])
     print("positive = mouth later than the sound\n")
     head = "".join(f"{n:>26}" for n in names)
@@ -109,7 +120,7 @@ def main() -> None:
 
     totals: dict[str, list[tuple[int, int, int]]] = {n: [] for n in names}
     for c in clips:
-        voice = speech(envelope(AUTHORING / c["audio"], c["ms"]))
+        voice = speech(envelope(root / c["audio"], c["ms"]))
         a_on, a_off = edges(voice)
         cells = []
         for name in names:

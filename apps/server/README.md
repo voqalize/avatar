@@ -35,7 +35,9 @@ cd packages/avatar-py && uv run --group server python ../../apps/server/server.p
 ```
 
 Or `pm2 start ecosystem.config.cjs` from the repo root, which serves this at
-`https://avatar-server.local.voqalize.com` alongside studio and the workshop.
+`https://avatar-server.local.voqalize.com` — the one surface this repository
+has. Studio, which dials this server through its own `/api` proxy, is in the
+private working tree and starts from that checkout's pm2 file.
 
 Open the URL and click **Start call**. Grant the microphone when
 Chrome asks — the call cannot connect until you do. The bot speaks first.

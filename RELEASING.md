@@ -3,17 +3,13 @@
 Two packages, two pipelines, no long-lived credentials. Both publish from this
 repository, which is the only place they ever have.
 
-**The JavaScript arrives here already reviewed.** From 0.4.0 the client and the
-renderers are developed in a private working tree — the Blender pipeline that
-compiles a 2.5-D character lives there and is not published
-([CONTRIBUTING.md](CONTRIBUTING.md)) — and reach this repository as **one commit
-per release**, synthesised by a tool in that tree from an explicit list of
-paths. The commit carries an `Exported-From:` trailer naming the private revision
-it was cut from, which is how the next export finds where the last one stopped.
-So `packages/avatar/` and `docs/` here are a published artifact: a fix to either
-is made in the working tree and arrives with the next release. The Python package
-and `apps/server/` are this repository's own, are never written by an export, and
-take pull requests.
+**The JavaScript arrives here already reviewed.** `packages/avatar/` and
+`docs/` are exported from a private working tree as one commit per release,
+carrying an `Exported-From:` trailer that names the private revision — so
+`@voqalize/avatar`'s version bump belongs in that export commit, and a fix to
+either path is made over there. The Python package and `apps/server/` are this
+repository's own and take pull requests. Why the line is drawn there:
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 | package | registry | tag | workflow | what's in it |
 |---|---|---|---|---|
@@ -26,22 +22,19 @@ workflow refuses to publish if its tag disagrees with its manifest, and gates
 on its own package's CI (`ci-py.yml`, `ci-js.yml`) and nothing else.
 
 Up to 0.3.0 both shipped together from one `v<semver>` tag. Those tags stay,
-and each release also carries a `py-v`/`npm-v` pair on the same commit, so
-either package's history reads from one tag family.
+and each of those releases also carries a `py-v`/`npm-v` pair on the same
+commit, so either package's history reads from one tag family.
 
-**The npm tarball's layout changed in 0.3.0.** The published manifest moved to
-`packages/avatar/package.json`, the compiled client is `dist/` rather than
-`client/dist/`, and `files` is now `src`, `client`, `dist` — the contract
-documents no longer ship inside the package, because a second copy of `docs/`
-going stale on npm is worse than a link to a public repository that is current.
-The export map is unchanged, so nothing a consumer imports moved.
-
-**0.4.0 adds bytes that are not JavaScript.** `assets/` — the three compiled
-2.5-D characters — is in `files`, and so is `LICENSE-CC-BY-4.0`, which covers
-them: npm auto-includes a file called `LICENSE` and nothing else, so a second
-licence file that is not named in `files` silently does not ship. The manifest
-declares `MIT AND CC-BY-4.0` and `three` is an *optional* peer, reachable only
-from the three character entry points. Three more export paths, no removals.
+**What is in the npm tarball, and why.** `files` is `src`, `client`, `dist`,
+`assets`, `LICENSE-CC-BY-4.0`. `dist/` imports `../src/` as an ordinary sibling,
+so the entrypoint dangles without it; `assets/` is the three compiled 2.5-D
+characters; and the CC-BY licence has to be named explicitly, because npm
+auto-includes a file called `LICENSE` and nothing else — a second licence file
+that is not in `files` silently does not ship. The manifest declares
+`MIT AND CC-BY-4.0`, and `three` is an *optional* peer reachable only from the
+three character entry points. The contract documents deliberately do not ship: a
+second copy of `docs/` going stale on npm is worse than a link to a public
+repository that is current. `packaged.test.ts` is what holds all of this.
 
 ## Compatibility
 
@@ -56,6 +49,13 @@ why), and the client ignores a `cmd` it does not know. So:
   minor (a major after 1.0) of *both* packages, released together, and both
   release notes name the pairing.
 
+**When a wire change does land, browsers move first and the pipeline's pin
+follows.** A newer client reads an older server — 0.4.0 renamed `claim` to
+`state` and still accepts the old spelling at its parse boundary — but the
+reverse is silent: a 0.3.x client's parser drops an unrecognised `cmd` without a
+log line, so a pipeline upgraded ahead of its browsers loses every state and
+action and keeps its lipsync, which looks like a rendering bug and is not one.
+
 The wire itself is [docs/contract-wire.md](docs/contract-wire.md). A consumer
 picks its pair with its own pins.
 
@@ -63,12 +63,12 @@ picks its pair with its own pins.
 
 ```sh
 # voqalize-avatar: bump packages/avatar-py/pyproject.toml, commit, then
-git tag -a py-v0.3.1 -m "voqalize-avatar 0.3.1"
-git push origin main py-v0.3.1
+git tag -a py-v0.4.1 -m "voqalize-avatar 0.4.1"
+git push origin main py-v0.4.1
 
 # @voqalize/avatar: bump packages/avatar/package.json, commit, then
-git tag -a npm-v0.3.1 -m "@voqalize/avatar 0.3.1"
-git push origin main npm-v0.3.1
+git tag -a npm-v0.4.2 -m "@voqalize/avatar 0.4.2"
+git push origin main npm-v0.4.2
 ```
 
 The commit you are tagging is usually the export commit for `@voqalize/avatar`
@@ -103,80 +103,31 @@ whatever you type. The guard derives that spelling from the tag, so a wrong one
 fails before anything is uploaded. Only `-alpha.N`, `-beta.N` and `-rc.N` are
 accepted; anything else is rejected at the guard rather than at upload.
 
-## One-time setup
+## How publishing is trusted
 
-Three things, none of which store a secret in this repository. Both registries
-accept a short-lived OIDC token that GitHub mints for *this repo running this
-workflow*, which is strictly better than a token in `secrets`: it cannot be
-copied out, cannot be used from a fork, and expires in minutes.
+No credential is stored in this repository. Both registries mint a short-lived
+OIDC token for *this repo running this workflow*, which cannot be copied out,
+cannot be used from a fork, and expires in minutes.
 
-### 1. GitHub environments
+| registry | trusted publisher | GitHub environment |
+|---|---|---|
+| PyPI | `voqalize/avatar`, workflow `release-pypi.yml` | `pypi` |
+| npm | `voqalize/avatar`, workflow `release-npm.yml` | `npm` |
 
-**Settings → Environments**, create two, named exactly:
+**A trusted publisher is keyed to the exact workflow filename**, and that is the
+one thing here that has actually bitten. Both entries were first registered
+against the combined `release.yml` that predated the split; a publish under a
+filename the registry does not name is refused at upload, after the tag is
+pushed and after CI has gone green. Renaming or splitting a release workflow
+means editing the registry entry in the same breath. The environment names are
+pinned by those entries too, so they are not free to rename either.
 
-- `npm`
-- `pypi`
-
-Leave them unprotected for now, or add a required reviewer on both if you want
-a human to approve every publish. The names matter — both registries pin their
-trust to the environment name below.
-
-### 2. PyPI
-
-PyPI supports a *pending* publisher, so this can be done before the project
-exists.
-
-1. Log in as the account that should own the project → **Your projects → Publishing**
-   → *Add a new pending publisher*.
-2. Fill in:
-   - PyPI Project Name: `voqalize-avatar`
-   - Owner: `voqalize`
-   - Repository name: `avatar`
-   - Workflow name: `release-pypi.yml`
-   - Environment name: `pypi`
-3. Save. The first tagged release creates the project and claims the name.
-
-The project already exists, with a publisher registered for the old combined
-`release.yml`. PyPI allows several trusted publishers per project, so add one
-for `release-pypi.yml` (**Your projects → voqalize-avatar → Manage →
-Publishing**) before the first `py-v` tag, and delete the `release.yml` one
-once a release has gone through.
-
-Move the project into a PyPI **organization** afterwards if you want the
-`voqalize` name held there too — PyPI has no scopes, so `voqalize-` is the
-namespace and holding the org name is what stops someone else using it.
-
-### 3. npm
-
-npm has no pending-publisher equivalent, so the very first publish is manual
-and everything after it is automatic.
-
-```sh
-# a. create the org that owns the scope — free for public packages
-#    https://www.npmjs.com/org/create   ->   name: voqalize
-# b. from a clean checkout of the tag, as a member of that org:
-npm login
-pnpm install --frozen-lockfile   # runs `prepare`, which compiles packages/avatar/dist
-cd packages/avatar && npm publish --access public
-```
-
-Then, on the package page: **Settings → Trusted publisher → GitHub Actions**
-
-- Organization or user: `voqalize`
-- Repository: `avatar`
-- Workflow filename: `release-npm.yml`
-- Environment: `npm`
-
-The package's existing trusted publisher names the old combined `release.yml`;
-edit it to `release-npm.yml` before the first `npm-v` tag, or that publish is
-refused.
-
-From the next tag on, the workflow publishes with no credential and attaches a
-**provenance attestation** — a signed statement linking the tarball to this
-workflow run and this commit, which is the only way a consumer can check that
-what they installed is built from what they can read. Turn on *Require two-factor
-authentication and disallow tokens* in the org settings once this works; it
-closes the door the manual publish left open.
+npm additionally attaches a **provenance attestation** — a signed statement
+linking the tarball to this workflow run and this commit, which is the only way
+a consumer can check that what they installed was built from what they can read.
+PyPI's first publish created the project; npm's was manual, because npm has no
+pending-publisher equivalent, and *Require two-factor authentication and
+disallow tokens* in the org settings is what closes the door that left open.
 
 ### Fallback: tokens
 
