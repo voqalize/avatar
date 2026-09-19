@@ -304,6 +304,13 @@ fetched when the avatar mounts. Nothing above the renderer changes: same wire,
 same states, same cue-synced mouth, and a server that has never heard of these
 characters drives one correctly.
 
+**On 0.4.0 a build importing one of them emitted all three binaries** — 1.8 MB
+where 504 kB was asked for, because the three asset URLs shared a module and
+bundlers emit `new URL` assets per module. Fixed in 0.4.1, with no change to the
+import. If you are on 0.4.0, that is the reason to move; `optimizeDeps.exclude`
+is the one thing Vite needs either way, and both are in
+[characters.md](docs/characters.md#the-asset-is-fetched-at-runtime).
+
 **The binaries are artwork under CC-BY 4.0**, separately from the MIT code around
 them. Mounting, sizing, the asset budget, the head envelope and the credit line:
 [characters.md](docs/characters.md).
