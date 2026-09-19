@@ -107,3 +107,62 @@ describe("the three-dimensional engine", () => {
     expect(installed.version.startsWith(floor!)).toBe(true);
   });
 });
+
+/**
+ * A consumer who imports one character downloads one character.
+ *
+ * This is a bundling fact and nothing else in the suite can see it: the URLs are
+ * `new URL(…, import.meta.url)` literals, so Vite, webpack and Rollup emit the
+ * file each one names — and they decide that per *module*. While all three URLs
+ * sat in one frozen object, every build of every consumer carried all three GLBs
+ * (~1.3 MB unasked for; measured in two real apps at 0.4.0). The fix was one
+ * module per character, which only holds if nothing a character module reaches
+ * mentions another character — including the rig, which used to default its
+ * `url` to tara's.
+ *
+ * So this walks the real relative import graph from each character's entry point
+ * and counts asset literals. It fails the day someone reintroduces a convenience
+ * that pulls the table back in.
+ */
+describe("one character costs one character", () => {
+  /** The transitive relative-import closure of a module, as paths under ROOT. */
+  const closure = (entry: string): string[] => {
+    const seen = new Set<string>();
+    const queue = [entry];
+    while (queue.length) {
+      const rel = queue.shift()!;
+      if (seen.has(rel)) continue;
+      // `.js` in a specifier is the runtime spelling; the file on disk beside a
+      // compiled entry point is `.ts`. Either can be the real one here.
+      const onDisk = [rel, rel.replace(/\.js$/, ".ts")].find((p) => existsSync(join(ROOT, p)));
+      if (!onDisk) continue;
+      seen.add(onDisk);
+      const src = readFileSync(join(ROOT, onDisk), "utf8");
+      for (const m of src.matchAll(/from\s+"(\.[^"]+)"/g)) {
+        queue.push(join(onDisk, "..", m[1]));
+      }
+    }
+    return [...seen];
+  };
+
+  it.each(["tara", "tushar", "tanya"])("%s's module graph names only her own GLB", (name) => {
+    // Only a real `new URL("…/assets/<name>.glb", …)` literal counts — that is
+    // the one shape a bundler follows. Prose naming a file does not emit it, and
+    // two comments in the rig discuss `tara.glb` for reasons of their own.
+    const naming = closure(`client/three/${name}.ts`)
+      .flatMap((f) => [...readFileSync(join(ROOT, f), "utf8").matchAll(/assets\/(\w+)\.glb/g)]
+        .map((m) => ({ file: f, glb: m[1] })));
+    expect(naming.length, `asset literals reached from ${name}.ts`).toBeGreaterThan(0);
+    for (const { file, glb } of naming) expect(glb, `${file} names ${glb}.glb`).toBe(name);
+  });
+
+  // The table itself is not a defect — it is what a rig instrument switching
+  // between characters wants. It may only be reachable from `/internal/three`,
+  // which is a separate entry point that ships no call page.
+  it("keeps the all-three table out of the character modules", () => {
+    for (const name of ["tara", "tushar", "tanya"]) {
+      expect(closure(`client/three/${name}.ts`), name).not.toContain("client/three/assets.ts");
+    }
+    expect(closure("client/three/internal.ts")).toContain("client/three/assets.ts");
+  });
+});

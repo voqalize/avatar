@@ -1,23 +1,21 @@
 /**
- * Where the three compiled characters are, resolved against this module's own
- * location.
+ * The three compiled characters as one table — for a page that enumerates them.
  *
- * `new URL(…, import.meta.url)` and not a bundler's asset import: these files
- * are fetched at runtime by a consumer's app, and the spelling has to survive
- * Vite, webpack, Rollup, esbuild, a plain `tsc` output and a browser loading
- * the module directly. The query-suffix form this used to carry is Vite syntax —
- * every other toolchain, including the compiler that now builds this directory,
- * passes it through verbatim and produces an import of a file that is not there.
- *
- * The depth is the same from the source tree and from the compiled one
- * (`client/three/` and `dist/three/` are siblings), so one literal is correct in
- * both — and literal is load-bearing, because a bundler can only follow this
- * pattern when it can read the path without running anything.
+ * Each URL lives in its own module (`tara-asset.ts` and its siblings) and this
+ * file only gathers them, because a bundler emits assets per module: anything
+ * importing *this* ships all three GLBs, which is right for a rig instrument
+ * that switches between characters and wrong for a consumer who mounted one.
+ * So the character modules never import this — they import their own — and the
+ * only reader is `/internal/three`, a separate entry point that ships nothing.
  */
+import { TANYA_GLB } from "./tanya-asset.js";
+import { TARA_GLB } from "./tara-asset.js";
+import { TUSHAR_GLB } from "./tushar-asset.js";
+
 export const ASSETS = Object.freeze({
-  tara: new URL("../../assets/tara.glb", import.meta.url).href,
-  tushar: new URL("../../assets/tushar.glb", import.meta.url).href,
-  tanya: new URL("../../assets/tanya.glb", import.meta.url).href,
+  tara: TARA_GLB,
+  tushar: TUSHAR_GLB,
+  tanya: TANYA_GLB,
 });
 
 /** Every compiled character, in build order. */

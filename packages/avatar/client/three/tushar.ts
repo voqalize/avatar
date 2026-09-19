@@ -11,7 +11,7 @@
 
 import type { PipecatClient } from "@pipecat-ai/client-js";
 import { AvatarClient, createSvgAvatar } from "../internal.js";
-import { ASSETS } from "./assets.js";
+import { TUSHAR_GLB } from "./tushar-asset.js";
 import { BLENDER_ACTIONS, BLENDER_SEQUENCES, BLENDER_SUPPORTS } from "./sequences.js";
 import { headHold } from "./holds.js";
 import { createTaraRig, TARA_TUNING } from "./tara-rig.js";
@@ -41,7 +41,7 @@ export function createAvatar(options: AvatarOptions): AvatarInstance {
   if (!mount) throw new TypeError("createAvatar: `mount` is required");
   if (!client) throw new TypeError("createAvatar: `client` is required");
 
-  const rigOptions: TaraRigOptions = { onReady, url: ASSETS.tushar };
+  const rigOptions: TaraRigOptions = { onReady, url: TUSHAR_GLB };
   // TARA-SPECIFIC, kept on purpose: `TARA_TUNING` (her mouth and motion gains)
   // is the first thing to question if he reads wrong in a call.
   const widget = createSvgAvatar({

@@ -31,7 +31,6 @@ import { REST } from "../internal.js";
 import type { AvatarFrame, AvatarRig, RigPose } from "../internal.js";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { ASSETS } from "./assets.js";
 import { HARD_BUDGET, pixelRatioFor } from "./budgets.js";
 
 /**
@@ -918,11 +917,17 @@ const MIN_FRAME_MS = 1000 / RENDER_FPS;
 export interface TaraRigOptions {
   /** Called once the GLB is in the scene, for a capture tool that must wait. */
   readonly onReady?: () => void;
-  /** The character's GLB, when it is not tara. The second-character seam: every
-   *  build fact the rig reads (jaw-shadow tile, rim depth, morph names) travels
-   *  in the GLB's own extras, so a character built by the same scripts needs
-   *  nothing else. Tara's tuning is still applied, which is the experiment. */
-  readonly url?: string;
+  /** The character's GLB. The second-character seam: every build fact the rig
+   *  reads (jaw-shadow tile, rim depth, morph names) travels in the GLB's own
+   *  extras, so a character built by the same scripts needs nothing else. Tara's
+   *  tuning is still applied, which is the experiment.
+   *
+   *  Required, and it used to default to tara's. A default meant this module
+   *  imported one character's URL, and a bundler emits assets per module — so
+   *  every consumer of *any* character shipped tara's GLB whether or not they
+   *  mounted her. The caller knows which character it is building; this file
+   *  must not ([tara-asset.ts](./tara-asset.ts)). */
+  readonly url: string;
   /** `false` leaves an asset's expression maps unread, for a capture tool
    *  comparing the face with and without them. */
   readonly expression?: boolean;
@@ -1148,8 +1153,12 @@ const expressionWeights = (pose: RigPose, side: "L" | "R", expression: Expressio
 // `options` is `unknown` in the contract, and stays `unknown` here: the mixer
 // passes `rigOptions` through verbatim and has no way to know any rig's shape.
 export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig {
-  const { onReady, url = ASSETS.tara, expression: readExpression = true } =
+  const { onReady, url, expression: readExpression = true } =
     (options ?? {}) as TaraRigOptions;
+  // A missing `url` is a caller's defect, not a browser condition — the WebGL
+  // path below degrades because a driver is nobody's fault, whereas this would
+  // otherwise be a 404 on a path spelled `undefined`.
+  if (!url) throw new TypeError("createTaraRig: `url` is required");
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   camera.position.set(0, FRAME_CENTRE, 6);

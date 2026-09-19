@@ -16,6 +16,7 @@
 import type { PipecatClient } from "@pipecat-ai/client-js";
 import { AvatarClient, createSvgAvatar } from "../internal.js";
 import { BLENDER_ACTIONS, BLENDER_SEQUENCES, BLENDER_SUPPORTS } from "./sequences.js";
+import { TARA_GLB } from "./tara-asset.js";
 import { headHold } from "./holds.js";
 import { createTaraRig, TARA_TUNING } from "./tara-rig.js";
 import type { TaraRigOptions } from "./tara-rig.js";
@@ -44,7 +45,7 @@ export function createAvatar(options: AvatarOptions): AvatarInstance {
   if (!mount) throw new TypeError("createAvatar: `mount` is required");
   if (!client) throw new TypeError("createAvatar: `client` is required");
 
-  const rigOptions: TaraRigOptions = { onReady };
+  const rigOptions: TaraRigOptions = { onReady, url: TARA_GLB };
   // `hand: false` disables the bundled SVG hand renderer only; the semantic
   // hand frame still reaches the rig, which ignores it — tara has no arms, and
   // that is the library's oldest standing constraint rather than an omission.

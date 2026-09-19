@@ -62,6 +62,28 @@ The file is fetched when the avatar mounts, not when the module is imported.
 `onReady` fires once it is in the scene, which is for a capture tool; a consumer
 does not need it.
 
+**You ship the character you import, and only from 0.4.1.** A bundler that
+follows `new URL` decides what to emit per *module*, and until 0.4.1 all three
+URLs sat in one table that every character reached through — so a build importing
+`avatars/tara` emitted all three files. Measured on one page against both
+versions: 1.8 MB and three `.glb`s at 0.4.0, 504 kB and one at 0.4.1. Each URL
+now lives in its own module and the rig takes the path from its caller. Nothing
+about the import changed; if you pinned `~0.4.0`, this is the reason to move.
+
+**One thing to tell Vite.** Its dev-time dependency pre-bundler copies a
+dependency's modules into `node_modules/.vite/deps/`, and `import.meta.url` then
+points at the copy — where `../../assets/tara.glb` is not. The fetch 404s into
+your SPA fallback, the character mounts, nothing is drawn and nothing is thrown.
+Exclude the package and it is served from its real path:
+
+```js
+// vite.config.js
+export default { optimizeDeps: { exclude: ['@voqalize/avatar'] } };
+```
+
+The same applies to the Canvas2D avatars, which locate their rig JSON and
+wardrobe images the same way. Other bundlers do not pre-bundle and need nothing.
+
 ## Size, and what it costs
 
 The characters are drawn, judged and budgeted at a **400 × 300 CSS tile at device
