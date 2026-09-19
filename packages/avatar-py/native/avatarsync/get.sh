@@ -36,10 +36,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG="$(cd "$HERE/../.." && pwd)"
 
 version=""
+asked_for_a_version=0
 check_only=0
 while [ $# -gt 0 ]; do
 	case "$1" in
-		--version) version="${2:?--version needs a value}"; shift 2 ;;
+		--version) version="${2:?--version needs a value}"; asked_for_a_version=1; shift 2 ;;
 		--check) check_only=1; shift ;;
 		*) echo "unknown argument: $1" >&2; exit 2 ;;
 	esac
@@ -84,7 +85,27 @@ if ! uv pip install --no-deps --quiet --target "$TMP" "voqalize-avatar==$version
 	echo "could not download voqalize-avatar==$version:" >&2
 	sed 's/^/  /' "$TMP/err" >&2
 	echo "" >&2
-	echo "If that version is not published yet, build from source: ./build.sh" >&2
+	# The default version is what this checkout *is*, so between a version bump
+	# and its `py-v` tag it is routinely a version PyPI has never seen. That is
+	# the ordinary case and it deserves to be named, not left as a resolver
+	# error the reader has to interpret.
+	if [ "$asked_for_a_version" = 0 ]; then
+		echo "$version is the version this checkout releases as (pyproject.toml). It" >&2
+		echo "has no wheels on PyPI until the py-v$version tag is pushed, so this is" >&2
+		echo "expected on an unreleased working tree." >&2
+	fi
+	# Best effort, and only to save a browser trip: no failure here changes the
+	# advice below.
+	latest=$(curl -fsS --max-time 10 https://pypi.org/pypi/voqalize-avatar/json 2>/dev/null |
+		python3 -c 'import json,sys; print(json.load(sys.stdin)["info"]["version"])' 2>/dev/null) || latest=""
+	if [ -n "$latest" ] && [ "$latest" != "$version" ]; then
+		echo "" >&2
+		echo "The newest published release is $latest:" >&2
+		echo "  ./get.sh --version $latest" >&2
+	fi
+	echo "" >&2
+	echo "Or build the aligner from source, which needs no published wheel:" >&2
+	echo "  ./build.sh" >&2
 	exit 1
 fi
 
