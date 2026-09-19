@@ -1,6 +1,19 @@
 # Releasing
 
-Two packages, two pipelines, no long-lived credentials.
+Two packages, two pipelines, no long-lived credentials. Both publish from this
+repository, which is the only place they ever have.
+
+**The JavaScript arrives here already reviewed.** From 0.4.0 the client and the
+renderers are developed in a private working tree — the Blender pipeline that
+compiles a 2.5-D character lives there and is not published
+([CONTRIBUTING.md](CONTRIBUTING.md)) — and reach this repository as **one commit
+per release**, synthesised by a tool in that tree from an explicit list of
+paths. The commit carries an `Exported-From:` trailer naming the private revision
+it was cut from, which is how the next export finds where the last one stopped.
+So `packages/avatar/` and `docs/` here are a published artifact: a fix to either
+is made in the working tree and arrives with the next release. The Python package
+and `apps/server/` are this repository's own, are never written by an export, and
+take pull requests.
 
 | package | registry | tag | workflow | what's in it |
 |---|---|---|---|---|
@@ -22,6 +35,13 @@ either package's history reads from one tag family.
 documents no longer ship inside the package, because a second copy of `docs/`
 going stale on npm is worse than a link to a public repository that is current.
 The export map is unchanged, so nothing a consumer imports moved.
+
+**0.4.0 adds bytes that are not JavaScript.** `assets/` — the three compiled
+2.5-D characters — is in `files`, and so is `LICENSE-CC-BY-4.0`, which covers
+them: npm auto-includes a file called `LICENSE` and nothing else, so a second
+licence file that is not named in `files` silently does not ship. The manifest
+declares `MIT AND CC-BY-4.0` and `three` is an *optional* peer, reachable only
+from the three character entry points. Three more export paths, no removals.
 
 ## Compatibility
 
@@ -50,6 +70,11 @@ git push origin main py-v0.3.1
 git tag -a npm-v0.3.1 -m "@voqalize/avatar 0.3.1"
 git push origin main npm-v0.3.1
 ```
+
+The commit you are tagging is usually the export commit for `@voqalize/avatar`
+and an ordinary pull-request merge for `voqalize-avatar`; the version bump goes
+in whichever of the two it belongs to, and a wire change that breaks both is
+what makes the two tags land on one commit.
 
 Push the tag by name. The root `package.json` is the workspace manifest and
 publishes nothing; its version is not read by anything and neither guard reads

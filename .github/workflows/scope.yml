@@ -1,0 +1,54 @@
+# What a pull request is allowed to touch, checked rather than asked for.
+#
+# `packages/avatar/` and `docs/` are a build output here: they are developed in a
+# private working tree and overwritten wholesale by one export commit per release
+# (RELEASING.md). A pull request against them cannot be merged in any useful
+# sense — it would be reverted by the next release with nobody noticing — so this
+# job says so at the top of the review instead of a maintainer saying it at the
+# bottom. CONTRIBUTING.md carries the reasoning.
+#
+# Pull requests only. The export lands as a direct push to `main` by a
+# maintainer, which is the one change that legitimately touches everything and
+# the one this job never sees.
+name: scope
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    name: contributable paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: check the changed paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Everything this repository is the source of truth for. Anything else
+          # is either exported or artwork.
+          allowed='^(packages/avatar-py/|apps/server/|\.github/|CONTRIBUTING\.md$)'
+
+          git diff --name-only "$BASE" "$HEAD" > /tmp/changed
+          if ! grep -qvE "$allowed" /tmp/changed; then
+            echo "In scope:"; sed 's/^/  /' /tmp/changed
+            exit 0
+          fi
+
+          echo "This pull request changes paths that are not developed in this repository:"
+          grep -vE "$allowed" /tmp/changed | sed 's/^/  /'
+          echo
+          echo "packages/avatar/ and docs/ are exported from a private working tree and"
+          echo "are overwritten by the next release; packages/avatar/assets/ is artwork."
+          echo "See CONTRIBUTING.md. A report of the bug, with a reproduction, is the"
+          echo "contribution we can act on for those paths -- and we do act on them."
+          exit 1

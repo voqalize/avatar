@@ -7,17 +7,16 @@
 # so the IDE and the package under test could have been running different
 # transports.
 #
-# `packages/avatar` is the published one (`@voqalize/avatar`); the other two are
-# private dev tooling that never ships, and the root manifest is a workspace
-# manifest with nothing publishable in it.
+# `packages/avatar` is the published one (`@voqalize/avatar`) and, since 0.4.0,
+# the only one: the IDE and the rig workshop are part of the working tree, which
+# is private (CONTRIBUTING.md). The root manifest is a workspace manifest with
+# nothing publishable in it.
 packages:
   - "packages/avatar"
-  - "apps/studio"
-  - "apps/authoring/tools"
 
 # The versions that must agree across the workspace, named once. `catalog:` in a
-# manifest resolves to the entry here, so the root package and the IDE cannot
-# end up on different pipecat clients — which is what happened under three
+# manifest resolves to the entry here, so the package and everything testing it
+# cannot end up on different pipecat clients — which is what happened under three
 # lockfiles, and which npm reported as nothing at all.
 #
 # `@pipecat-ai/small-webrtc-transport` tracks `client-js` with a `~` peer, so
@@ -33,10 +32,9 @@ catalog:
   "@types/react-dom": "^18.3.0"
   typescript: "^5.7.3"
 
-# puppeteer downloads a browser and esbuild unpacks its platform binary; both
-# are no-ops without their install script, and `node apps/authoring/tools/shot.mjs`
-# fails with a missing-Chrome error that reads like a bug in the tool. pnpm blocks install
-# scripts by default, so the two that genuinely need one are named here.
+# esbuild unpacks its platform binary in an install script, and is a no-op
+# without one: `pnpm run server:vendor` bundles the pipecat client for the demo
+# call. pnpm blocks install scripts by default, so the one that genuinely needs
+# one is named here.
 onlyBuiltDependencies:
   - esbuild
-  - puppeteer

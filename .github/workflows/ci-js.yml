@@ -33,9 +33,9 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      # One install for the whole workspace — the package, the IDE and the rig
-      # tooling. `prepare` compiles packages/avatar/client/ on install, so this
-      # also proves the one build step in the repo still works.
+      # One install for the workspace, which is one package now. `prepare`
+      # compiles packages/avatar/client/ on install, so this also proves the one
+      # build step in the repo still works.
       - run: pnpm install --frozen-lockfile
 
       - name: typecheck
@@ -50,15 +50,37 @@ jobs:
         # so a real Chrome was paying for nothing.
         run: pnpm test
 
-      - name: studio typecheck and build
-        # `build` is `tsc --noEmit && vite build`, so this is the typecheck too.
-        # Studio resolves `@voqalize/avatar` through the workspace link — the
-        # real `exports` map, out of `packages/avatar/dist` — so a build
-        # failing here is
-        # usually the published entrypoint being wrong rather than the IDE: it
-        # is the only thing in CI that consumes the package as a consumer does,
-        # from outside.
-        run: pnpm run studio:build
+      - name: consume the tarball
+        # The one job here that uses the package the way a consumer does:
+        # installed from a tarball, resolved through the real `exports` map, with
+        # the optional peers present. Studio used to be this — a vite build
+        # against the workspace link — and Studio is part of the working tree
+        # now, so the check became what it was always standing in for.
+        #
+        # Every entry point, because a missing subpath is invisible to a build
+        # that imports one: the barrel, the two internal doors, the three faces,
+        # two of the six canvas identities and all three compiled characters. The
+        # characters are the reason `three` is installed here; they are also the
+        # only exports that read a file at runtime, and this proves the import
+        # resolves, not that the GLB fetches.
+        run: |
+          cd packages/avatar
+          TARBALL="$(pnpm pack | tail -1)"
+          WORK="$(mktemp -d)"
+          cp "$TARBALL" "$WORK/"
+          cd "$WORK"
+          npm init -y >/dev/null
+          npm i --silent "./$(basename "$TARBALL")" three @pipecat-ai/client-js react react-dom
+          node --input-type=module -e '
+            const paths = ["", "/internal", "/internal/three", "/faces/peep",
+              "/faces/wren", "/faces/myna", "/avatars/arjun", "/avatars/naina",
+              "/avatars/tara", "/avatars/tushar", "/avatars/tanya", "/react"];
+            for (const p of paths) {
+              const m = await import("@voqalize/avatar" + p);
+              if (Object.keys(m).length === 0) throw new Error(`empty export: ${p}`);
+              console.log((p || ".").padEnd(18), Object.keys(m).join(", ").slice(0, 60));
+            }
+          '
 
       - name: npm package contents
         # The tarball is the artifact consumers actually get; `files` has been

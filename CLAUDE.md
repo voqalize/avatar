@@ -5,8 +5,26 @@ A renderer-agnostic behavior library that makes a 2-D talking head read as
 rig only renders** — that precedence is the design
 ([pipecat-lifecycle-protocol.md § Authority model](docs/pipecat-lifecycle-protocol.md)).
 
+> **This repository holds two things with different rules, and confusing them
+> wastes a change (from 0.4.0).** `packages/avatar/` and `docs/` are a
+> *published artifact*: they are developed in a private working tree and arrive
+> here as one synthesised commit per release, carrying an `Exported-From:`
+> trailer that names the private revision. **Editing them here is editing a
+> build output** — the next export overwrites it, silently, and no test catches
+> that. `packages/avatar-py/`, `apps/server/`, the workflows and the root
+> manifests are this repository's own; no export ever writes them, and they take
+> pull requests ([CONTRIBUTING.md](CONTRIBUTING.md)). The reason for the split is
+> one directory that is not here: the Blender pipeline that compiles a 2.5-D
+> character is the part of this project we are not publishing, and the
+> characters themselves ship as compiled binaries under CC-BY 4.0.
+>
+> So: a JavaScript or documentation fix goes to the working tree, and lands here
+> with the next release. If you are reading this in a checkout that *has* a
+> `packages/avatar-3d/`, you are in the working tree and this note does not apply
+> to you.
+
 Library, not product; two live consumers, both pipecat voice agents. Public at
-`voqalize/avatar` under MIT — **everything committed here is public**.
+`voqalize/avatar` under MIT, with the character binaries under CC-BY 4.0 — **everything committed here is public**.
 `@voqalize/avatar` (npm) and `voqalize-avatar` (PyPI) are two ends of one wire
 format and release independently, from `npm-v<semver>` and `py-v<semver>` tags —
 the wire keeps them compatible, not a shared version ([RELEASING.md](RELEASING.md)).
@@ -31,7 +49,7 @@ mistake has already been made once.
 
 | layer | owns | code | reference |
 |---|---|---|---|
-| **wire** | `claim` / `action` / `cues`, nothing else | `packages/avatar/client/AvatarClient.ts` | **[contract-wire.md](docs/contract-wire.md)** |
+| **wire** | `state` / `action` / `cues`, nothing else | `packages/avatar/client/AvatarClient.ts` | **[contract-wire.md](docs/contract-wire.md)** |
 | **avatar** | `createAvatar({mount, client}) -> {destroy()}` — the only public seam | `packages/avatar/client/createAvatar.ts` | **[design-avatar-interface.md](docs/design-avatar-interface.md)** |
 | lifecycle | effective-state precedence, cue-clock anchor, FIFO ctx bind — **the one copy of the precedence ladder** | `packages/avatar/client/AvatarClient.ts` | [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md) |
 | behavior | states, actions, wire→library mapping | `packages/avatar/src/behavior.js` | [contract-behavior.md](docs/contract-behavior.md) |
@@ -39,6 +57,7 @@ mistake has already been made once.
 | mixer | layer order, per-channel smoothing, gaze, idle, clips — **the driving API, `/internal`, no semver promise** | `packages/avatar/src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
 | rig | `apply({pose, hand})` / `destroy()`, the 30 pose channels — **internal to the SVG renderer, not a seam to implement** | `packages/avatar/src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
 | SVG faces | the drawings; `createFace` / `META`, exported as a `{create, meta}` value per module — never resolved by name | `packages/avatar/src/face-*.js`, `line-art.js`, `packages/avatar/src/faces.js` (tooling only) | [authoring-a-face.md](docs/authoring-a-face.md) |
+| 2.5-D characters | `tara`, `tushar`, `tanya` — one `createAvatar` each over one shared rig; `three` is an *optional* peer, so a drawing never pays for a 3-D engine | `packages/avatar/client/three/`, `packages/avatar/assets/*.glb` | [characters.md](docs/characters.md) |
 | Canvas2D avatars | the six professional identities, each a complete `createAvatar` module — private renderer, rig JSON and wardrobe webp images kept out of the public surface | `packages/avatar/src/canvas/`, `packages/avatar/client/{arjun,meera,vikram,ishita,kabir,naina}.ts` | [README.md § Professional avatars](README.md#professional-avatars) |
 
 **The state list has exactly one copy: `STATES` in `packages/avatar/src/avatar.js`,** with each
@@ -60,7 +79,10 @@ zero-argument `AvatarProcessor()`.** The avatar is an embodiment of
 `PipecatClient`; there is no avatar state beyond what `PipecatClient` exposes
 and the caller does not get to read it. You add an avatar by publishing a module
 that exports `createAvatar` — no registry, no loader
-([design-avatar-interface.md](docs/design-avatar-interface.md)). A new prop,
+([design-avatar-interface.md](docs/design-avatar-interface.md)). One optional
+export sits beside it and only because the wire's action id is open: `supports`,
+a declaration of what this face answers to, read by a page that *drives* an
+avatar and by nothing in the library. A new prop,
 option or wire command needs a real consumer asking, not a plausible one. The
 backend extension seams are `AvatarControlFrame` and subclassing
 `AvatarStateMachine`.
@@ -70,8 +92,8 @@ backend extension seams are `AvatarControlFrame` and subclassing
 Non-obvious, and recorded nowhere else.
 
 - **The client never decides what the agent is doing.** No client-side
-  intelligence about call content. Server claims are *candidates*; observed
-  playout wins. A Live2D-style client clip-priority mechanism was rejected
+  intelligence about call content. A state the server sends is a *candidate*;
+  observed playout wins. A Live2D-style client clip-priority mechanism was rejected
   outright for this reason — it would let the client refuse a server command.
 - **Lipsync is the headline feature.** The brief ranked it *"most importantly"*;
   anything that degrades its fidelity or timing is a regression even if it
@@ -127,10 +149,10 @@ Non-obvious, and recorded nowhere else.
   not from zero. The arithmetic and the worked numbers are in
   [internal-mixer.md § Smoothing](docs/internal-mixer.md) — one copy.
 - **`packages/avatar/src/` has no build step, and that is a constraint, not a convenience.**
-  Dependency-free ES modules — what you screenshot is what ships. `packages/avatar/client/`
-  (tsc) and `apps/studio/` (vite) are compiled; nothing in `packages/avatar/src/` may depend on
-  either. A change that makes the widget need a build has broken the shape of
-  the project even if it works.
+  Dependency-free ES modules — what you screenshot is what ships.
+  `packages/avatar/client/` is compiled with plain `tsc` and nothing in
+  `packages/avatar/src/` may depend on it. A change that makes the widget need a
+  build has broken the shape of the project even if it works.
 - **Do not duplicate the backend.** When a consumer must signal something the
   library cannot infer: write your own `FrameProcessor`, or subclass
   `AvatarStateMachine` and translate in `on_frame`. YAGNI until a third strong
@@ -140,20 +162,20 @@ Non-obvious, and recorded nowhere else.
   *down*) are the actual value in this code and are easy to "clean up" by
   accident.
 
-## Running the three surfaces
+## Running the demo call
 
 ```sh
 pm2 start ecosystem.config.cjs
 ```
 
-Starts `apps/server/` (the pipecat demo call), `apps/studio/` and the authoring
-workshop. Ports are declared in that file and passed on the command line; no
-config here names one. On this machine a local nginx fronts them at
-`avatar.local.voqalize.com` (Studio, with `/api` proxied to the server),
-`avatar-server.local.voqalize.com` and `authoring.local.voqalize.com`.
+Starts `apps/server/` — the pipecat demo call, and the only surface here. Its
+port is declared in that file and passed on the command line; no config names
+one. On the maintainer's machine a local nginx fronts it at
+`avatar-server.local.voqalize.com`.
 
-Each also runs standalone exactly as the READMEs describe — a contributor
-without pm2 or that nginx loses nothing.
+It also runs standalone exactly as [its README](apps/server/README.md) describes
+— a contributor without pm2 or that nginx loses nothing, which is the point of
+it being the surface that stayed public.
 
 ## Verifying
 
@@ -161,34 +183,24 @@ The rig is judged by eye; the packages are judged by test.
 
 ```
 pnpm test                 # the client, the package boundary, and the rig conformance sweep
-                          # (`packages/avatar/src/conformance.js`) — run before committing src/
-pnpm run studio:dev       # Avatar Studio — the review environment
+                          # (`packages/avatar/src/conformance.js`)
 cd packages/avatar-py && uv run pytest     # backend, against the real avatarsync library
 cd apps/server && uv run --project ../../packages/avatar-py --group server --group dev python -m pytest
 cd packages/avatar-py && uv run --group server python ../../apps/server/server.py   # a real call
 ```
 
-Headless render/screenshot/diff/motion tooling: [apps/authoring/tools/README.md](apps/authoring/tools/README.md).
-Which Studio route validates which layer: [apps/studio/README.md](apps/studio/README.md).
+`pnpm test` runs here as well as in the working tree, and is the gate the
+export tool proves a release against before its commit exists — so a Python
+change that breaks a JavaScript test is caught here, in CI, and nowhere else.
 
-Three things no suite will tell you:
+Two things no suite will tell you:
 
 - **Lipsync is only ever verified in [`apps/server/`](apps/server/README.md)**
   — a real call, your microphone, live TTS, `AvatarProcessor()` seated between
-  the TTS and the transport. `apps/authoring/lipsync-review.html` plays *baked* cue
-  tracks, so it shows what a leg's cues look like and not how the two legs
-  interleave, latch or rewrite under a real generator. Studio joins the same
-  real call, so the legs are live there too — but Studio is an option surface,
-  and the two constraints that matter are the ones only ears catch: that the
-  mouth moves the instant audio starts, and that the accurate leg's arrival is
-  not visible as a jump.
-
-- **Serve with `apps/authoring/serve.py` (pm2: `avatar-authoring`), never
-  `python3 -m http.server`.** The stdlib server sends `Last-Modified` and no `Cache-Control`, so browsers apply
-  heuristic freshness and stop revalidating modules you have edited. That has
-  cost three debugging sessions, one of which produced a module error that was
-  simply a lie. Do not work around it with `?v=` either — that puts two copies
-  of the module in the graph and fails differently and worse.
+  the TTS and the transport. The two constraints that matter are the ones only
+  ears catch: that the mouth moves the instant audio starts, and that the
+  accurate leg's arrival is not visible as a jump. A backend change that touches
+  either viseme leg is not done until someone has held a conversation with it.
 - **The conformance sweep passing is not evidence a change is good.** It
   catches dead avatars, NaN leaks and detached SVGs, nothing about how the face
   *looks*.
@@ -203,42 +215,33 @@ Three things no suite will tell you:
   `createSvgRig` (`packages/avatar/src/rig.js`) is the migration shim. There is no second
   renderer, deliberately: the one that existed implemented the rig contract
   instead of the wire and is why that page now opens with a warning box.
-- **There are exactly three non-published surfaces, and each answers one
-  question.** [`apps/server/`](apps/server/README.md) — *does it work in a real call?* One
-  pipecat process, canned LLM and TTS behind the real pipecat interfaces, **zero
-  API keys**, and the only place lipsync is ever judged.
-  [`apps/studio/`](apps/studio/README.md) — *is the published interface enough?* The IDE,
-  pointed at that same server. [`apps/authoring/`](apps/authoring/README.md) — *does the
-  drawing read?* The workshop: rig pages, clip fixtures, headless tools, no
-  build step. A thing that belongs in one of them and lands in another is how
-  this repo once grew three answers to "show me the avatar".
-- **Studio is not a rig workbench, and no longer pretends to be.** It imports
-  `@voqalize/avatar` and nothing else from this repo — no `packages/avatar/src/`, no
-  `/internal` — so a thing it cannot do is a thing a consumer cannot do. It is
-  one screen driving a real `SmallWebRTCTransport` call against `apps/server/`, and
-  the connection picks the mode: disconnected you build the avatar, in a call
-  you drive the server. There is no fake clock, no trace fixture and no
-  demo-only state machine anywhere in it, and it does not compose wire messages
-  — every control that moves the face asks the *server* to send one. **One
-  avatar, at shipping size, and no wire log**: a compare mode and a decoded
-  message list answer transport questions on a page whose subject is the face.
+- **[`apps/server/`](apps/server/README.md) answers one question — *does it work
+  in a real call?*** One pipecat process, canned LLM and TTS behind the real
+  pipecat interfaces, **zero API keys**, and the only place lipsync is ever
+  judged. It is not a product surface and it is not a test harness: a control
+  that would only ever be used by us belongs in the working tree's review
+  environment, which is where the two surfaces that used to live here went.
 - **The vocabulary is the nine core states, everywhere above the mixer.** The
   render-state pass-throughs (`TYPING_CHAT`, `WANTS_IN`, …) are gone from
   `packages/avatar/src/behavior.js`; they are still real states *in* `packages/avatar/src/avatar.js`, reached
   with `avatar.setState`, which is whose state it is. Only the `TYPING` alias
-  was deleted outright. Seven of the nine map 1:1 to a render state; `STRAINING`
-  is the first one that does not (it draws as `CANT_HEAR`), which is the
-  two-column table finally earning itself.
+  was deleted outright. **All nine map 1:1 to a render state, and the two-column
+  table is gone with the one row that did not.** `STRAINING` drew as `CANT_HEAR`
+  until the wire redesign renamed the state to the situation rather than the
+  effort a pose depicts; `BEHAVIOR_STATE_IDS` is a flat list now, and a renderer
+  that wants to draw one of the nine as something else calls `avatar.setState`.
+  The old spelling is still accepted at the client's parse boundary and nowhere
+  above it.
 - **Everything below `SPEAKING`/`LISTENING` is inference, and the reasoning is
   written down once.** A face that goes blank while a model is mid-inference
   reads as *disconnected*, so `IDLE` is the wrong answer to almost all of the
   silence in a call. Which latch is armed by which frame, why `WORKING` sits
-  under `THINKING` without being masked by it, why `STRAINING` needs a clock,
+  under `THINKING` without being masked by it, why `CANT_HEAR` needs a clock,
   and the one heuristic that is deliberately unimplemented (the held-open turn —
-  the JS client exposes no VAD event, so the claim could never win):
+  the JS client exposes no VAD event, so the candidate could never win):
   [pipecat-lifecycle-protocol.md § The silence problem](docs/pipecat-lifecycle-protocol.md).
-  `MUTED` is not a claim at all — pipecat's own mute events reach the browser,
-  and that is the authority model working as designed.
+  `MUTED` is not the server's to send at all — pipecat's own mute events reach
+  the browser, and that is the authority model working as designed.
 - **Animation quality is the open avatar work.** `myna` is stakeholder-approved
   as a *static* character (2026-08-07); an animation expert found the motion not
   up to the mark. From the graded 2026-08 review: adopted ballistic head-follow
@@ -264,3 +267,35 @@ Three things no suite will tell you:
   calibration at 130 px retires it as the yardstick. The evidence is one day
   apart: `koel`, authored from a text brief, passed every rig check and was
   rejected on sight; `myna`, authored reference-first, was approved.
+- **The three 2.5-D characters are compiled binaries, and that is the whole of
+  them here.** `packages/avatar/assets/*.glb` is a build output of a pipeline
+  that is not published; the renderer that loads one is
+  `packages/avatar/client/three/`, reached as `@voqalize/avatar/avatars/<name>`
+  and `@voqalize/avatar/internal/three`. There is no source for the artwork in
+  this repository and there is not meant to be — which is also why assets take
+  no contributions ([CONTRIBUTING.md](CONTRIBUTING.md)). What a consumer needs:
+  [characters.md](docs/characters.md).
+- **A character is a photograph on shallow geometry, and one rule of that
+  survives into the renderer: the albedo may not carry anything that has to
+  appear or disappear.** Sclera, teeth and the lip line are geometry for that
+  reason, and a rig channel that tried to fade one of them in would be fighting
+  the asset rather than driving it. The characters are driven by the *mixer*,
+  not the wire: their morph targets are authored under the 30 pose-channel names
+  in `packages/avatar/src/params.js`, so `tara.ts` is
+  `createAvatar({ rig: createTaraRig })` and every clip, blink and
+  co-articulation rule the SVG faces have works unmodified.
+- **Speech head motion holds a pose per phrase and moves between them**
+  (`packages/avatar/src/head.js`, [internal-mixer.md](docs/internal-mixer.md)).
+  The previous design summed envelopes, which gives the right spread and the
+  wrong *shape*: it matched a published per-sentence deviation statistic at 100%
+  and was read in a live call as not moving like a human at all. The statistic
+  is advisory; watching a recording is the gate.
+- **An avatar can publish motions the wire has no portable word for**, under
+  the same `cmd: "action"` whose id is open
+  ([contract-wire.md](docs/contract-wire.md) § Action). It can only add — a
+  required id wins a name collision — and an unknown id is ignored, which is the
+  forward-compat rule reached from the other direction: a face that cannot do
+  the thing is as expected as a newer server. The first table is the 2.5-D
+  characters' three research-shaped nod types and a head shake
+  (`packages/avatar/client/three/sequences.ts`), which are three things to say where
+  `ACKNOWLEDGE` is one.

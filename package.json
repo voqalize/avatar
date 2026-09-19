@@ -12,10 +12,7 @@
     "build": "tsc -p packages/avatar/tsconfig.json",
     "typecheck": "tsc -p packages/avatar/tsconfig.json --noEmit",
     "test": "vitest run",
-    "server:vendor": "esbuild apps/server/vendor.entry.js --bundle --format=esm --outfile=apps/server/vendor/pipecat.js",
-    "studio:dev": "pnpm --filter @voqalize/avatar-studio dev",
-    "studio:build": "pnpm --filter @voqalize/avatar-studio build",
-    "studio:typecheck": "pnpm --filter @voqalize/avatar-studio typecheck"
+    "server:vendor": "esbuild apps/server/vendor.entry.js --bundle --format=esm --outfile=apps/server/vendor/pipecat.js"
   },
   "devDependencies": {
     "@pipecat-ai/client-js": "catalog:",
