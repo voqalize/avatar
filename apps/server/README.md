@@ -202,9 +202,9 @@ Two things only ears catch, and no suite in this repo will tell you either:
 
 Watch more than one vendor. Under `google` the corrections stream in and the
 mouth converges while it is still talking; under `google-http` the predicted leg
-is replaced in one go. `apps/authoring/lipsync-review.html` plays *baked* cue tracks
-— it shows what a leg's cues look like, never how the two legs interleave,
-latch or rewrite under a live generator. Studio drives this same server, so the
+is replaced in one go. A review page in the private tree plays *baked*
+cue tracks — it shows what a leg's cues look like, never how the two legs
+interleave, latch or rewrite under a live generator. Studio drives this same server, so the
 legs are live there too; what it does not give you is this page's plainness,
 which is the point of judging here.
 

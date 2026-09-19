@@ -26,9 +26,9 @@ run twice a year and `--group server-vendors` carries the *runtime* vendors:
 pipecat speaks Cartesia's protocol over raw websockets and does not pull the SDK.
 
 Run this after editing the text in `lines.json`. It is the checked-in answer to
-a question the repo could not previously answer: the clips in `apps/authoring/*-audio/`
-were spoken on somebody's laptop by a command nobody wrote down, so "how do I add
-a line?" had no answer but "ask whoever made the last one".
+a question the repo could not previously answer: the earlier clips were spoken on
+somebody's laptop by a command nobody wrote down, so "how do I add a line?" had
+no answer but "ask whoever made the last one".
 
 **The recorded voice and the streamed voice are now the same voice.** Each row in
 `lines.json` carries one id — `omnivoice/gauri`, `omnivoice/gaurav` — and this

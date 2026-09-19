@@ -14,8 +14,8 @@ Three jobs, and they are separate on purpose:
   `no-store` is not paranoia. `python3 -m http.server` sends `Last-Modified`
   with no `Cache-Control`, browsers apply heuristic freshness, and they stop
   revalidating modules you have edited — that has cost this project three
-  debugging sessions, one of which produced a module error that was a lie. See
-  the repo's `apps/authoring/serve.py`, which exists for the same reason.
+  debugging sessions, one of which produced a module error that was a lie. The
+  workshop's own static server exists for the same reason.
 
 - **The call.** `POST /api/offer` hands the SDP to pipecat's
   `SmallWebRTCRequestHandler`, which is also what the JS transport posts to by
