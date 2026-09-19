@@ -366,7 +366,7 @@ implements or depends on. The rest are our own internals, and are named so.
 | mixer | layer order, per-channel smoothing, gaze, idle, clips | `packages/avatar/src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
 | rig | `apply({pose, hand})` / `destroy()`, our SVG renderer's internals | `packages/avatar/src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
 | SVG faces | the drawings | `packages/avatar/src/face-*.js` | [authoring-a-face.md](docs/authoring-a-face.md) |
-| Canvas2D avatars | the six professional identities — private renderer, rig data and wardrobe images kept out of the public surface | `packages/avatar/src/canvas/`, `packages/avatar/client/{arjun,meera,vikram,ishita,kabir,naina}.ts` | [README.md § Professional avatars](#professional-avatars) |
+| Canvas2D avatars | the six professional identities — an internal Canvas2D renderer whose rig data and wardrobe images ship as implementation details, not as a seam to build on | `packages/avatar/src/canvas/`, `packages/avatar/client/{arjun,meera,vikram,ishita,kabir,naina}.ts` | [README.md § Professional avatars](#professional-avatars) |
 | 2.5-D characters | the three compiled characters and the Three.js renderer that draws them — driven by the mixer above, under the same pose channels as every SVG face | `packages/avatar/client/three/`, `packages/avatar/assets/*.glb` | [characters.md](docs/characters.md) |
 
 The two bold rows are the contracts, and only they carry a semver promise.

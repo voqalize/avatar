@@ -67,7 +67,7 @@ lands in the wire log is what the *server* sent — which is how you tell a
 command the face ignored from one that never arrived.
 
 The five misbehaviours are there because the authority model
-([pipecat-lifecycle-protocol.md § Authority model](../docs/pipecat-lifecycle-protocol.md))
+([pipecat-lifecycle-protocol.md § Authority model](../../docs/pipecat-lifecycle-protocol.md))
 is a claim about the *renderer*, and until now nothing exercised it: every
 message this server sent was well-formed and sent at the right moment. Each
 button names what to watch for.

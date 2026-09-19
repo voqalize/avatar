@@ -6,7 +6,7 @@ and `durations.py` is that prediction. A prediction is only as good as the thing
 it was fitted against, so this is the measuring step: the same texts, spoken by
 the voices the avatar actually ships with, timed by the byte count that came back.
 
-    cd py && \
+    cd packages/avatar-py && \
       VQL_SPEECH_HOST=speech.<env>.example.com \
       VQL_SPEECH_KEY_PEM=/path/to/signing-key.pem \
       uv run --with "cartesia[websockets]>=3,<4" --with "pyjwt[crypto]" \

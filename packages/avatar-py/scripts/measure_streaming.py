@@ -1,6 +1,6 @@
 """Measure the streaming viseme path against the five constraints it was built for.
 
-    cd py && uv run python scripts/measure_streaming.py
+    cd packages/avatar-py && uv run python scripts/measure_streaming.py
 
 Runs the real `VisemeEngine` over the test fixtures, through the same entry
 points `AvatarProcessor` calls, at the frame cadences pipecat actually delivers.

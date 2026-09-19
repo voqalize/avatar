@@ -1,6 +1,6 @@
 """Measure whether a cue track is in phase with the audio it describes.
 
-    cd py && uv run python scripts/check_alignment.py
+    cd packages/avatar-py && uv run python scripts/check_alignment.py
 
 The one thing about lipsync that cannot be judged by eye without a controlled
 listening setup: a uniform shift. Every browser plays audio later than
