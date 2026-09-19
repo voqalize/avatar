@@ -61,8 +61,8 @@ describe("what the tarball carries", () => {
     expect(manifest.files.some((f) => asset === f || asset.startsWith(`${f}/`))).toBe(true);
   });
 
-  // `assets/` is the airlock: the one directory a private tree writes into a
-  // published one (`packages/avatar-3d/scripts/paths.py`). Whatever is in it
+  // `assets/` is the airlock: the one directory the private forge that builds
+  // the characters writes into a published one. Whatever is in it
   // ships, so the list is closed rather than checked — until 0.4.0 two of
   // tara's reference photographs were sitting in here, which is the exact
   // failure this holds shut. A new character adds a row; anything else in the

@@ -116,9 +116,9 @@ const FRAME_CENTRE = (FRAME.top + FRAME.bottom) / 2;
  * avatar measures its own with the audit.
  */
 // Exported through `internal.ts` for the instruments that need to put a real
-// angle *into* a channel, which is this scaling run backwards. `tools/mocap`
-// kept its own copy for want of that export and said in a comment that the
-// copy would lie the day the envelope moved; it moved on 2026-09-18.
+// angle *into* a channel, which is this scaling run backwards. The mocap
+// instrument kept its own copy for want of that export and said in a comment
+// that the copy would lie the day the envelope moved; it moved on 2026-09-18.
 export const HEAD_CLAMP = 1.4;
 export const HEAD_DEG = { yaw: 15, pitch: 24, roll: 8 };
 
@@ -207,8 +207,8 @@ const HEAD_PARTS = ["Head", "Ears", "Hair", "Eye_L", "Eye_R", "Cavity",
  *         mixer produces. What it looked like was the owner's report — the
  *         shoulders swelling and dropping in half a second. The crown travelled
  *         4.56× what the eyes did, which is a head being scaled, not carried.
- *         `tools/motion-audit/torso_travel.py` is that measurement, and its
- *         gates are what this change had to turn green.
+ *         A headless audit of what the crown travels against the eyes is that
+ *         measurement, and its gates are what this change had to turn green.
  * sway    `torsoTurn` as the seated body's inverted pendulum: the whole figure
  *         rolls about the hips, ~45 cm below the collar, so the trunk shifts
  *         sideways and tips by a fraction of a degree together. peep slides

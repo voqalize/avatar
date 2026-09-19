@@ -240,8 +240,8 @@ describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
       // is what the note here used to say. A lean rendered as a scale of the
       // whole figure, with the orthographic camera outside the group it scaled,
       // is arithmetically a zoom — fit the displacement as a linear map and its
-      // singular values come back equal with no residual
-      // (`tools/motion-audit/torso_travel.py`). The card-slide prohibition was
+      // singular values come back equal with no residual, which is what the
+      // travel audit measures. The card-slide prohibition was
       // always against a *free* hem rather than against a field: both trunk
       // fields ramp to exactly zero at the frame's lower edge and the shell
       // runs 0.14 below it, so they satisfy it by construction. Only the breath

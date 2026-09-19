@@ -2,16 +2,17 @@
 /**
  * The rig conformance gate, headless and deterministic.
  *
- * This used to be `node tools/sweep.mjs` — puppeteer, a real Chrome, a static
+ * This used to be a puppeteer sweep — a real Chrome, a static
  * server and ~15 s of wall clock, all to run assertions that never once looked
  * at a pixel. The sweep asserts *numbers*: finite, in-range mixer parameters
  * and a drawing still attached to the document. jsdom has a document, and
  * `{manual: true}` avatars stepped at a fixed dt reach the same states in
  * milliseconds — so the browser was paying for nothing the gate used.
  *
- * What did NOT move here is the part that needed a browser: `apps/authoring/` still
- * renders, screenshots and pixel-diffs the faces, and `apps/authoring/rig-check.html`
- * still runs this exact sweep in real time so you can watch it. The assertions
+ * What did NOT move here is the part that needed a browser: the authoring
+ * workshop in the working tree still renders, screenshots and pixel-diffs the
+ * faces, and one of its pages still runs this exact sweep in real time so you
+ * can watch it happen. The assertions
  * have one copy, in `src/conformance.js` — see that file for why `advance` is
  * a parameter.
  *
