@@ -5,7 +5,7 @@ Pipecat JavaScript events. The server state machine supplies only lower-priority
 `THINKING`/`WORKING` claims and explicit actions.
 
 The application still knows things a generic pipeline cannot: that a long task
-is `WORKING`, or that a deliberate `NOD_SLOW` is appropriate. A library that
+is `WORKING`, or that a deliberate `ACKNOWLEDGE` is appropriate. A library that
 guessed would nod at the wrong moment, which is worse than not nodding at all.
 
 So the seam is explicit and it is one frame wide. Write a `FrameProcessor` in

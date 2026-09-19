@@ -112,8 +112,13 @@ that guessed would nod at the wrong moment.
 ```python
 from voqalize_avatar import AvatarAction, AvatarControlFrame, AvatarMessage
 
-await self.push_frame(AvatarControlFrame(message=AvatarMessage.action(AvatarAction.ACK_RECEIVE)))
-await self.push_frame(AvatarControlFrame(message=AvatarMessage.action(AvatarAction.GESTURE_GREET)))
+# The two ids every avatar answers to.
+await self.push_frame(AvatarControlFrame(message=AvatarMessage.action(AvatarAction.ACKNOWLEDGE)))
+
+# The vocabulary is open past those two: an id is a name resolved against the face
+# that is mounted, and one that does not know it ignores the message. Send a motion
+# by name only when you know which avatar is on the other end.
+await self.push_frame(AvatarControlFrame(message=AvatarMessage.action("NOD_ASSESS")))
 ```
 
 **Or subclass `AvatarStateMachine`** (from `voqalize_avatar.state_machine`) when

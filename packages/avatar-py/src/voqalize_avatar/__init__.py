@@ -20,8 +20,9 @@ lipsync, the floor claim and the failure states are inferred from frames every
 pipecat pipeline already produces.
 
 The only other thing to know is `AvatarControlFrame`: push one from a processor
-of your own to say something the pipeline cannot infer — `TYPING`,
-`SEARCHING_SCREEN`, a deliberate gesture. See `frames.py`.
+of your own to say something the pipeline cannot infer — that a long tool call is
+`WORKING` rather than `THINKING`, or that an acknowledgement is due. See
+`frames.py`.
 """
 
 from .frames import AvatarControlFrame
