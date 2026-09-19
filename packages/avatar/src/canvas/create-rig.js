@@ -73,7 +73,7 @@ export function createCanvasRig({ url, images, face, label }) {
         renderer.resize(dpr);
         live = createLive(rig, faceModule);
       }).catch((error) => {
-        if (!destroyed) console.error('[voqalize avatar] canvas rig failed to load', error);
+        if (!destroyed) console.error('[avatar] canvas rig failed to load', error);
       });
 
       return {

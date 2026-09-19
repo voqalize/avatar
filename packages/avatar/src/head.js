@@ -10,7 +10,7 @@
  * replaced: beats, a phrase drift and a lead-in, each a linear keyframe curve,
  * summed and then low-passed at the head's 160 ms, drew a head in continuous
  * motion from the first word to the last. A video reviewer called it a
- * screensaver (apps/authoring/tools/video-review/, 2026-09-12), and that is
+ * screensaver (a recorded call, reviewed 2026-09-12), and that is
  * the right word: every part was a movement the literature measured, and the
  * sum was a movement nobody makes.
  *

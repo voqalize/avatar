@@ -13,7 +13,7 @@
  * drawing before anyone is asked to look at it.
  *
  * `advance` is the seam that lets one copy of the sweep serve both callers:
- * `apps/authoring/rig-check.html` lets real time pass and watches it happen, while
+ * a rig page in the working tree lets real time pass and watches it happen, while
  * `packages/avatar/test/conformance.test.ts` steps `{manual: true}` avatars by a fixed
  * dt and finishes in milliseconds. The sweep's own clock is handed to `speak`
  * so the mouth articulates under both — a stepped avatar reading

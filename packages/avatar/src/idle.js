@@ -94,7 +94,7 @@ const EVOKED_EARLIEST = 0.80;
  * Everything else here is an oscillator, and an oscillator cannot make a body
  * look alive across a thirty-second hold. Fast enough to notice and it reads
  * as rocking; slow enough not to and it is indistinguishable from a still
- * image. A motion map of the listening state (apps/authoring/tools/motion.mjs) showed the
+ * image. A headless motion map of the listening state showed the
  * outer edge of the torso travelling zero pixels over 24 seconds — the sway
  * was there in the numbers and rendered as nothing at all.
  *

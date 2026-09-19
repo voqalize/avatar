@@ -82,6 +82,13 @@ roll** — and it is a measured limit rather than a taste: past it the flat
 projection stops reading as a head that turned. The library keeps every head
 motion inside it, so there is nothing to configure and nothing to get wrong.
 
+A pose the head *holds* is a stricter case than a motion that passes through an
+angle and returns, and it has its own per-character numbers — roughly a third of
+the envelope, because the eye behind a flat projection never foreshortens and a
+sustained turn is where that shows. They are measured by eye and recorded in
+`packages/avatar/client/three/motion-limits.json` (exported as `MOTION_LIMITS`), and the
+characters apply them themselves: nothing to set here either.
+
 They also answer to more action ids than the core vocabulary has words for. A
 server asks for `ACKNOWLEDGE` and is never wrong; a server that knows one of
 these is mounted can ask for a particular *kind* of nod instead, because the

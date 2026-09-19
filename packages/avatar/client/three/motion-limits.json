@@ -1,5 +1,6 @@
 {
- "what": "The head angles each character's projection survives, in degrees, measured by eye. Not a clamp and not read by anything yet: a record of where each asset stops reading as a head that turned.",
+ "what": "How far each character may HOLD its head off centre, in degrees, measured by eye. A sustained pose is the strict case and this is the strict number: past it a static turn stops reading as a head that turned, because the eye behind a flat projection never foreshortens. `holds.ts` converts these into the mixer's pose units and `test/three/presence.test.ts` gates LISTENING and SPEAKING against them.",
+ "versus": "This is not `HEAD_DEG` and is much smaller than it. `HEAD_DEG` (tara-rig.ts) is the envelope any motion may REACH — set by where the projection itself tears, which a rendered ladder put past 21 degrees of yaw on tara. A transient that returns is forgiven what a held pose is not, so a nod may pass through an angle this file will not let the head sit at.",
  "units": "degrees from rest, either side, per axis driven alone from rest",
  "surface": {
   "cssWidth": 400,
@@ -10,7 +11,7 @@
  "measured": {
   "on": "2026-09-18",
   "by": "owner",
-  "using": "apps/studio/lab/head.html",
+  "using": "the hold-and-move rig instrument in the working tree, which pins one axis at a fixed angle",
   "how": "static held pose, one axis at a time from rest, judged by eye at the shipping surface",
   "safe": "reads as a head that turned, with nothing to notice",
   "limit": "the last angle before something is visibly wrong"

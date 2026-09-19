@@ -80,6 +80,12 @@ const FRAME_CENTRE = (FRAME.top + FRAME.bottom) / 2;
  * mocap drives and what pegged the channel — a real 25° turn still saturates at
  * 15°, so this widens the envelope without making it generous.
  *
+ * And it is not the angle a pose may be *held* at, which is a stricter question
+ * with its own measurement per character (`motion-limits.json`, applied through
+ * `holds.ts`): a turn that returns is forgiven what a sustained one is not. The
+ * two numbers differ by about 3x on yaw and neither is a correction of the
+ * other.
+ *
  * **Editing these needs no rebuild, but it is not free.** The neck's fields
  * carry no angle, so `tara.glb` cannot go stale against them. What a number
  * here does move:
@@ -1158,11 +1164,11 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
   // remote desktop — and the right outcome is a call that still has audio,
   // captions and states, with an empty tile where the head would be.
   //
-  // `warn` rather than `error` on purpose: `[avatar-3d]` console errors mean a
+  // `warn` rather than `error` on purpose: `[avatar]` console errors mean a
   // defect in this package, and the capture tools fail a run on any of them.
   // This one says the environment cannot draw, which is a different sentence.
   if (!renderer) {
-    console.warn("[avatar-3d] no WebGL context; tara will not render in this browser");
+    console.warn("[avatar] no WebGL context; this character will not render in this browser");
     return { apply() { /* nothing to pose */ }, destroy() { /* nothing to release */ } };
   }
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1483,12 +1489,12 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
     // A rig with no morph targets still renders a perfectly good rest pose, so
     // the failure mode of losing them is a face that simply never moves — which
     // a still frame cannot show. Say so, loudly enough that the Gate B capture
-    // (which fails on any `[avatar-3d]` console error) catches it.
-    if (!morphed.length) console.error("[avatar-3d] tara has no morph targets; the face will not move");
+    // (which fails on any `[avatar]` console error) catches it.
+    if (!morphed.length) console.error("[avatar] this character has no morph targets; the face will not move", url);
     loaded = true;
     if (pending) applyPose(pending);
     onReady?.();
-  }, undefined, (error: unknown) => console.error("[avatar-3d] could not load tara", error));
+  }, undefined, (error: unknown) => console.error("[avatar] could not load this character", url, error));
 
   // The tolerance is not a fudge factor, it is the whole of what makes the cap
   // land on 30. rAF fires on the panel's own grid, so the elapsed time is only
@@ -1516,7 +1522,7 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
         (renderer.info.render.calls > HARD_BUDGET.drawCalls ||
          renderer.info.render.triangles > HARD_BUDGET.triangles)) {
       warnedAboutRuntimeBudget = true;
-      console.warn("[avatar-3d] runtime budget exceeded", {
+      console.warn("[avatar] runtime budget exceeded", {
         calls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
       });

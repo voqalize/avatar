@@ -404,7 +404,8 @@ export const STATE_NAMES = Object.keys(STATES);
  * and read as a shrug arriving with the head.
  *
  * Exported for a page that drives a rig by hand and wants the body the shipping
- * mixer would have put under the tilt (`apps/studio/lab/head.ts`).
+ * mixer would have put under the tilt; the rig instruments in the working tree
+ * are its only callers.
  */
 export const SHOULDER_TILT = 0.08;
 
@@ -658,7 +659,8 @@ export function createAvatar(opts = {}) {
   // `manual` withholds the rAF loop so a tool can drive frames itself. The
   // baseline pages could already step a ClipPlayer by hand, but nothing could
   // step the *mixer* — which is where idle, gaze and engagement actually
-  // compose — so motion had no reproducible render. See apps/authoring/tools/motion.mjs.
+  // compose — so motion had no reproducible render. The headless motion map in
+  // the working tree is what steps it.
   const manual = !!opts.manual;
 
   function frame(now) {

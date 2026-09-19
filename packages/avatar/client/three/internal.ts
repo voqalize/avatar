@@ -5,8 +5,8 @@
  * `createAvatar` each, the mixer behind it, nothing to configure. This is the
  * other door, for a page whose subject is the *rig* rather than the call — the
  * renderer with no mixer in front of it, the three compiled characters, and the
- * head envelope their channels are scaled by. Its readers are the instruments in
- * `apps/studio/lab/`, and nothing that ships.
+ * head envelope their channels are scaled by. Its readers are the rig instruments
+ * in the working tree, and nothing that ships.
  *
  * It exists because those instruments were reaching around the package instead,
  * by relative path into its source, and two of them carried their own copy of
