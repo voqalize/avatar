@@ -103,15 +103,18 @@ class Voice:
     The avatar is drawn as a person and a voice that disagrees with the drawing
     breaks the illusion faster than any lipsync error does — so the voice is a
     choice a caller makes, and it has to mean the same thing whichever TTS is
-    behind it. `vql_speech` is that id: what `--tts vql-speech` streams live, and
-    what `record.py` already asked for when it wrote `audio/<name>/`. The default
-    path and the vendor path are the same person, which they were not while the
-    recordings were a licence-clean stand-in.
+    behind it. **`name` is vql-speech's own id**: what `--tts vql-speech` streams
+    live, what `record.py` asked for when it wrote `audio/<name>/`, and what
+    `lines.json` keys the row by. The default path and the vendor path are the
+    same person, which they were not while the recordings were a licence-clean
+    stand-in — and no longer because a field agrees with a key.
+
+    `label` is speech's own description of that id, for a picker to show. It
+    names nothing and nothing resolves by it.
     """
 
     name: str
     label: str
-    vql_speech: str
 
 
 def load_voices(path: Path) -> dict[str, Voice]:
@@ -122,10 +125,7 @@ def load_voices(path: Path) -> dict[str, Voice]:
     picked yet are not its business.
     """
     raw = json.loads(path.read_text())
-    return {
-        name: Voice(name=name, label=v["label"], vql_speech=v["vql_speech"])
-        for name, v in raw["voices"].items()
-    }
+    return {name: Voice(name=name, label=v["label"]) for name, v in raw["voices"].items()}
 
 
 def default_voice(path: Path) -> str:
@@ -163,7 +163,9 @@ class CannedLines:
         # One text corpus, one recording of it per voice. The text is authored
         # once and the directory is the only thing that varies, so a line added
         # for one voice cannot go missing for the other — it goes missing for
-        # both, loudly, at load.
+        # both, loudly, at load. The id has an engine prefix, so the directory is
+        # nested: `audio/omnivoice/gauri/`, which is the id and not a flattening
+        # of it.
         root = path.parent / "audio" / name
         timings = _load_timings(root)
 

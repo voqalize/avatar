@@ -13,6 +13,7 @@ are tested rather than reviewed.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -220,7 +221,7 @@ class Chain:
         await self.until(lambda: len(self.out.of(TTSStoppedFrame)) >= turns, timeout)
 
 
-@pytest.fixture(params=["female", "male"])
+@pytest.fixture(params=json.loads(LINES.read_text())["voices"])
 def lines(request: pytest.FixtureRequest) -> CannedLines:
     """Every corpus test runs against every voice.
 
@@ -228,6 +229,11 @@ def lines(request: pytest.FixtureRequest) -> CannedLines:
     introduces is a sentence recorded for one and not the other — silence the
     face still mouths, on one setting only. Parametrising the fixture is what
     makes that a test failure rather than something you find in a call.
+
+    Read off `lines.json` rather than listed here, because the list a hand-kept
+    copy always gets wrong is the one just added: a voice declared and never
+    recorded would otherwise be tested by nothing at all, which is the same
+    silence one level up.
     """
     return CannedLines.load(LINES, request.param)
 
@@ -247,28 +253,30 @@ def test_every_sentence_has_a_clip(lines: CannedLines) -> None:
 
 
 def test_a_voice_is_one_row_and_one_id() -> None:
-    """Picking a voice has to move the recordings *and* the vendor id together.
+    """Picking a voice has to move the recordings *and* the streamed id together.
 
     The defect this guards is inaudible in the default pipeline and obvious in
-    production: the canned path plays the female recordings while
-    `--tts vql-speech` asks for the male omnivoice id, because the two were
-    threaded through separately. The avatar is drawn as a person; a voice that
-    disagrees with the drawing is noticed before anything about the face is.
+    production: the canned path plays one person's recordings while
+    `--tts vql-speech` asks for another's id, because the two were threaded
+    through separately. The avatar is drawn as a person; a voice that disagrees
+    with the drawing is noticed before anything about the face is.
 
-    Since the recordings are now vql-speech's own output, one id covers both
-    paths and this is a narrower claim than it was — the id that named the
-    stand-in is gone, and with it the way the two could differ.
+    It is now a claim about naming rather than about wiring. The row's key *is*
+    the vql-speech id — engine-prefixed, the way that service requires — so the
+    id `bot.py` streams is the key `CannedLines` loaded, and there is no second
+    place for it to disagree with. What is left to check is that the keys really
+    are ids and not names of our own, which is the state this replaced.
     """
-    female = CannedLines.load(LINES, "female")
-    male = CannedLines.load(LINES, "male")
+    voices = json.loads(LINES.read_text())["voices"]
+    for name in voices:
+        engine, _, voice = name.partition("/")
+        assert engine and voice, f"{name!r} is not an engine-prefixed vql-speech id"
+        assert CannedLines.load(LINES, name).voice.name == name
 
-    assert female.voice.name == "female"
-    assert female.voice.vql_speech == "omnivoice/gauri"
-    assert male.voice.vql_speech == "omnivoice/gaurav"
-
-    # Same text, different audio: one corpus, recorded twice.
-    assert [n.text for n in female.lines] == [n.text for n in male.lines]
-    assert female.lines[0].sentences[0].audio != male.lines[0].sentences[0].audio
+    # Same text, different audio: one corpus, recorded once per voice.
+    first, second = (CannedLines.load(LINES, n) for n in list(voices)[:2])
+    assert [n.text for n in first.lines] == [n.text for n in second.lines]
+    assert first.lines[0].sentences[0].audio != second.lines[0].sentences[0].audio
 
     with pytest.raises(ValueError, match="no voice"):
         CannedLines.load(LINES, "nobody")
@@ -288,11 +296,10 @@ def test_rejects_a_clip_that_is_not_what_the_corpus_declares(
 ) -> None:
     """A 44.1 kHz clip in a 22.05 kHz corpus plays at half speed through the
     resampler and sounds like a different person, with no error anywhere."""
-    import json
     import wave
 
     src = lines.lines[0].sentences[0]
-    bad = tmp_path / "audio" / "wren" / "bad.wav"
+    bad = tmp_path / "audio" / "omnivoice" / "x" / "bad.wav"
     bad.parent.mkdir(parents=True)
     with wave.open(str(src.audio)) as r, wave.open(str(bad), "wb") as w:
         w.setnchannels(1)
@@ -310,10 +317,8 @@ def test_rejects_a_clip_that_is_not_what_the_corpus_declares(
         json.dumps(
             {
                 "sample_rate": lines.sample_rate,
-                "default_voice": "wren",
-                "voices": {
-                    "wren": {"label": "Wren", "vql_speech": "omnivoice/x"}
-                },
+                "default_voice": "omnivoice/x",
+                "voices": {"omnivoice/x": {"label": "a stand-in"}},
                 "lines": [
                     {"id": "x", "tag": "t", "sentences": [{"text": "hi", "audio": "bad.wav"}]}
                 ],

@@ -177,7 +177,7 @@ def _vql_speech(lines: CannedLines) -> TTSService:
             # The corpus carries the voice, so this path and the canned one are
             # never speaking as two different people. `VQL_SPEECH_VOICE` still
             # wins, for trying a voice that has no row in `lines.json` yet.
-            voice=os.environ.get("VQL_SPEECH_VOICE", lines.voice.vql_speech),
+            voice=os.environ.get("VQL_SPEECH_VOICE", lines.voice.name),
             model="sonic-2",
             language=Language.EN,
         ),
@@ -222,10 +222,11 @@ async def run_bot(
 ) -> None:
     """One call, start to finish. Returns when the pipeline ends.
 
-    `voice` is a key in `lines.json` — "female", "male" — and not a vendor voice
-    id. It picks a whole row: the recordings the canned path plays *and* the
-    `omnivoice/...` id the vql-speech path asks for. The avatar is drawn as a
-    person, so a voice that disagrees with the drawing is a defect you hear
+    `voice` is a key in `lines.json`, and the key **is** vql-speech's own voice
+    id — `omnivoice/gauri`, `kokoro/ava`. It picks a whole row: the recordings
+    the canned path plays *and* the id the vql-speech path asks for, which is
+    now the same string rather than two that have to agree. The avatar is drawn
+    as a person, so a voice that disagrees with the drawing is a defect you hear
     before you notice anything else about the face.
     """
     lines = CannedLines.load(LINES, voice)

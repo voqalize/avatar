@@ -154,30 +154,43 @@ public. The voice comes from the selected row of `lines.json` (below);
 `VQL_SPEECH_VOICE` overrides it. A key vql-speech has not been told about fails
 closed at the handshake with a 403.
 
-## Two voices
+## A voice is a row
 
 `lines.json` carries a `voices` table, and the corpus is recorded once per row:
 
-| row | voice |
+| row | reads as |
 |---|---|
-| `female` | `omnivoice/gauri` |
-| `male` | `omnivoice/gaurav` |
+| `omnivoice/gauri` | female |
+| `omnivoice/gaurav` | male |
+| `kokoro/ava` | American female |
 
-One id per row, used twice: it is what `--tts vql-speech` streams in a live
-call, and it is what `record.py` asked for when it wrote `audio/<row>/`. So the
-default path and the vendor path are the same person. They were not always —
-`audio/` used to hold a licence-clean piper stand-in, which meant the only run
-anybody makes first was the one demonstrating a voice nobody ships.
-`test_canned.py` runs its whole suite once per row.
+**The row's key is vql-speech's own voice id**, engine-prefixed the way that
+service names one, and it is used twice: it is what `--tts vql-speech` streams
+in a live call, and it is what `record.py` asked for when it wrote
+`audio/<key>/`. So the default path and the vendor path are the same person, and
+not because two fields agree — there is only the one name. They were not always
+the same person: `audio/` used to hold a licence-clean piper stand-in, which
+meant the only run anybody makes first was the one demonstrating a voice nobody
+ships. `test_canned.py` runs its whole suite once per row, reading the rows off
+this file so that a voice declared and never recorded fails here rather than in
+a call.
+
+The `label` beside each key is speech's own words for that voice, and it is
+there for a picker to print. Nothing reads it, and nothing may route on it — a
+row is chosen by its id.
 
 Which row is live is a server setting, not a wire message — `GET /api/lines`
-reports it alongside the vocabularies and `POST /api/voice {"name": "male"}`
-changes it. It takes effect on the **next** call, deliberately: a TTS opens its
-context with a voice id, so switching mid-call would put one sentence in each.
+reports it alongside the vocabularies and
+`POST /api/voice {"name": "omnivoice/gaurav"}` changes it. The id travels in the
+body and never in a path, which is why a `/` in it costs nothing. It takes
+effect on the **next** call, deliberately: a TTS opens its context with a voice
+id, so switching mid-call would put one sentence in each.
 
 The pairing exists because a voice that contradicts the face is read as a
 mistake long before any animation defect is — the avatar is one character, and
-the abstraction breaks at the first gender mismatch.
+the abstraction breaks at the first mismatch. It used to be a choice between a
+`female` and a `male` of our own naming, and an American female is what showed
+that up: those were never two values of one thing.
 
 ## Verifying lipsync
 
@@ -212,7 +225,7 @@ which is the point of judging here.
 
 ## The audio is committed
 
-`audio/` — 72 WAVs, 8.6 MB, one directory per voice, each with a
+`audio/` — a directory per voice, holding a WAV per sentence and a
 `timings.json` — is in git deliberately, which is the opposite call
 from the aligner in `packages/avatar-py/native/avatarsync/`, whose library and model tree were taken
 out of git in favour of `packages/avatar-py/native/avatarsync/get.sh`.
@@ -234,13 +247,14 @@ cd server \
      uv run --with "cartesia[websockets]>=3,<4" --with "pyjwt[crypto]" python record.py
 ```
 
-A voice name as an argument records only that row. It writes every sentence into
-`audio/<voice>/` at the rate `lines.json` declares, and refuses a clip that comes
-back silent — that and a missing file are the two failures the corpus re-checks
+A voice id as an argument — `python record.py kokoro/ava` — records only that
+row. It writes every sentence into `audio/<id>/` at the rate `lines.json`
+declares; the id's `/` nests, so `kokoro/ava`'s clips sit under `audio/kokoro/`
+beside `audio/omnivoice/`. It refuses a clip that comes back silent — that and a missing file are the two failures the corpus re-checks
 at load, and both look identical in a call: the mouth moves and no sound comes
 out, which reads as a lipsync bug and is not one.
 
-The same pass writes `audio/<voice>/timings.json`: the **service's own** word
+The same pass writes `audio/<id>/timings.json`: the **service's own** word
 timestamps, `(word, start_ms)` per clip, alongside the clip's duration. They are
 recorded rather than re-derived because a canned TTS with plausible-looking
 karaoke is worse than one with none — the karaoke path in `AvatarProcessor` is

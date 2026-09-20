@@ -5,11 +5,16 @@
     "can hear the avatar without a credential — see that script and",
     "server/README.md.",
     "",
-    "Two voices, because the avatar has a gender and the voice has to agree with",
-    "it. `vql_speech` is the id both halves use: what `--tts vql-speech` asks",
-    "Voqalize's own service for in a live call, and what `record.py` asked for",
-    "when it wrote `audio/<voice>/`. One row, one id — the recorded voice and the",
-    "streamed voice cannot drift apart.",
+    "A row per voice, because the avatar is drawn as a person and the voice has",
+    "to agree with the drawing. **The key IS vql-speech's own id** — what",
+    "`--tts vql-speech` asks Voqalize's service for in a live call, what",
+    "`record.py` asked for when it wrote `audio/<id>/`, and what this file calls",
+    "the row. It used to be a name of our own (`female`, `male`) beside a",
+    "`vql_speech` field, and one row, one id was a convention something had to",
+    "keep; the key being the id is the same promise with nothing left to keep.",
+    "A third voice is what exposed the old naming: `female` and an American",
+    "female are not two values of one thing. `label` is speech's own words for",
+    "the row and exists for the picker, not for the wire.",
     "",
     "24000 Hz is what vql-speech emits (`pcm_s16le`, mono). It is not resampled",
     "on the way in: pipecat's output transport resamples to the transport rate",
@@ -24,15 +29,16 @@
     "more here than a paragraph that does not."
   ],
   "sample_rate": 24000,
-  "default_voice": "female",
+  "default_voice": "omnivoice/gauri",
   "voices": {
-    "female": {
-      "label": "Female",
-      "vql_speech": "omnivoice/gauri"
+    "omnivoice/gauri": {
+      "label": "female"
     },
-    "male": {
-      "label": "Male",
-      "vql_speech": "omnivoice/gaurav"
+    "omnivoice/gaurav": {
+      "label": "male"
+    },
+    "kokoro/ava": {
+      "label": "American female"
     }
   },
   "lines": [

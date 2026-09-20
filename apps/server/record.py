@@ -16,7 +16,7 @@ at 0 ms instead of 890 ms, and the transcript finished 1.4 s before the voice
 did.
 
     cd server && uv run --with "cartesia[websockets]>=3,<4" --with "pyjwt[crypto]" python record.py
-    cd server && uv run --with "cartesia[websockets]>=3,<4" --with "pyjwt[crypto]" python record.py male
+    cd server && uv run --with "cartesia[websockets]>=3,<4" --with "pyjwt[crypto]" python record.py kokoro/ava
 
 `<4` is load-bearing: cartesia 4 negotiates a newer API version and the handshake
 comes back 403, which reads exactly like an untrusted key. `[crypto]` is the half
@@ -30,10 +30,10 @@ a question the repo could not previously answer: the earlier clips were spoken o
 somebody's laptop by a command nobody wrote down, so "how do I add a line?" had
 no answer but "ask whoever made the last one".
 
-**The recorded voice and the streamed voice are now the same voice.** Each row in
-`lines.json` carries one id — `omnivoice/gauri`, `omnivoice/gaurav` — and this
-script asks vql-speech for exactly what `--tts vql-speech` asks for in a live
-call. That closes a gap the old recorder could not: it spoke a licence-clean
+**The recorded voice and the streamed voice are the same voice, and now they
+cannot be anything else.** A row in `lines.json` IS a vql-speech id —
+`omnivoice/gauri`, `kokoro/ava` — so this script asks for the key it is writing
+under, and `--tts vql-speech` asks for the key it loaded. That closes a gap the old recorder could not: it spoke a licence-clean
 piper stand-in, so `--tts canned` and `--tts vql-speech` were two different
 people, and the default path — the only one anybody runs first — was the one
 nobody was shipping. A voice that contradicts the face is read as a mistake long
@@ -151,13 +151,13 @@ def _synthesise(
 def record(client: Any, voice: str, spec: dict, sentences: list[dict], sample_rate: int) -> int:
     out_dir = HERE / "audio" / voice
     out_dir.mkdir(parents=True, exist_ok=True)
-    print(f"\n{voice} — {spec['vql_speech']} → {out_dir}")
+    print(f"\n{voice} — {spec['label']} → {out_dir}")
 
     timings: dict[str, Any] = {}
     for s in sentences:
         out = out_dir / s["audio"]
         pcm, words, starts = _synthesise(
-            client, text=s["text"], voice=spec["vql_speech"], sample_rate=sample_rate
+            client, text=s["text"], voice=voice, sample_rate=sample_rate
         )
 
         # Every way this fails looks identical at runtime — the mouth moves and
@@ -205,7 +205,7 @@ def record(client: Any, voice: str, spec: dict, sentences: list[dict], sample_ra
                     "of the sentence within the turn, which is the baseline pipecat stamps "
                     "against. Regenerate with apps/server/record.py — never by hand."
                 ),
-                "voice": spec["vql_speech"],
+                "voice": voice,
                 "sample_rate": sample_rate,
                 "sentences": timings,
             },

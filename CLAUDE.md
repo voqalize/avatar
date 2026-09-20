@@ -128,7 +128,7 @@ working tree.
   first thing anyone notices, before a single nod is judged. So `apps/server/`'s
   corpus is recorded once per voice from vql-speech itself, and the picker sits
   before the call because a TTS opens its context with a voice id
-  ([apps/server/README.md § Two voices](apps/server/README.md)).
+  ([apps/server/README.md § A voice is a row](apps/server/README.md)).
 - **Do not duplicate the backend.** When a consumer must signal something the
   library cannot infer: write your own `FrameProcessor`, or subclass
   `AvatarStateMachine` and translate in `on_frame`. YAGNI until a third strong

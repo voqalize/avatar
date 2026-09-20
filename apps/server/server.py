@@ -213,7 +213,7 @@ def build_app(tts_name: str) -> FastAPI:
             # Who can speak, and who will. Chosen before the call, because the
             # canned path picks a directory of recordings at load.
             "voices": [
-                {"name": v.name, "label": v.label, "id": v.vql_speech} for v in voices.values()
+                {"name": v.name, "label": v.label} for v in voices.values()
             ],
             "voice": chosen["name"],
             # What a fresh call will do before it speaks, so a page can show the

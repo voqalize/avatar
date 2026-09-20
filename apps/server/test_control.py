@@ -12,6 +12,7 @@ checked for being malformed in the specific way they advertise.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -239,7 +240,7 @@ def test_the_corpus_endpoint_describes_the_whole_surface(
         "think_ms": CannedLLMService.DEFAULT_THINK_MS,
         "work_ms": CannedLLMService.DEFAULT_WORK_MS,
     }
-    assert {v["name"] for v in body["voices"]} == {"female", "male"}
+    assert {v["name"] for v in body["voices"]} == set(json.loads(LINES.read_text())["voices"])
     assert body["voice"] in {v["name"] for v in body["voices"]}
 
 
@@ -255,8 +256,9 @@ def test_choosing_a_voice_needs_no_call(client: TestClient) -> None:
     opposite: the voice decides which recordings a call loads, so it is settled
     before there is a pipeline to tell — and asking mid-call would mean one
     sentence in one voice and the next in another."""
-    assert client.post("/api/voice", json={"name": "male"}).json() == {"voice": "male"}
-    assert client.get("/api/lines").json()["voice"] == "male"
+    other = "omnivoice/gaurav"
+    assert client.post("/api/voice", json={"name": other}).json() == {"voice": other}
+    assert client.get("/api/lines").json()["voice"] == other
     assert client.post("/api/voice", json={"name": "nobody"}).status_code == 404
 
 
