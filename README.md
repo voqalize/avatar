@@ -8,10 +8,10 @@ The avatar itself is a JavaScript library, driven by the standard RTVI events
 your client already receives plus one custom RTVI message carrying lipsync
 metadata and semantic cues.
 
-No video track, no per-minute avatar vendor, no second media path. Twelve
-avatars ship with it — three hand-drawn SVG faces, six professional Canvas2D
-identities and three 2.5-D characters — one per entry point, so you pay for the
-one you import, and you can author your own.
+No video track, no per-minute avatar vendor, no second media path. Hand-drawn
+SVG faces, professional Canvas2D identities and 2.5-D characters all ship with
+it — one per entry point, so you pay for the one you import, and you can author
+your own.
 
 <p>
   <img src="docs/assets/readme-peep-speaking.png" alt="peep, mid-utterance" width="180">
@@ -35,7 +35,7 @@ below, sent from a server — the same ones your own app would send.
 Running it yourself instead: a call with [`apps/server/`](apps/server/README.md)
 takes about a minute and needs no API key.
 
-**Licence: MIT for the code, CC-BY 4.0 for the three character binaries** —
+**Licence: MIT for the code, CC-BY 4.0 for the 2.5-D character binaries** —
 attribution is all the latter asks, and the code is usable in closed-source
 products with no obligation beyond the notice. Details, and the third-party
 attributions that travel with the package, under [License](#license).
@@ -48,7 +48,7 @@ attributions that travel with the package, under [License](#license).
 | Python | 3.12+ |
 | pipecat, browser side | `@pipecat-ai/client-js` at `>=1.4 <2`, declared an **optional** peer: the package imports its types only, so nothing fails to load without it. React `>=18` is likewise optional, and only for `@voqalize/avatar/react`. |
 | Node | 20+. The browser half is ESM with no runtime dependencies and ships its own types. |
-| transports | Any. Nothing in either package names a transport: the three commands ride the RTVI data channel your client already has, and no video track is added or asked for. The two surfaces in this repo run on `SmallWebRTCTransport`. |
+| transports | Any. Nothing in either package names a transport: `state`, `action` and `cues` ride the RTVI data channel your client already has, and no video track is added or asked for. The surfaces in this repo run on `SmallWebRTCTransport`. |
 | lipsync wheels | Linux x86-64 and aarch64 (manylinux — RHEL 8+, Debian 10+, Ubuntu 18.04+) and macOS arm64 (macOS 11+). No Intel macOS, for an upstream reason: pipecat requires `onnxruntime`, which publishes no macOS x86-64 wheel, so nothing depending on pipecat installs there at all. |
 
 The wheel is ~44 MB because it carries the aligner and its acoustic model; the
@@ -126,7 +126,7 @@ cd packages/avatar-py && uv run --group server python ../../apps/server/server.p
 # then open the URL it prints — click Start call; the bot speaks first
 ```
 
-The two surfaces we review the avatar *on* — the IDE for `createAvatar`, and the
+The surfaces we review the avatar *on* — the IDE for `createAvatar`, and the
 rig workshop the images above came out of — are part of the working tree, which is
 private, along with the Blender pipeline that compiles a character
 ([CONTRIBUTING.md](CONTRIBUTING.md)). Nothing they can do is anything a consumer
@@ -147,9 +147,9 @@ always the renderer's.
 
 What is left over is small, specific, and each item is a case the library
 refuses to guess at — a deliberate nod or greeting, a tool whose calls never
-enter your pipeline, a pose richer than the nine states, a backend that is not
+enter your pipeline, a pose richer than the core states, a backend that is not
 ours. **[docs/architecture.md](docs/architecture.md) is the canonical page for
-all of this**: how the pieces relate, the five principles they rest on, and the
+all of this**: how the pieces relate, the principles they rest on, and the
 free/costs-a-line table in full. Read it before deciding whether this fits your
 pipeline.
 
@@ -253,8 +253,8 @@ image rather than a text brief:
 
 ## Professional avatars
 
-Six complete, code-authored avatars ship as their own `createAvatar` modules —
-each a full identity, not a face value, with a private Canvas2D renderer:
+The code-authored avatars ship as their own `createAvatar` modules — each a
+full identity, not a face value, with a private Canvas2D renderer:
 
 ```js
 import { createAvatar } from '@voqalize/avatar/avatars/arjun';
@@ -274,7 +274,7 @@ older entry points (`interviewer-male`, `interviewer-female`,
 `professional-female-b`) still work as `@deprecated` aliases for the names
 above — use the new names in new code.
 
-All six depict Indian professionals in their late twenties, without caricature
+They depict Indian professionals in their late twenties, without caricature
 or regional costume cues, calibrated at call-tile size, and use the same wire
 contract and Pipecat lifecycle/viseme driver as the SVG faces — their private
 renderer is Canvas2D and its rig data and bitmap assets are implementation
@@ -283,7 +283,8 @@ details, not part of the package surface. Full detail:
 
 ## The 2.5-D characters
 
-Three more ship as compiled binaries, each its own `createAvatar` module:
+The 2.5-D characters ship as compiled binaries, each its own `createAvatar`
+module:
 
 ```js
 import { createAvatar } from '@voqalize/avatar/avatars/tara';
@@ -296,17 +297,17 @@ const avatar = createAvatar({ mount, client: pipecatClient });
 A photograph of a face projected onto shallow geometry, with the parts that have
 to *move* — the eyes, the teeth, the lip line — built as geometry rather than
 painted. Hence 2.5-D: there is no head behind the face and the camera does not
-orbit. None of the three depicts a real person; each begins as an image from a
+orbit. None of them depicts a real person; each begins as an image from a
 generative model, which is what makes it licensable as artwork.
 
-`three` is an *optional* peer dependency (`>=0.180 <0.187`) behind these three
+`three` is an *optional* peer dependency (`>=0.180 <0.187`) behind the 2.5-D
 entry points only, so an SVG or Canvas consumer never downloads it. The `.glb` is
 fetched when the avatar mounts. Nothing above the renderer changes: same wire,
 same states, same cue-synced mouth, and a server that has never heard of these
 characters drives one correctly.
 
 Importing one character emits one binary — 504 kB, not 1.8 MB, which is what
-0.4.0 did before the three asset URLs were split across modules. Vite also needs
+0.4.0 did before each asset URL was split into its own module. Vite also needs
 `optimizeDeps.exclude`, or the `.glb` request falls through to the SPA fallback
 and arrives as HTML:
 [characters.md](docs/characters.md#the-asset-is-fetched-at-runtime).
@@ -430,19 +431,27 @@ itself a cue. Where the constants come from:
 
 ## License
 
+Which licence applies is decided by the kind of avatar, not by the roster, so
+adding a character never moves the line.
+
 **MIT for the code** (`/LICENSE`): use, modify, embed and redistribute it, in
 open- or closed-source products, with no obligation beyond keeping the copyright
-notice.
+notice. **The SVG faces and the Canvas2D identities are code, and ask for no
+attribution** — each is drawn by the function that ships it, and the rig data and
+wardrobe bitmaps behind a Canvas2D identity are implementation details of that
+function rather than artwork you are licensing.
 
-**CC-BY 4.0 for the three character binaries** (`/LICENSE-CC-BY-4.0`) —
-`packages/avatar/assets/*.glb`, and nothing else in the repository. They are
-artwork rather than code, so they carry an artwork licence: use them anywhere,
-commercially, modified, and credit Voqalize. The credit line and the reasoning
-are in [packages/avatar/assets/README.md](packages/avatar/assets/README.md), and
-each binary states its own terms in its metadata, because a file that gets copied
-out of a dependency tree has to carry them itself. The published manifest
-declares both as one expression, `MIT AND CC-BY-4.0`, which is what a consumer's
-licence scanner reports.
+**CC-BY 4.0 for the 2.5-D character binaries** (`/LICENSE-CC-BY-4.0`) —
+`packages/avatar/assets/*.glb`, and nothing else in the repository. Each is a
+photographic texture atlas over geometry, which is artwork rather than code, so
+it carries an artwork licence: use them anywhere, commercially, modified, and
+credit Voqalize. The credit line and the reasoning are in
+[packages/avatar/assets/README.md](packages/avatar/assets/README.md), and each
+binary states its own terms in its metadata, because a file that gets copied out
+of a dependency tree has to carry them itself. The published manifest declares
+both as one expression, `MIT AND CC-BY-4.0`, which is what a consumer's licence
+scanner reports — it describes the package, so it reads the same whether or not
+you import a 2.5-D character.
 
 Voqalize holds the copyright on all of it either way. The faces are synthetic and
 depict nobody.
@@ -463,8 +472,8 @@ unchanged, and travels with that directory.
 | [Open Peeps](https://www.openpeeps.com/) | the drawing *idiom* `peep` is authored in — no artwork is copied | CC0 |
 | Rhubarb Lip Sync 1.14.0 | `packages/avatar-py/native/avatarsync/` (fetched at build time, not vendored) | MIT; see `UPSTREAM-LICENSE.md` |
 | [piper](https://github.com/OHF-Voice/piper1-gpl) voices `en_US-ljspeech-high`, `en_US-libritts_r-medium` | spoke every clip in `packages/avatar-py/tests/fixtures/` (pcm) | LJSpeech public domain; LibriTTS-R CC BY 4.0 — the one row here that asks for attribution |
-| OpenAI image models | the wardrobe/hair webp images for the six Canvas2D avatars, `packages/avatar/src/canvas/data/img/` | generated output, not a third-party asset under its own license; Voqalize holds the copyright per OpenAI's usage terms |
+| OpenAI image models | the wardrobe/hair webp images for the Canvas2D avatars, `packages/avatar/src/canvas/data/img/` | generated output, not a third-party asset under its own license; Voqalize holds the copyright per OpenAI's usage terms |
 
-The three SVG avatars are original drawings. All demo audio is synthesised from
+The SVG avatars are original drawings. All demo audio is synthesised from
 text written for this repo; `apps/server/audio/` is Voqalize's own `omnivoice`
 voices, which is why that corpus is not in the table above.
