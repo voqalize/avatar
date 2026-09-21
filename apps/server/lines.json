@@ -38,7 +38,10 @@
       "label": "male"
     },
     "kokoro/ava": {
-      "label": "American female"
+      "label": "American female, Ava"
+    },
+    "kokoro/sarah": {
+      "label": "American female, Sarah"
     }
   },
   "lines": [

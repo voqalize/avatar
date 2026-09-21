@@ -162,7 +162,8 @@ closed at the handshake with a 403.
 |---|---|
 | `omnivoice/gauri` | female |
 | `omnivoice/gaurav` | male |
-| `kokoro/ava` | American female |
+| `kokoro/ava` | American female, Ava |
+| `kokoro/sarah` | American female, Sarah |
 
 **The row's key is vql-speech's own voice id**, engine-prefixed the way that
 service names one, and it is used twice: it is what `--tts vql-speech` streams
