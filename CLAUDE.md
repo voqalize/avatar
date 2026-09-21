@@ -79,7 +79,7 @@ that exports `createAvatar` — no registry, no loader
 wire command needs a real consumer asking, not a plausible one. The backend
 extension seams are `AvatarControlFrame` and subclassing `AvatarStateMachine`.
 
-**The three 2.5-D characters are compiled binaries, and that is the whole of
+**The 2.5-D characters are compiled binaries, and that is the whole of
 them here.** `packages/avatar/assets/*.glb` is the output of the pipeline that
 is not published; the renderer that loads one is
 `packages/avatar/client/three/`. There is no source for the artwork in this

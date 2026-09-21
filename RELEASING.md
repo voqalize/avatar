@@ -27,12 +27,12 @@ commit, so either package's history reads from one tag family.
 
 **What is in the npm tarball, and why.** `files` is `src`, `client`, `dist`,
 `assets`, `LICENSE-CC-BY-4.0`. `dist/` imports `../src/` as an ordinary sibling,
-so the entrypoint dangles without it; `assets/` is the three compiled 2.5-D
+so the entrypoint dangles without it; `assets/` is the compiled 2.5-D
 characters; and the CC-BY licence has to be named explicitly, because npm
 auto-includes a file called `LICENSE` and nothing else — a second licence file
 that is not in `files` silently does not ship. The manifest declares
 `MIT AND CC-BY-4.0`, and `three` is an *optional* peer reachable only from the
-three character entry points. The contract documents deliberately do not ship: a
+character entry points. The contract documents deliberately do not ship: a
 second copy of `docs/` going stale on npm is worse than a link to a public
 repository that is current. `packaged.test.ts` is what holds all of this.
 
