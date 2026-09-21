@@ -69,10 +69,11 @@ const FRAME_CENTRE = (FRAME.top + FRAME.bottom) / 2;
  * shell, and a large turn is where that reads as a cardboard cutout rather than
  * a head. **It opened from 9° to 15° on 2026-09-18.** The cutout was measured
  * rather than assumed — a ladder rendered at 9/12/15/18/21/25/30 and read at
- * crop on all three characters is clean to 21° on tara and to 18° on tanya and
- * tushar. 9° was therefore set at half of where the artefact actually begins,
- * and the stiffness the owner reported on tanya's turns was that margin, not
- * her asset. 15° keeps 3° of headroom on the tightest of the three.
+ * crop on the characters that existed then is clean to 21° on tara and to 18°
+ * on tanya and tushar. 9° was therefore set at half of where the artefact
+ * actually begins, and the stiffness the owner reported on tanya's turns was
+ * that margin, not her asset. 15° keeps 3° of headroom under the 18° the
+ * tightest of them read.
  *
  * This is not for speech: Busso wants ±1.15° of yaw in neutral conversation and
  * always did. It is for a head that turns to *look* at something, which is what
@@ -931,6 +932,19 @@ export interface TaraRigOptions {
   /** `false` leaves an asset's expression maps unread, for a capture tool
    *  comparing the face with and without them. */
   readonly expression?: boolean;
+  /** Keeps the drawing buffer readable after the browser has composited it, so
+   *  a caller can copy the canvas out at any moment rather than only from
+   *  inside the frame that drew it.
+   *
+   *  A pose sheet needs this and a consumer must not have it. WebGL contexts are
+   *  a handful per page, so a sheet of thirty poses cannot be thirty canvases —
+   *  it holds one pose still, copies the canvas into a tile, and moves on. Copy
+   *  outside the drawing frame and the buffer has already been cleared, which is
+   *  a blank tile and not an error. The cost is that the buffer cannot be
+   *  discarded, which on some drivers means a second copy of every frame; the
+   *  consumer renders thirty frames a second forever and pays nothing for a
+   *  readback it never performs. */
+  readonly readback?: boolean;
 }
 
 const radians = (deg: number) => (deg * Math.PI) / 180;
@@ -940,9 +954,9 @@ const radians = (deg: number) => (deg * Math.PI) / 180;
  * Three.js throws out of the constructor rather than returning anything, and it
  * has already written its own line to the console by then; that line is kept
  * because it names the underlying reason, which this one does not. */
-function webglRenderer(): THREE.WebGLRenderer | null {
+function webglRenderer(readback = false): THREE.WebGLRenderer | null {
   try {
-    return new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    return new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: readback });
   } catch {
     return null;
   }
@@ -1153,7 +1167,7 @@ const expressionWeights = (pose: RigPose, side: "L" | "R", expression: Expressio
 // `options` is `unknown` in the contract, and stays `unknown` here: the mixer
 // passes `rigOptions` through verbatim and has no way to know any rig's shape.
 export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig {
-  const { onReady, url, expression: readExpression = true } =
+  const { onReady, url, expression: readExpression = true, readback = false } =
     (options ?? {}) as TaraRigOptions;
   // A missing `url` is a caller's defect, not a browser condition — the WebGL
   // path below degrades because a driver is nobody's fault, whereas this would
@@ -1164,7 +1178,7 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
   camera.position.set(0, FRAME_CENTRE, 6);
   camera.lookAt(0, FRAME_CENTRE, 0);
 
-  const renderer = webglRenderer();
+  const renderer = webglRenderer(readback);
   // No context, no face — and that has to be the whole of it. `createAvatar` is
   // synchronous and returns `{ destroy }`, so a consumer has nothing to catch:
   // anything thrown here lands in *their* window and takes the call page with

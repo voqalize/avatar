@@ -29,14 +29,17 @@ Ours ships `peep`, `wren`, `myna` as `{ face }` — a value imported from
 one costs one drawing. Every other option belongs to whoever wrote the
 implementation; nothing reads them but them.
 
-Ours also ships six complete Canvas2D implementations, at
+Ours also ships six Canvas2D implementations, at
 `@voqalize/avatar/avatars/{arjun,meera,vikram,ishita,kabir,naina}`. Each exports
 the same `createAvatar` function and fixes one identity behind it. Their shared
 renderer, pose evaluator, rig data and wardrobe images are private code reuse,
 not another public interface and not a registry. (The original entry points —
 `interviewer-male`/`interviewer-female`/`professional-male-a`/`professional-female-a`/`professional-male-b`/`professional-female-b`
-— still work as `@deprecated` aliases for the names above; renamed for
-memorability without touching the SVG faces.)
+— still work as `@deprecated` aliases for the names above.)
+
+Those six are **frozen and come out in 0.5.0**. What they proved is the part
+worth keeping: a whole second renderer arrived, and nothing was added to this
+interface to admit it.
 
 ## The one optional export
 

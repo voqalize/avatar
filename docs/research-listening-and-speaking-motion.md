@@ -161,8 +161,8 @@ and they re-fixate several times within a single head hold. An avatar whose
 eyes stay locked on the camera through every head move is not holding eye
 contact, it is staring — and it is doing so *more* than any measured human.
 
-This is the research behind a call already made on 2026-09-19: **the lab page's
-"eyes hold the camera" defaults to off, because on this face every reflex gain
+This is the research behind a call already made on 2026-09-19: **the head
+instrument's "eyes hold the camera" defaults to off, because on this face every reflex gain
 read worse than none.** The reflex being modelled (the vestibulo-ocular reflex,
 which counter-rotates the eyes against head rotation to stabilise gaze) is real
 physiology, and modelling it at full gain is still wrong here, for two separate

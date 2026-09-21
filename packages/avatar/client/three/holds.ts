@@ -3,11 +3,15 @@
  * pose units per axis, ready to hand to `createSvgAvatar` as `headHold`.
  *
  * The angles themselves are in `motion-limits.json` and are only
- * there. They were read off the three faces by the person who owns how they
+ * there. They were read off the faces by the person who owns how they
  * look, one axis at a time, at the surface a call actually shows — which is
  * the only way this kind of number can be got, and the reason nothing here
  * recomputes, adjusts or second-guesses one. This file is the unit change and
  * nothing else.
+ *
+ * An axis the file never carried is the same case, and a character built but
+ * not yet driven by the owner has none of them: the file says so instead of
+ * carrying a number nobody read, and the fallback below is what holds her.
  *
  * An axis the file marks for re-measurement is not enforced: it was read off an
  * asset that has since been fixed, and holding the driver to a defect that no
@@ -52,7 +56,8 @@ function safest(axis: string): number | undefined {
   return angles.length ? Math.min(...angles) : undefined;
 }
 
-/** `name` as the limits file spells it: tara, tushar, tanya. */
+/** `name` as the limits file spells it — a character with no live axis there
+ *  is held to the tightest budget any other is still vouched for. */
 export function headHold(name: keyof typeof LIMITS.characters): HeadHold {
   const out: HeadHold = {};
   for (const channel of Object.keys(AXIS) as (keyof typeof AXIS)[]) {

@@ -193,7 +193,7 @@ high-frequency subscription serving decoration.
 (`packages/avatar/client/AvatarClient.ts`). It is an `AvatarClient` option, not a
 `createAvatar` one: nothing on the public seam sets it, and nothing reads the
 resulting state back. Shortening it to *watch* the transition means
-constructing `AvatarClient` yourself, which is what the lab below does.
+constructing `AvatarClient` yourself, which is what the tests below do.
 
 The server owns the three because the frames they are inferred from do
 not all reach the browser: function-event reporting there is optional, and the
@@ -204,24 +204,22 @@ draw either as ordinary listening. Tool-specific behaviour, DOM-aware gaze and
 custom compound motion remain deferred until there is evidence for a stable
 JavaScript extension API.
 
-## Verification lab
+## How the ladder is verified
 
-The ladder above is verified by driving the real `AvatarClient` against a
-Pipecat-shaped local event emitter — no transport, no server — and watching six
-repeatable traces. Ours is a page in the maintainers' workshop; the emitter is the
-interesting half, and it is short, because `AvatarClient` takes a client object
-and listens to it. The traces:
+The ladder is asserted, not watched: `packages/avatar/test/AvatarClient.test.ts`
+drives the real `AvatarClient` against a Pipecat-shaped fake — no transport, no
+server, no browser — because `AvatarClient` takes a client object and listens to
+it, so the fake is a `Map` of listeners. Each rung of the precedence table is one
+`it`, and the ones that earn their place are where two authorities disagree: bot
+speech arriving over a server `WORKING`, observed speech over a concurrent
+recoverable failure, a confirmed interruption held until playout actually stops,
+prefetched cues from interrupted audio discarded, and quiet earning `IDLE` on a
+fake clock.
 
-- Normal reply
-- Streaming reply (bot speech pre-empts a `THINKING` state)
-- Parallel tools
-- Interruption
-- Failure and reconnect
-- Explicit nod
-
-The timeline distinguishes SDK events from custom avatar messages. The primary
-visual invariant is that no acknowledgement appears in any scenario except
-**Explicit nod**.
+What a test cannot assert is that the ladder is *right*, and that is read in the
+live call — Studio's `/` against the demo server in the public checkout, where
+the same resolver runs on real RTVI events. The invariant to watch there is the
+negative one: no acknowledgement appears unless a server sent an `action`.
 
 The server state machine deduplicates Pipecat function calls by `tool_call_id`,
 so repeated Started/InProgress notifications cannot strand `WORKING`.

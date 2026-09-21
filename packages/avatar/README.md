@@ -5,10 +5,11 @@ avatars are lip-synced to the audio and they are state aware: they know when
 they have been interrupted, when the user is talking versus idle, when a tool
 call has started and stopped.
 
-No video track, no per-minute avatar vendor, no second media path. Twelve
-avatars ship with it — three SVG faces, six professional Canvas2D identities and
-three 2.5-D characters — one per entry point, so you pay for the one you import,
-and you can author your own.
+No video track, no per-minute avatar vendor, no second media path. SVG faces
+and 2.5-D characters ship with it, one per entry point, so you pay for the one
+you import, and you can author your own. Canvas2D identities also ship and are
+frozen: they still work, they get no further work,
+and they come out in 0.5.0 (below).
 
 This is the browser half. The pipeline half is
 [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) on PyPI; they are
@@ -16,10 +17,10 @@ two ends of one wire format and release independently, kept compatible by the
 wire contract rather than a shared version number
 ([RELEASING.md § Compatibility](https://github.com/voqalize/avatar/blob/main/RELEASING.md#compatibility)).
 
-**Licence: MIT for the code, CC-BY 4.0 for the three 2.5-D character binaries**
-(`assets/*.glb`, the artwork — see `assets/README.md` for the credit line). The
-code is usable anywhere, including in closed-source products; the characters ask
-for attribution and nothing else. The manifest declares the pair as
+**Licence: MIT for the code and the SVG and Canvas2D avatars, CC-BY 4.0 for the
+2.5-D character binaries** (`assets/*.glb` — see `assets/README.md` for the
+credit line). Which applies is decided by the kind of avatar, so adding a
+character never moves the line. The manifest declares the pair as
 `MIT AND CC-BY-4.0`.
 
 ## Install
@@ -85,14 +86,14 @@ always the renderer's.
 
 What is left over is small, specific, and each item is a case the library
 refuses to guess at — a deliberate nod or greeting, a tool whose calls never
-enter your pipeline, a pose richer than the nine states, a backend that is not
+enter your pipeline, a pose richer than the core states, a backend that is not
 ours. [The architecture
 page](https://github.com/voqalize/avatar/blob/main/docs/architecture.md) is the
 canonical reference for all of it.
 
 ## The wire protocol
 
-Three commands, one envelope
+`state`, `action` and `cues`, one envelope
 ([contract-wire.md](https://github.com/voqalize/avatar/blob/main/docs/contract-wire.md)):
 
 ```json
@@ -113,16 +114,16 @@ Emission is overwrite, never merge: a `cues` message says "discard everything
 queued at or after `from_ms`, then append these". The server decides; the client
 has no say and no way to refuse.
 
-**Not using our backend?** Any server can produce cues, three ways, best first.
+**Not using our backend?** Any server can produce cues; the ways, best first:
 If your TTS emits native viseme events, map the integer ids through
 `AZURE_VISEME_TO_LETTER` and ship `{t, v}` as they stream. Otherwise force-align
 the text against the audio and map ARPAbet through `ARPABET_TO_VISEME`. With no
 server work at all, `textToCues(text)` is a crude grapheme guesser, fit for
-previews only. All three are exported from `@voqalize/avatar/internal`.
+previews only. Each is exported from `@voqalize/avatar/internal`.
 
 ## The faces
 
-Three ship today, all hand-authored line art: **`peep`** (the default),
+All hand-authored line art: **`peep`** (the default),
 **`wren`**, **`myna`**. Each is its own entry point, and you pass the value
 rather than a name:
 
@@ -133,11 +134,18 @@ createAvatar({ mount, client, face: myna });
 ```
 
 A name would need a table, and a table is a dynamic index no bundler can shake —
-three drawings in every consumer's bundle to render one.
+every drawing in every consumer's bundle to render one.
 
-## Professional avatars
+## Professional avatars — frozen, removed in 0.5.0
 
-Six complete, code-authored avatars ship as their own `createAvatar` modules:
+**Do not start here.** These are a Canvas2D renderer that ended up in the
+wrong place: more expensive to author than an SVG drawing and less expressive
+than the 2.5-D characters, which is the whole range it was meant to sit between.
+They still work and they are still tested, but they get no further work, and
+their entry points come out in 0.5.0. Pick an SVG face or a 2.5-D character
+instead; both are below.
+
+Complete, code-authored avatars, each its own `createAvatar` module:
 
 ```js
 import { createAvatar } from '@voqalize/avatar/avatars/arjun';
@@ -151,15 +159,15 @@ const avatar = createAvatar({ mount, client: pipecatClient });
 ```
 
 `arjun`/`meera` are the original interviewer pair; `vikram`/`ishita` and
-`kabir`/`naina` are two further wardrobe/hair directions on the same rig. The
+`kabir`/`naina` are further wardrobe/hair directions on the same rig. The
 entry points `interviewer-male`, `interviewer-female`, `professional-male-a`,
 `professional-female-a`, `professional-male-b` and `professional-female-b`
 still work — they are `@deprecated` aliases for the names above, kept so
 existing imports do not break, and should not be used in new code.
 
-All six depict Indian professionals in their late twenties, without caricature
+They depict Indian professionals in their late twenties, without caricature
 or regional costume cues. They are calibrated at call-tile size and preserve
-all six expression targets, continuous visemes, gaze, blink, head motion, and
+every expression target, continuous visemes, gaze, blink, head motion, and
 the frame-edge gesture hand. Each module is a complete identity, not a face
 value: import one instead of the default module and do not pass a `face`
 option.
@@ -171,23 +179,25 @@ only in low-motion upper-cheek areas; none are used as demographic cues.
 They use the same public contract and the same Pipecat lifecycle/viseme driver
 as the SVG avatars. Their private renderer is Canvas2D; its rig data and bitmap
 wardrobe assets are implementation details and no Canvas or pose API is added
-to the package surface.
+to the package surface. Like the SVG faces they are code, MIT, and ask for no
+attribution.
 
 ## The 2.5-D characters
 
-Three characters ship as compiled binaries, each its own `createAvatar` module:
+The characters ship as compiled binaries, each its own `createAvatar` module:
 
 ```js
 import { createAvatar } from '@voqalize/avatar/avatars/tara';
 // or: @voqalize/avatar/avatars/tushar
 //     @voqalize/avatar/avatars/tanya
+//     @voqalize/avatar/avatars/tess
 
 const avatar = createAvatar({ mount, client: pipecatClient });
 ```
 
 A photograph of a face projected onto shallow geometry, with the parts that have
 to move — eyes, teeth, the lip line — built as geometry rather than painted.
-Three.js is an *optional* peer (`three`, `>=0.180 <0.187`) behind these three
+Three.js is an *optional* peer (`three`, `>=0.180 <0.187`) behind those
 entry points only, so an SVG or Canvas consumer never downloads it, and the `.glb`
 is fetched when the avatar mounts.
 
@@ -196,7 +206,7 @@ cue-synced mouth, and a server that has never heard of these characters drives o
 correctly. The head turns 15° of yaw and 24° of pitch, which is a measured limit
 rather than an option.
 
-**The three binaries are artwork under CC-BY 4.0**, separately from the MIT code
+**The binaries are artwork under CC-BY 4.0**, separately from the MIT code
 around them; the credit line is in `assets/README.md`. Mounting, sizing, the asset
 budget and what the characters can be asked to do:
 [characters.md](https://github.com/voqalize/avatar/blob/main/docs/characters.md).
@@ -234,7 +244,7 @@ React binding. `src/` is the widget itself: the mixer, the SVG rig and drawings,
 plus the private Canvas2D interviewer rigs and their assets, as dependency-free
 ES modules with no build step, imported by `dist/` through ordinary relative
 paths. `client/` is the TypeScript those `dist/` files were compiled from, so
-the source maps resolve. `assets/` is the three compiled characters and their
+the source maps resolve. `assets/` is the compiled characters and their
 licence note — the only non-JavaScript thing here, fetched at runtime by URL.
 
 The contract documents do not ship here. They live in the repository, which is
@@ -244,10 +254,18 @@ where they are kept current:
 ## License
 
 **MIT for the code, CC-BY 4.0 for the artwork**, and Voqalize holds the
-copyright on all of it. The manifest declares the pair as `MIT AND CC-BY-4.0`;
-the artwork is `assets/*.glb`, the three 2.5-D characters, and `assets/README.md`
-carries the credit line. Everything else in the tarball is MIT, usable anywhere
-including in closed-source products.
+copyright on all of it. The licence follows the kind of avatar, not the roster:
+
+- **SVG faces and Canvas2D identities are code** — MIT, no attribution. Each is
+  drawn by the function that ships it; a Canvas2D identity's rig data and
+  wardrobe bitmaps are implementation details of that function, not artwork you
+  are licensing.
+- **2.5-D characters are artwork** — `assets/*.glb`, and nothing else in the
+  tarball, under CC-BY 4.0. `assets/README.md` carries the credit line.
+
+MIT is usable anywhere, including in closed-source products. The manifest
+declares the package as `MIT AND CC-BY-4.0`, which is what a licence scanner
+reports whether or not you import a 2.5-D character.
 
 The drawing idiom `peep` is authored in is
 [Open Peeps](https://www.openpeeps.com/) (CC0) — no artwork is copied. The

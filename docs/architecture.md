@@ -47,9 +47,9 @@ deliberate nod, a greeting, a tool whose calls never enter your pipeline — and
 guessing at those would make the face wrong at exactly the moments people are
 watching it.
 
-## The five principles
+## The principles
 
-### 1. The avatar is an embodiment of the pipecat client
+### The avatar is an embodiment of the pipecat client
 
 `createAvatar` takes a live `PipecatClient` and subscribes to it. The avatar
 derives as much of its behaviour as it can directly from that client's standard
@@ -76,7 +76,7 @@ Two consequences that surprise people, both deliberate:
   decides what the agent is *doing* — it has no view of call content and no way
   to refuse a server command — but it does own the Pipecat facts it receives.
 
-### 2. States form a hierarchy
+### States form a hierarchy
 
 A **state** is a durable condition: it holds until the facts change, and it
 does not complete on a timer. Exactly one state is effective at any instant,
@@ -108,12 +108,12 @@ why it is a ladder rather than a switch:
   which also records the one heuristic we deliberately do not implement, and
   why).
 
-The vocabulary an avatar implementation receives is nine names, and
-[contract-behavior.md](contract-behavior.md) owns that list. A state names what
+The vocabulary an avatar implementation receives is a closed list of names, and
+[contract-behavior.md](contract-behavior.md) owns it. A state names what
 is happening, never how to draw it: `WORKING` is `WORKING` on the wire whether
 your renderer draws it as typing, as a spinner, or as nothing at all.
 
-### 3. Actions are moments; states are durations
+### Actions are moments; states are durations
 
 An **action** is a finite physical sequence with a start, a bounded timeline
 and its own completion — a nod, a receipt, a greeting, a wave. It establishes
@@ -129,15 +129,14 @@ understanding them. Autonomy here is contingent, never decorative — the
 renderer's own autonomy stops at physical polish: blending, blink, breath,
 small eye motion, sustained posture.
 
-Two actions are required of every avatar — `ACKNOWLEDGE` and
-`RESPONSE_INTERRUPTED` — and the id is otherwise **open**: a name out of the
-mounted avatar's own catalogue, ignored by a face that has no such name. So the
+`ACKNOWLEDGE` and `RESPONSE_INTERRUPTED` are required of every avatar, and the
+id is otherwise **open**: a name out of the mounted avatar's own catalogue, ignored by a face that has no such name. So the
 bundled SVG renderer's larger clip library is addressable by a server that knows
 what it is talking to, and what the two required ids buy is the thing an open
 name cannot — something to send *without* knowing which face is on the other
 end ([contract-wire.md](contract-wire.md) § Action).
 
-### 4. An avatar is a JavaScript contract, not a renderer
+### An avatar is a JavaScript contract, not a renderer
 
 ```ts
 createAvatar({ mount, client, ...implementationOptions }) -> { destroy() }
@@ -148,11 +147,13 @@ over the implementation's own options, so a caller passing yours still gets
 them checked. At runtime it is duck typing on the top-most layer — an avatar
 *is* the API.
 
-Ours ships two renderers behind that same seam: three hand-authored SVG faces
-(`peep`, `wren`, `myna`, imported as `{ face }` values) and six Canvas2D
-identities (`arjun`, `meera`, `vikram`, `ishita`, `kabir`, `naina`, each a
-complete `createAvatar` module at `@voqalize/avatar/avatars/<name>`) — proof
-the contract is renderer-agnostic rather than SVG with extra steps. Nothing
+Ours ships live renderers behind that same seam: the hand-authored SVG
+faces (`peep`, `wren`, `myna`, imported as `{ face }` values) and the 2.5-D
+characters (`tara`, `tushar`, `tanya`, `tess`, each a complete `createAvatar` module at
+`@voqalize/avatar/avatars/<name>`, over Three.js as an optional peer) — proof
+the contract is renderer-agnostic rather than SVG with extra steps, one of them
+being a GPU. A further set, the Canvas2D identities, is frozen and comes out in
+0.5.0 ([packages/avatar/README.md](../packages/avatar/README.md)). Nothing
 about the contract is fixed to either: a Rive rig, a WebGL head, a CSS-only
 mascot and a renderer with no mouth at all are all conforming avatars. **You
 add an avatar by publishing a module that exports `createAvatar`, and
@@ -173,7 +174,7 @@ What an implementation owes the caller is only that `destroy()` unsubscribes
 and leaves the mount as it found it. The obligations that actually matter are
 perceptual, and they are in [contract-behavior.md](contract-behavior.md).
 
-### 5. It is built on the pipecat ecosystem, not beside it
+### It is built on the pipecat ecosystem, not beside it
 
 The browser half is driven by `@pipecat-ai/client-js` — your instance of it,
 which you already have; the package declares it an *optional* peer and imports
@@ -210,8 +211,8 @@ renders the bot's tile.
   │  state machine│    state / action /    (lifecycle)   state; anchors the cue
   │  viseme legs  │    cues                    │         clock to real playout
   └───────────────┘                            ▼
-        │                                 behavior ──── nine states, two core
-        ▼                                 (src/behavior.js)  actions
+        │                                 behavior ──── STATES, core actions
+        ▼                                 (src/behavior.js)
   transport.output()                          │
                                               ▼
                                           renderer ──── ours: mixer → rig → face
@@ -220,7 +221,7 @@ renders the bot's tile.
 
 Read the two columns as two authorities that never negotiate. The left one
 observes frames and *proposes*; the right one observes facts and *resolves*.
-Only three commands cross the gap, and the envelope is one RTVI
+Only `state`, `action` and `cues` cross the gap, and the envelope is one RTVI
 `server-message` shape ([contract-wire.md](contract-wire.md), the one copy):
 
 ```json
@@ -275,8 +276,8 @@ guess at:
 |---|---|
 | a deliberate nod, receipt, greeting, wave | push an `AvatarControlFrame` carrying an action from anywhere in your pipeline. |
 | an out-of-process LLM whose tool calls never appear as pipecat function-call frames | subclass `AvatarStateMachine` and translate your own frames in `on_frame`; you inherit the call-id dedup and the parallel-call hold. |
-| a richer pose than the nine states — reviewing a screen, searching, typing into a chat | drive the mixer directly through `@voqalize/avatar/internal`, whose state list has exactly one copy, `STATES` in `packages/avatar/src/avatar.js`. Not wire vocabulary, on purpose. |
-| a backend that is not ours | produce `cues` yourself. Best first: map your TTS's native viseme events; else force-align text against audio; the tables for both are exported from `@voqalize/avatar/internal` ([README.md § TTS to visemes](../README.md)). |
+| a richer pose than the core states — reviewing a screen, searching, typing into a chat | drive the mixer directly through `@voqalize/avatar/internal`, whose state list has exactly one copy, `STATES` in `packages/avatar/src/avatar.js`. Not wire vocabulary, on purpose. |
+| a backend that is not ours | produce `cues` yourself. Best first: map your TTS's native viseme events; else force-align text against audio; the tables for both are exported from `@voqalize/avatar/internal`, and the cue format they have to produce is [internal-mixer.md § Speech](internal-mixer.md). |
 | a different face, or a different rendering technology entirely | pass a `face`, or publish your own `createAvatar`. |
 
 The two backend seams are the whole extension surface, and the choice between
@@ -311,11 +312,11 @@ can all be tested without running a call
 
 | you want | read |
 |---|---|
-| the three commands and their fields | [contract-wire.md](contract-wire.md) |
+| `state`, `action`, `cues` and their fields | [contract-wire.md](contract-wire.md) |
 | the precedence ladder, and every latch under it | [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md) |
 | states and actions as an avatar author receives them | [contract-behavior.md](contract-behavior.md) |
 | the public interface, and how to ship your own avatar | [design-avatar-interface.md](design-avatar-interface.md) |
-| mounting one of the three 2.5-D characters, and what it costs | [characters.md](characters.md) |
+| mounting one of the 2.5-D characters, and what it costs | [characters.md](characters.md) |
 | why a library, what each package owns, the repo layout | [design-library-split.md](design-library-split.md) |
 | the pipeline half, its two seams, its wheels | [packages/avatar-py/README.md](../packages/avatar-py/README.md) |
 | our SVG renderer's internals — not a seam to implement | [internal-mixer.md](internal-mixer.md), [internal-rig.md](internal-rig.md) |

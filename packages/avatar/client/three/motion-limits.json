@@ -110,7 +110,11 @@
      "fixed": "2026-09-19"
     }
    ]
+  },
+  "tess": {
+   "unmeasured": "Nothing here has been read off her. She was built on 2026-09-20 and the owner has not driven her yet, so this entry carries no angle at all rather than a plausible one: `holds.ts` falls back to the tightest angle still live on each axis, which is the budget the faces nobody doubts are already held to. Drive her with the hold-and-move instrument and this becomes the same shape as the entries above.",
+   "defects": []
   }
  },
- "remeasure": "An axis carrying `remeasure` was measured on an asset that has since changed. It stays as written \u2014 a measurement is not edited by someone who did not make it \u2014 and a gate skips it and says so."
+ "remeasure": "An axis carrying `remeasure` was measured on an asset that has since changed. It stays as written — a measurement is not edited by someone who did not make it — and a gate skips it and says so."
 }

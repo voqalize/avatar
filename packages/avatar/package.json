@@ -1,6 +1,6 @@
 {
   "name": "@voqalize/avatar",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "A JavaScript-programmable talking head for AI voice calls: line-art or 2.5-D faces, server-synced lipsync, state through motion, no runtime dependencies.",
   "license": "MIT AND CC-BY-4.0",
   "author": "Voqalize",
@@ -76,6 +76,10 @@
     "./avatars/tanya": {
       "types": "./dist/three/tanya.d.ts",
       "default": "./dist/three/tanya.js"
+    },
+    "./avatars/tess": {
+      "types": "./dist/three/tess.d.ts",
+      "default": "./dist/three/tess.js"
     },
     "./avatars/arjun": {
       "types": "./dist/arjun.d.ts",

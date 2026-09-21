@@ -262,13 +262,13 @@ void (BLENDER_ACTIONS satisfies Partial<Record<keyof typeof ACTIONS, Sequence>>)
  * What every character in this package answers to — each one's `supports`, the
  * optional declaration a driving UI reads (`AvatarSupport`).
  *
- * Derived rather than written down, because the three parts already exist: the
- * two ids every avatar owes a server, the mixer's own clip catalogue these
- * characters inherit whole, and this file's own names. A hand-kept fourth copy
- * would only be able to disagree with them. `BLENDER_ACTIONS` adds nothing —
+ * Derived rather than written down, because every part of it already exists: the
+ * ids every avatar owes a server, the mixer's own clip catalogue these
+ * characters inherit whole, and this file's own names. A hand-kept copy beside
+ * them would only be able to disagree with them. `BLENDER_ACTIONS` adds nothing —
  * it re-shapes an id the mixer already has.
  *
- * It is one list for tara, tushar and tanya for the same reason the tables are:
+ * It is one list for every 2.5-D character for the same reason the tables are:
  * they are one rig driven through one set of channels. A character that stops
  * being able to do one of these owes its own `supports`, not an edit here.
  */

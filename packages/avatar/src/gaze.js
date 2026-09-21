@@ -84,9 +84,6 @@ const LID_FOLLOW = { down: 0.34, up: 0 };
 // peaks mid-turn, is gone when the head lands, and sizes itself on a rig whose
 // head moves four times faster. A 0.75-unit look on tara sinks ~0.8°.
 const HEAD_DIP = 0.06;
-// A gated aversion waits this long past its due time for a phrase boundary,
-// then goes anyway: a run of speech with no pause in it still gets its look.
-const GATE_WAIT = 1.5;
 // How much of a drift the head joins. Little: a drift is a reader's scan or a
 // thinker's gaze moving where it rests, and both are eye movements. At 0.35
 // the head nodded along with every step of a reading scan, which on a
@@ -219,30 +216,24 @@ export const AVERSION = {
     mag: [0.30, 0.44],
     dirs: [[-1, 0.06], [-1, 0.06], [1, 0.02], [1, 0.02], [-0.7, -0.5], [0.5, 0.35]],
   },
-  // While speaking: 1.96 s every 4.75 s mid-turn, a turn-start look on 73% of
-  // turns — the planning look, away to find the words and back to deliver
-  // them — and none in the last 2.4 s, because the floor is handed back under
-  // mutual gaze (§4.2; the mixer owns that hold, since only it can see the
-  // cue track). Human speakers hold the listener's eyes for about 41% of a
-  // turn. This is set for 70-80% instead — the
-  // listener here watches a face on a screen, where 41% reads as evasive — so
-  // the looks keep about Andrist's length and come a little less often.
-  // `every` sits under Andrist's 4.75 s because the phrase gate and the
-  // end-of-turn hold both stretch it: at 3.8-5.8 a turn measured 6-8 looks a
-  // minute and 76-82% contact, the top edge of the band rather than its middle.
-  // `gated`: a mid-turn look waits for a phrase boundary, because speakers
-  // break gaze between clauses, not in the middle of a word.
-  SPEAK: {
-    every: [3.4, 5.2],
-    dur: [1.5, 2.3],
-    mag: [0.34, 0.48],
-    dirs: [[-1, 0.12], [1, 0.12], [-0.75, 0.55], [0.7, 0.5], [-0.6, -0.45]],
-    gated: true,
-    start: { p: 0.73, dur: [1.1, 1.8], window: 0.8 },
-  },
 };
-// There is deliberately no THINK profile. The *cognitive* aversion — 3.54 s
-// (SD 1.26), splitting 39.3% down / 29.4% up / 31.3% side (§4.2) — is longer
+// **There is deliberately no SPEAK profile, and that is the owner's call
+// (2026-09-21): while the avatar talks, its eyes are on the user.** There was
+// one — Andrist's measured speaker, a planning look away at the start of most
+// turns and a short one every few seconds at a phrase boundary — and in a live
+// call it read as the eyes darting off and coming back. The research it came
+// from is not disputed and the reason it does not transfer is structural: a
+// human speaker's look away is a *head and body* movement that the eyes only
+// lead, and this rig has no such movement to give it. Eye travel on its own is
+// not a smaller version of that, it is a different thing, and on tara the
+// amplitude it needed to be visible at all (`aversionGain` 1.8) is exactly what
+// made it read as a dart. What the speaking face moves instead is the head it
+// holds per phrase and the trunk under it (prosody.js), which is communicative
+// rather than evasive. If the face and body half is ever built, this is where
+// the eye half comes back.
+//
+// There is deliberately no THINK profile either. The *cognitive* aversion —
+// 3.54 s (SD 1.26), splitting 39.3% down / 29.4% up / 31.3% side (§4.2) — is longer
 // and deeper than the listening kind, and THINKING renders it with its own
 // dwell cycle (a `glance` in STATES), which moves the whole gaze target rather
 // than nudging off it. Two mechanisms producing the same look would fight.
@@ -296,9 +287,6 @@ export class GazeLayer {
     this._avHead = { x: 0, y: 0 };
     this._avVel = { x: 0, y: 0 };
     this._avProfileRef = undefined;
-    /** Whether now is a phrase boundary, for a `gated` profile. Set by the mixer. */
-    this.gate = true;
-    this._avStartBy = 0;       // a turn-start look may still fire until this time
     // --- drift: a small held offset about the target, set by the mixer
     this.drift = { x: 0, y: 0 };
     this._drift = { x: 0, y: 0 };
@@ -313,15 +301,6 @@ export class GazeLayer {
     // it is entered off a stale timestamp from one that didn't.
     this._avNext = this._t + (p ? p.every[0] + Math.random() * (p.every[1] - p.every[0]) : 0);
     this._avUntil = 0;
-    this._avStartBy = 0;
-  }
-
-  /** A turn begins. If the profile has a turn-start look and the dice take it,
-   *  it fires as soon as `hold` allows inside its window, or not at all — a
-   *  planning look that arrives a second into the words is just a look. */
-  startTurn() {
-    const s = this.aversion && this.aversion.start;
-    if (s && Math.random() < s.p) this._avStartBy = this._t + s.window;
   }
 
   _avert(t, dt) {
@@ -339,17 +318,13 @@ export class GazeLayer {
       // moment the hold lifted — out, back and out again across one turn
       // edge, which is three saccades where the floor wanted none.
       this._avUntil = 0;
-      this._avStartBy = 0;
       this._avNext = t + p.every[0] + Math.random() * (p.every[1] - p.every[0]);
     } else if (this._avUntil && t >= this._avUntil) {
       this._avUntil = 0;
       this._nextMicro = 0;
       this._avNext = t + p.every[0] + Math.random() * (p.every[1] - p.every[0]);
-    } else if (!this._avUntil && !this.hold && (t < this._avStartBy || (t >= this._avNext
-        && (this.gate || !p.gated || t >= this._avNext + GATE_WAIT)))) {
-      const dur = t < this._avStartBy ? p.start.dur : p.dur;
-      this._avStartBy = 0;
-      this._avUntil = t + dur[0] + Math.random() * (dur[1] - dur[0]);
+    } else if (!this._avUntil && !this.hold && t >= this._avNext) {
+      this._avUntil = t + p.dur[0] + Math.random() * (p.dur[1] - p.dur[0]);
       this._nextMicro = 0;
       const d = p.dirs[(Math.random() * p.dirs.length) | 0];
       const m = (p.mag[0] + Math.random() * (p.mag[1] - p.mag[0])) * this.avertGain;

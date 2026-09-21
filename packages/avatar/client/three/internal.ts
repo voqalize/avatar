@@ -1,11 +1,11 @@
 /**
  * The 2.5-D rig, below the `createAvatar` modules — `/internal`, no semver promise.
  *
- * `tara.ts`, `tushar.ts` and `tanya.ts` are what a consumer gets: one
- * `createAvatar` each, the mixer behind it, nothing to configure. This is the
- * other door, for a page whose subject is the *rig* rather than the call — the
- * renderer with no mixer in front of it, the three compiled characters, and the
- * head envelope their channels are scaled by. Its readers are the rig instruments
+ * A character's own module — `tara.ts`, `tushar.ts`, `tanya.ts`, `tess.ts` — is
+ * what a consumer gets: one `createAvatar` each, the mixer behind it, nothing to
+ * configure. This is the other door, for a page whose subject is the *rig*
+ * rather than the call — the renderer with no mixer in front of it, every
+ * compiled character, and the head envelope their channels are scaled by. Its readers are the rig instruments
  * in the working tree, and nothing that ships.
  *
  * It exists because those instruments were reaching around the package instead,

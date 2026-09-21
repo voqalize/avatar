@@ -7,12 +7,13 @@
 > [contract-wire.md](contract-wire.md); how the client resolves it is
 > [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md).
 >
-> What follows is the imperative surface underneath all of that — the one the
-> rig pages and the headless tools drive directly, and the one a
+> What follows is the imperative surface underneath all of that — the one
+> Studio's instruments and the headless tools drive directly, and the one a
 > behavior author works against. It ships under `@voqalize/avatar/internal`
-> with no semver promise. Our own review IDE pointedly does *not* use it: it is
-> the surface an integrator copies from, so it takes the published
-> `createAvatar` and nothing else.
+> with no semver promise. Studio's *app* pointedly does not use it, and that is
+> checked by the instruments being separate build entries: it is the surface an
+> integrator copies from, so the app takes the published `createAvatar` and
+> nothing else ([apps/studio/README.md § The rule](../apps/studio/README.md)).
 
 Everything below is reachable from one import:
 
@@ -157,8 +158,8 @@ duration and keyframes beside its intent:
   open vocabulary makes a name this face cannot draw the expected case.
 - `INTERNAL_CLIPS` — the full authoring library the seven are drawn from, ~33
   clips. It is a *timeline* library, not a second action vocabulary: nothing on
-  the mixer's surface takes one of its ids, and the authoring page that reviews
-  them — the clip strip — drives a bare `ClipPlayer` instead. That
+  the mixer's surface takes one of its ids, and the instrument that reviews them
+  — Studio's filmstrip — drives a bare `ClipPlayer` instead. That
   asymmetry is on purpose — publishing a clip says a server that knows this
   renderer is mounted may ask for it, and that should cost an edit to
   `ACTION_IDS`.
@@ -265,8 +266,11 @@ same `(t, v)` sequence; Python additionally retains phones and the browser adds
 local intensity defaults. A normalizer change is incomplete until both tests
 accept that fixture.
 
-`speak()` auto-enters `SPEAKING` (keeping the current gaze) and kills any
-spoken action in flight. `speakEnd` fires when the track completes.
+`speak()` auto-enters `SPEAKING` and kills any spoken action in flight. It takes
+the state's own gaze — the eyes go to the user with the first word — unless a
+performance aimed them with its `gaze` verb, which is kept. It used to keep
+whatever gaze it found, which left a reply that began mid-look pointed away for
+its whole turn. `speakEnd` fires when the track completes.
 
 **Around the mouth.** The same track drives the speaker's head, brows and
 breath, none of which is the mouth (`packages/avatar/src/prosody.js`, which has
@@ -351,7 +355,7 @@ and tuned on the rig.
 
 **A server cannot send one of these.** `perform` is not on the wire, and
 deliberately so; this is a local authoring surface only.
-Our own expression lab scripts a turn as data and plays it through them:
+Studio's scripted take reads a turn as data and plays it through them:
 
 ```js
 avatar.speak({ cues, audio });          // the utterance
@@ -456,6 +460,6 @@ are measured against it, in degrees.
   `gesturing`, `params` (the live smoothed vector), `svg`, `meta`, `theme`.
 - `setOverrides({channel: value})` — direct parameter injection, post-clamp.
   For tuning UIs and tests, not production.
-- `blink(double?)`, `step(dt)` (only under `{manual: true}`), `destroy()`.
+- `blink()`, `step(dt)` (only under `{manual: true}`), `destroy()`.
 
 Types: [`packages/avatar/src/avatar.d.ts`](../packages/avatar/src/avatar.d.ts), hand-maintained beside the code.

@@ -77,10 +77,11 @@ export const <yourname> = { create: createFace, meta: META };
   a face is passed; there is no registry and no name to resolve
   ([Shipping a face](#shipping-a-face)).
 
-**A face must be callable standalone.** The rig-tooling pages — the contact
-sheet, the torso check, the clip strip — call `FACES[name].create(mount)`
-directly with no mixer and drive `apply()` from a raw vector; a face that only
-works under `createAvatar` is broken.
+**A face must be callable standalone.** Every instrument whose question is about
+the *drawing* — the pose sheet, the filmstrip, mocap — reaches the rig through
+`mountRig`, which calls `FACES[name].create(mount)` with no mixer and drives
+`apply()` from a raw vector; a face that only works under `createAvatar` is
+broken.
 
 ### What you implement, and what you get free
 
@@ -244,11 +245,11 @@ face.apply(makeParams({ mouthOpen: 0.85, headYaw: 0.4 }));
 
 `makeParams` fills every channel from `REST` and applies your overrides on top,
 so you can name only the channel you are looking at. That is the whole harness
-the rig pages use, and `packages/avatar/src/face-peep-control-plane.js` ships for
-the same purpose: peep with all static art deleted and only the elements
-`apply()` writes left behind, so a page that mounts it shows exactly which nodes
-a frame actually touches. Expose your `apply` on `window` and you can pose it
-from the console.
+the instruments use, and `packages/avatar/src/face-peep-control-plane.js` is the
+worked example: peep with all static art deleted and only the elements `apply()`
+writes left behind, so the file is a list of exactly which nodes a frame
+touches. It is a thing to read; the five lines above mount it if you would
+rather pose it from the console.
 
 ### What the skeleton does not do
 
@@ -479,22 +480,22 @@ createAvatar({ mount, client, face: peep });
 ```
 
 Adding a face to *this* repo is four edits, and the first one is worth doing on
-day one because every review tool enumerates that table:
+day one because the conformance sweep enumerates that table:
 
 1. **`packages/avatar/src/faces.js`** — import your module and add a row to `FACES`. That is
-   what makes the face visible to every review view — the rig check, the contact
-   sheet, the torso check, the clip strip, the headless screenshot set — and to
-   the conformance sweep in `pnpm test`. `FACE_NAMES` and `DEFAULT_FACE` follow from it;
-   `DEFAULT_FACE` stays `peep` unless a stakeholder says otherwise.
+   what makes the face visible to the conformance sweep in `pnpm test`.
+   `FACE_NAMES` and `DEFAULT_FACE` follow from it; `DEFAULT_FACE` stays `peep`
+   unless a stakeholder says otherwise.
 2. **A `.d.ts` beside the module**, three lines: `createFace`, `META`, `THEME`
    and the record, typed from `./avatar.js` exactly as `packages/avatar/src/face-peep.d.ts`
    does.
 3. **A `package.json` `exports` entry** for `./faces/<name>`, pointing at the
    `.js` and the `.d.ts`. Separate entry points are why importing one face costs
    one drawing.
-4. **Your review surface's face list**, only if the face should be selectable
-   there. Ours imports the published subpaths, never `packages/avatar/src/`,
-   which is what keeps it honest about what a consumer can reach.
+4. **Your review surface's avatar list**, so the face is selectable there. Have
+   it import the published subpath rather than `packages/avatar/src/` — then it
+   can reach only what a consumer can, which keeps it honest, and is why this
+   edit is separate from the one above.
 
 Both halves of the record are required. `create` without `meta` used to be
 tolerated, with `viewBox` re-read off the produced svg — a face could ship half
@@ -551,83 +552,80 @@ then plays the face half alone.
 ## Checklist for a new avatar
 
 Setup, once: `pnpm install` at the repository root (for `pnpm test`), then serve
-the tree over HTTP — `packages/avatar/src/` has no build step, so a static server
-at the repository root is the entire development loop.
+the tree over HTTP — `packages/avatar/src/` has no build step, so a server at the
+repository root is the entire development loop. **Use one that sends
+`Cache-Control`.** Python's `http.server` sends `Last-Modified` and nothing else,
+so browsers apply heuristic freshness and stop revalidating modules you have
+edited: three debugging sessions here, one of them a module error that was simply
+a lie. `?v=` is not the workaround — it puts two copies of the module in the
+graph and fails differently and worse.
 
-**Serve it with something that sends `Cache-Control: no-store`.** Python's
-`http.server` sends `Last-Modified` and no `Cache-Control`, so browsers apply
-heuristic freshness and stop revalidating modules you have edited. That has cost
-this project three debugging sessions, one of which produced a module error that
-was simply a lie. Do not work around it with `?v=` either — that puts two copies
-of the module in the graph and fails differently and worse.
+**The checks below are the review, and each is named by what it shows rather
+than by a file.** Ours are Studio's instruments, which are not published; the
+harness in [The smallest face that works](#the-smallest-face-that-works) is all
+any of them is — mount a face, write a pose vector, look — so an outside author
+builds the one they need in an afternoon and loses nothing but our styling. Every
+one of ours is also a URL that renders headless
+([tools/README.md](../tools/README.md)), which is how you review a face with no
+browser open and keep a record of what it looked like yesterday. All of them want
+your face registered in `packages/avatar/src/faces.js`, so do that first.
 
-**The seven views below are the review, and each is named by what it shows
-rather than by a file.** The pages that implement them are the maintainers'
-workshop and are not published; the harness in
-[The smallest face that works](#the-smallest-face-that-works) is all any of them
-is — mount a face, write a pose
-vector, look — so an outside author builds the one they need in an afternoon and
-loses nothing but our styling. Each also renders headlessly to a PNG, which is
-how you review a face with no browser open and keep a record of what it looked
-like yesterday. All of them want your face registered in
-`packages/avatar/src/faces.js`, so do that first.
-
-1. **The rig check** — every registered avatar side by side, driven by one
-   command, so any difference on screen is the drawing and never the driving.
-   First place to look; ours also runs the conformance sweep in the page and
-   takes a pose object from the console.
-2. **The contact sheet**, one face — every viseme, emotion, gaze and
-   channel extreme. Check the **mouth-detail crop row**, not just full heads:
-   two visemes can be numerically distinct and visually identical (`G` vs `B`
-   both read as a white strip until `G` was rebuilt as nearly-all-teeth). At
-   avatar size a viseme is ~40 px tall; letter collisions are invisible on the
-   full-head row. The crop row frames itself from your `META.mouthCrop`.
-3. **The torso check** — shoulders × lean × head pose. These channels only fail
-   *in combination*; this is where a rig leaks background from behind the shirt
-   if it is going to.
-4. **The clip strip**, one clip — phase relationships through the mixer's own
-   smoothing, as a filmstrip.
-5. `pnpm test` — the conformance sweep: params finite,
+1. **The pose sheet**, `/pose/` — every viseme, emotion, gaze and channel
+   extreme, plus the two composites that only fail *in combination*:
+   shoulders × lean × head pose, which is where a rig leaks background from
+   behind the shirt if it is going to. Select your face and one other and the
+   sheet is two columns, so any difference on screen is the drawing and never the
+   driving. Check the **mouth-detail crop row**, not just full heads: two visemes
+   can be numerically distinct and visually identical (`G` vs `B` both read as a
+   white strip until `G` was rebuilt as nearly-all-teeth). At avatar size a
+   viseme is ~40 px tall; letter collisions are invisible on the full-head row.
+   The crop row frames itself from your `META.mouthCrop`.
+2. **The filmstrip**, `/filmstrip/` — phase relationships through the mixer's own
+   smoothing, one row per clip, stepped at 1/60 s. The keys are not what the face
+   does; the smoothing between them is.
+3. **A shape held over a face that is still alive**, `/drive/` — the pose sheet
+   freezes everything, and a mouth that reads at rest can disappear once the
+   idle sway, the blinks and the breath are under it. Pin the channel and watch.
+4. `pnpm test` — the conformance sweep: params finite,
    `|v| ≤ 2`, svg connected, across every state/emotion/gaze/interjection and
    a viseme track, plus `checkHandFraming` against your window and a pass of
-   every hand gesture. (The rig check runs the same sweep in the page, if you
-   want to watch it land.) It also cannot see *looks*; it reaches shoulders/torso
-   only through clips, so drive those with a `setOverrides` loop over
-   `[-1, 0, 1]` per channel — and look at one hand gesture held at peak
-   extension, because figure/ground between hand and shirt is a judgement the
-   framing check cannot make.
-6. Auto-traced art has known failure modes to budget for: zero-margin abutting
+   every hand gesture. It also hashes the pose sheet and every filmstrip, so an
+   unintended change in either is a failing test rather than a screenshot you
+   forgot to take. What it cannot see is *looks* — and look at one hand gesture
+   held at peak extension, because figure/ground between hand and shirt is a
+   judgement the framing check cannot make.
+5. Auto-traced art has known failure modes to budget for: zero-margin abutting
    contours open seams under parallax; the trace stops at the source crop;
    hard horizontal edges invisible in the source appear under motion.
-7. **The 130 px acceptance pass** — downsample the rest pose, the emotions
+6. **The 130 px acceptance pass** — downsample the rest pose, the emotions
    row and the X/A mouth crops to ~130 px and judge *there*. Author at
    close-up, accept at tile size: the mouth must still read as smiling (not
    merely present), the six emotions must be tellable apart, and X vs A must
    differ in *shape*. Run the fixation audit on the rest tile: name the first
    three things you see, in order — the eye/mouth band places no worse than
    second. (Why: [research-perception.md](research-perception.md) §2, §5, §8.)
-8. **Levelness by mirror** — render rest, flip it horizontally, and compare
+7. **Levelness by mirror** — render rest, flip it horizontally, and compare
    the pair; tilt and lopsidedness pop instantly. Judge on the glasses line
    and eye line. Rest must be channel-neutral and dead level: the mixer adds
    roll, sway and glances at runtime, and a baked-in tilt compounds with all
    of them. Drawing asymmetry (fringe, chin off midline) is welcome; *pose*
    asymmetry is a defect.
-9. **Worst-case composites, not rest poses, for clearances** — build the
+8. **Worst-case composites, not rest poses, for clearances** — build the
    extreme combination for every pair of marks that move relative to each
    other (brows-down + squint + pitch against a glasses frame; wide-open
    mouth against any under-lip mark) and verify a hard 3–4 unit gap.
    Near-tangency shimmers under animation. If an accessory and a channel
    collide, the accessory yields. Also render one **mid-blink** frame (lids
-   held ~0.5 via rig-check's `pose()`): anything that must ride the lid — a
-   lash line — is caught here, not at open or closed.
-10. **Independent design review** — before a face is called done, a fresh-eyes
-    reviewer (not the author) critiques it against the *product brief* at
-    tile size, organized around the questions in
-    [research-perception.md](research-perception.md): fixation hierarchy,
-    resting trust/warmth, neoteny calibration, caricature economy, animation
-    head-room, silhouette, long-session comfort. The output is prescriptions
-    ranked by perceptual payoff ÷ stroke cost, plus a **protect-list** of
-    marks confirmed right — which then stops future churn on them.
+   held ~0.5): anything that must ride the lid — a lash line — is caught here,
+   not at open or closed.
+9. **Independent design review** — before a face is called done, a fresh-eyes
+   reviewer (not the author) critiques it against the *product brief* at
+   tile size, organized around the questions in
+   [research-perception.md](research-perception.md): fixation hierarchy,
+   resting trust/warmth, neoteny calibration, caricature economy, animation
+   head-room, silhouette, long-session comfort. The output is prescriptions
+   ranked by perceptual payoff ÷ stroke cost, plus a **protect-list** of
+   marks confirmed right — which then stops future churn on them.
 
 **The sweep passing is not evidence the face is good.** It catches dead
 avatars, NaN leaks and detached SVGs, nothing about how the face *looks*. Every

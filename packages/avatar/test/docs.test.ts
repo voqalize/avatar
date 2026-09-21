@@ -64,13 +64,16 @@ const CODE_DIRS = [
   "packages/avatar-py/src",
   "packages/avatar-py/native",
   "apps/studio/src",
+  // The instruments, whose own names the authoring docs cite — the avatar roster
+  // a new face is added to lives here, not in the app.
+  "apps/studio/instruments",
   "apps/server",
-  "apps/authoring",
-  // The release tooling. Private-only, so on the public line this entry finds
-  // nothing — which is right, and walk() already tolerates an absent tree. It is
-  // here because RELEASING.md names the export tool's allowlist constants on
-  // this line, and a doc that documents a constant is exactly as capable of
-  // going stale as one that documents a state.
+  // The private tooling: the release export and every headless runner. Private-
+  // only, so on the public line this entry finds nothing — which is right, and
+  // walk() already tolerates an absent tree. It is here because RELEASING.md
+  // names the export tool's allowlist constants on this line, and a doc that
+  // documents a constant is exactly as capable of going stale as one that
+  // documents a state.
   "tools",
 ];
 const CODE_EXT = /\.(js|mjs|ts|tsx|py|c|h|json|html)$/;
@@ -88,8 +91,7 @@ const DOC_FILES = [
   "packages/avatar-py/README.md",
   "apps/studio/README.md",
   "apps/server/README.md",
-  "apps/authoring/README.md",
-  "apps/authoring/tools/README.md",
+  "tools/README.md",
 ];
 const DOC_DIR = "docs";
 const DOC_EXEMPT = /^research-.*\.md$/;
@@ -195,14 +197,14 @@ const isGenerated = (path: string) =>
  * directory appearing in someone's working copy must not silently start
  * validating references to somebody else's source.
  *
- * Four, since the repo went to a `packages/` + `apps/` layout — which also
- * means a manifest's own package-relative claim (`pyproject.toml` saying
- * `src/voqalize_avatar`) no longer starts with a top-level directory and is no
- * longer checked. The claims that matter still are: anything a doc writes
- * repo-relative, and every `docs/…` URL in `[project.urls]` — which is the
- * exact rot this check was written for.
+ * Five, since the repo went to a `packages/` + `apps/` layout and the headless
+ * runners came up to a top-level `tools/` — which also means a manifest's own
+ * package-relative claim (`pyproject.toml` saying `src/voqalize_avatar`) no
+ * longer starts with a top-level directory and is no longer checked. The claims
+ * that matter still are: anything a doc writes repo-relative, and every `docs/…`
+ * URL in `[project.urls]` — which is the exact rot this check was written for.
  */
-const OUR_DIRS = ["packages", "apps", "docs", ".github"];
+const OUR_DIRS = ["packages", "apps", "docs", ".github", "tools"];
 
 /**
  * Top-level directories this repo USED to have. Anchoring on `OUR_DIRS` alone
@@ -216,7 +218,7 @@ const OUR_DIRS = ["packages", "apps", "docs", ".github"];
  * passes. Only a repo-relative claim on a tree that is gone fails.
  */
 const RETIRED_DIRS = [
-  "py", "client", "src", "test", "tools", "server", "studio", "authoring", "experiments",
+  "py", "client", "src", "test", "server", "studio", "authoring", "experiments",
 ];
 
 /**
@@ -240,14 +242,14 @@ const NARRATES_THE_OLD_TREE = new Set([
  *
  * `voqalize/avatar` is public and `voqalize/avatar-private` is where we work, and
  * from 0.4.0 they are a fork rather than two views of one history: the Blender
- * pipeline, Studio and the workshop are private, the Python package and the demo
- * server are public, and this file ships to both. So a doc naming
- * `apps/authoring/rig-check.html` is making a true claim on one line and an
+ * pipeline, Studio and the headless tooling are private, the Python package and
+ * the demo server are public, and this file ships to both. So a doc naming
+ * `apps/studio/instruments/nav.ts` is making a true claim on one line and an
  * unresolvable one on the other, with nothing wrong in either.
  *
  * The rule is *absence*, not exemption: a reference under one of these prefixes
  * is skipped only when the tree is not there. Where the tree exists the claim is
- * checked exactly as before, so private keeps every workshop path honest and
+ * checked exactly as before, so private keeps every Studio path honest and
  * public keeps every Python path honest, from the same list.
  *
  * This is deliberately narrow. Five prefixes, each one a tree that a documented
@@ -258,8 +260,8 @@ const ELSEWHERE = [
   "packages/avatar-3d",
   "packages/avatar-py",
   "apps/studio",
-  "apps/authoring",
   "apps/server",
+  "tools",
 ];
 
 /** True when the reference is into a tree this checkout does not have at all. */

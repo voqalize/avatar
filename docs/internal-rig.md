@@ -133,9 +133,12 @@ An author reviews rest and channel extremes, meaningful extreme composites,
 every viseme at full-frame and close scale, curated transitions (`X→A→X`,
 `A→D→A`, `D→F→B`, `B→G→H`, and rapid closures), the same raw frame across
 registered rigs, and numeric conformance (finite values, mounted renderer,
-clean teardown). Four pages implement this review — the contact sheet, the torso
-check, the clip strip and the rig check. They are the maintainers' workshop rather
-than part of the package; what each one shows, and how to build the equivalent,
-is [authoring-a-face.md § Checklist for a new avatar](authoring-a-face.md). The
-review IDE does not reach a pose channel at all: it drives the published contract
-only.
+clean teardown). Studio's instruments implement this review — the pose sheet, the
+filmstrip, the head envelope — and each is also a URL a headless runner reads, so
+the sheet is an artifact rather than a screenshot. They are the maintainers'
+surface rather than part of the package; what each one shows is
+[apps/studio/README.md § The instruments](../apps/studio/README.md), and what to
+check on a new avatar is [authoring-a-face.md § Checklist for a new
+avatar](authoring-a-face.md). Studio's *app* does not reach a pose channel at
+all: it drives the published contract only, and the instruments are separate
+build entries so that stays provable.

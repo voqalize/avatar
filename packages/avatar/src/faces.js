@@ -2,7 +2,7 @@
  * The faces we ship, as a table — for tooling that wants every one of them.
  *
  * **Importing this costs all three drawings** (~2k lines of path data). That is
- * the right trade for `rig-check`, the contact sheets, the sweep and Studio,
+ * the right trade for the pose sheet, the sweep and Studio,
  * which exist to compare faces against each other. It is the wrong trade for an
  * application, which renders one: those import a single face module and hand
  * the record to `createAvatar` directly.

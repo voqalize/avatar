@@ -170,7 +170,7 @@ Communicating "what is happening with the assistant" ranks equal with
 likability. The tests:
 
 - **Distinctness at tile size.** Every state and every emotion must be
-  tellable from every other on the 130 px contact-sheet row. The standing
+  tellable from every other on the 130 px pose-sheet row. The standing
   counterexample: the compound state that read as *asleep* instead of *busy* —
   a state that misreads is worse than no state, because the user acts on it.
 - **Motion is the state channel.** A tile has no room for icons or spinners;

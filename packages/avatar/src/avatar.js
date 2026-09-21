@@ -91,8 +91,8 @@ export const STATES = {
   // is kept to a fifth of looks because on a face this real it reads as
   // downcast. The pose takes back `thoughtful`'s lid drop: a thinking face is
   // alert, and the two together measured past the 0.15 that reads drowsy.
-  // The handoff to SPEAKING is in setState: a reply that starts mid-look
-  // finishes the look instead of snapping back.
+  // There is no handoff to SPEAKING any more: a reply that starts mid-look
+  // brings the eyes back with its first word (see enterGaze, 2026-09-21).
   THINKING:           { gaze: 'AWAY_SIDE', emotion: 'thoughtful', engagement: false,
                         // Fixational jumps rare and small: a thinker's eyes rest
                         // where they land. At the default gap the look jittered
@@ -138,11 +138,11 @@ export const STATES = {
                         // eyes drawn inside a head tipped back aimed every look
                         // meant to be level at the ceiling.
                         pose: { lidL: -0.10, lidR: -0.10 } },
-  // Eyes on the user, with the speaker's own looks away (AVERSION.SPEAK):
-  // a planning look at the start of most turns, a short one every ~5 s at a
-  // phrase boundary, and none as the turn ends. A speaker who never looks
-  // away is staring the listener down.
-  SPEAKING:           { gaze: 'USER',     emotion: 'neutral',    aversion: 'SPEAK',
+  // Eyes on the user for the whole turn, and no `aversion`: gaze.js has why a
+  // speaker's measured looks away are not this rig's to render. What moves
+  // while it talks is the head it holds per phrase and the trunk under it
+  // (prosody.js), never the eyes leaving the user.
+  SPEAKING:           { gaze: 'USER',     emotion: 'neutral',
                         idle: { sway: 0.55 }, engagement: false },
   REVIEWING_SCREEN:   { gaze: 'SCREEN_CENTER', emotion: 'thoughtful', engagement: false,
                         idle: { sway: 0.8, blinkGap: [4.0, 6.5] },
@@ -450,7 +450,7 @@ export function createAvatar(opts = {}) {
   // coordinates or the hand layer's private geometry.
   const rig = opts.rig ? opts.rig(mount, opts.rigOptions) : createSvgRig(face, hand);
 
-  gaze.onLargeShift = (forced) => idle.blink(false, true, forced);
+  gaze.onLargeShift = (forced) => idle.blink(true, forced);
 
   const listeners = {
     state: [], speakEnd: [], clipEnd: [], performEnd: [], gestureEnd: [],
@@ -617,7 +617,6 @@ export function createAvatar(opts = {}) {
   let wanderAt = 0;
   let driftAt = 0;
   let trunkYaw = 0;
-  let turnStartPending = false;
   let glanceAt = 0;
   let glanceUntil = 0;
   let lastBack = null;
@@ -627,8 +626,6 @@ export function createAvatar(opts = {}) {
   const dart = { x: 0, y: 0 };
   // THINKING -> SPEAKING mid-look: when the eyes go back to the user, and
   // when that handoff happened (it stands in for the turn-start look).
-  let returnAt = 0;
-  let carriedAt = -Infinity;
   // The state whose gaze is showing, and when the current state takes it
   // over if that is still pending (GAP_SETTLE). Usually the same state.
   let gazeState = 'IDLE';
@@ -754,11 +751,7 @@ export function createAvatar(opts = {}) {
     // spot every time. Either leg's gaze-evoked blink is the shift's odds
     // unless the state says (`blinkTo`, `blinkBack`), because which leg blinks
     // is part of what the glance means.
-    if (returnAt && elapsed > returnAt) {
-      returnAt = 0;
-      setGaze(gst.gaze);
-    }
-    if (gst.glance && !returnAt) {
+    if (gst.glance) {
       const gl = gst.glance;
       if (glanceUntil && elapsed > glanceUntil) {
         glanceUntil = 0;
@@ -807,25 +800,7 @@ export function createAvatar(opts = {}) {
     // mixer's one-frame veto — anything that means "the user is checking
     // whether I am with them" sets it (see api.attend).
     gaze.setAversion(gst.aversion ? AVERSION[gst.aversion] : null);
-    // A speaking turn ends under mutual gaze: no look in the last 2.4 s of the
-    // cue track as far as it has arrived, nor once it has run out (§4.2). The
-    // mid-turn looks wait for a silent cue, which is a phrase boundary. Both
-    // read last frame's sample, a frame late and harmlessly so.
-    let floorReturn = false;
-    gaze.gate = true;
-    if (gst.aversion === 'SPEAK') {
-      const cues = speech.cues;
-      floorReturn = !speech.playing || !cues.length
-        || cues[cues.length - 1].t - speech.now < FLOOR_RETURN_MS;
-      const cue = cues[speech.index];
-      gaze.gate = !!cue && cue.v === SILENT;
-    }
-    gaze.hold = attendUntil > elapsed || clip.playing || floorReturn;
-    if (turnStartPending) {
-      turnStartPending = false;
-      // A reply that began mid-think has had its planning look already.
-      if (elapsed - carriedAt > 1.5) gaze.startTurn();
-    }
+    gaze.hold = attendUntil > elapsed || clip.playing;
 
     engagement.enabled = !!st.engagement && !clip.playing;
     engagement.update(dt);
@@ -1041,11 +1016,6 @@ export function createAvatar(opts = {}) {
   // sliding.
   const TRUNK_FOLLOW = opts.trunkFollow ?? 0.45;
 
-  // Speakers are back on the listener's eyes this long before they stop
-  // (Andrist, docs/research-biomechanics.md §4.2): the floor is handed over
-  // under mutual gaze, and a look away there declines it.
-  const FLOOR_RETURN_MS = 2400;
-
   // The channels speech owns outright — exactly the params.js mouth group
   // (mouth corners stay free: a clip may smile over a sentence).
   const MOUTH_LOCK = new Set(GROUPS.mouth);
@@ -1058,13 +1028,6 @@ export function createAvatar(opts = {}) {
  *  Two thirds of the lean: the shoulders come up with it, they do not lead it. */
 const ENGAGE_SHOULDER = 0.10;
 const SPEAK_SMILE_RETAIN = 0.35;
-
-  // How long a reply that starts mid-think keeps the look before it comes
-  // back. Speakers look away to find the words and back to deliver them
-  // (§4.2); a reply that snapped to the user on its first syllable and then,
-  // three times in four, left again for the turn-start look did both halves
-  // twice.
-  const THINK_CARRY = [0.25, 0.6];
 
   // Between the user's turn and the reply the server's claim can change
   // several times a second — THINKING, a tool's WORKING, THINKING again, a
@@ -1152,25 +1115,40 @@ const SPEAK_SMILE_RETAIN = 0.35;
     const deferrable = !o.gaze && !o.keepGaze && GAP_STATES.has(gazeState) && GAP_STATES.has(name);
     if (deferrable && changed) settleAt = name === gazeState ? 0 : elapsed + GAP_SETTLE;
     else if (!(deferrable && settleAt)) { settleAt = 0; enterGaze(name, o, changed); }
+    // The floor has come back to the user: the face receives it (prosody.js
+    // `listen`). It is a state change rather than a VAD event on purpose —
+    // what is being welcomed is the turn, and the server is the one that knows
+    // a turn has changed hands.
+    if (changed && name === 'LISTENING') prosody.listen();
     if (changed) emit('state', name);
     return api;
   }
 
+  // Whether the eyes were last aimed by somebody who meant it — the public
+  // `setGaze`, or a performance's `gaze` verb — rather than by the state's own
+  // schedule. It is the one thing that outranks a state's `gaze`, and it is
+  // why `speak()` can take the eyes back without overriding a caller.
+  let gazeExplicit = false;
+
   /** The state `name` takes the gaze: its target and its schedules. */
   function enterGaze(name, o, blink) {
-    const prev = gazeState;
     gazeState = name;
     const st = states[name];
     const gl = st.glance;
-    // A reply that starts while THINKING is looking away finishes that look
-    // first, and the look stands in for the turn-start one.
-    const carry = prev === 'THINKING' && name === 'SPEAKING'
-      && !o.gaze && !o.keepGaze && gazeName !== st.gaze && !glanceUntil;
-    returnAt = carry ? elapsed + rand(THINK_CARRY) : 0;
-    if (carry) carriedAt = elapsed;
+    // **A reply brings the eyes back with its first word, and that is the
+    // whole of it (2026-09-21).** A THINKING look that was still running used
+    // to be carried a quarter to six tenths of a second into the turn, on the
+    // reasoning that a speaker looks away to find the words and back to
+    // deliver them — but what the owner sees at the top of a turn is the
+    // avatar talking while looking somewhere else, and then a dart back. The
+    // carry's own justification was the turn-start aversion it would otherwise
+    // have doubled with, and that aversion is deleted (gaze.js), so nothing is
+    // left for it to avoid. `setGaze` glides; the return is a saccade, not a
+    // cut, and it now lands on the first word instead of after it.
+    //
     // A state with an `opening` enters as though its check-in on the user is
     // already under way, and leaves it when that runs out.
-    if (!o.keepGaze && !carry) setGaze(o.gaze || (gl && gl.opening ? gl.to : st.gaze));
+    if (!o.keepGaze) { setGaze(o.gaze || (gl && gl.opening ? gl.to : st.gaze)); gazeExplicit = false; }
     // Arm every scheduler fresh, so entering a state never fires a timestamp
     // left over from the last one — the wander in particular, which used to
     // pick a new target on the first frame and override the state's own gaze.
@@ -1181,7 +1159,7 @@ const SPEAK_SMILE_RETAIN = 0.35;
     readCol = readCols = readRow = readRows = 0;
     dartAt = dartBrowUntil = 0;
     dart.x = dart.y = 0;
-    if (blink) idle.blink(false, true);
+    if (blink) idle.blink(true);
   }
 
   function setEmotion(name, intensity = 1) { emotion = name; emotionAmt = intensity; return api; }
@@ -1217,8 +1195,18 @@ const SPEAK_SMILE_RETAIN = 0.35;
         : () => performance.now() - speakStart;
     speech.start(o.cues || [], speakClock);
     prosody.reset(newTurn);
-    if (newTurn) turnStartPending = true;
-    if (stateName !== 'SPEAKING') setState('SPEAKING', { keepGaze: true });
+    // **The eyes come back to the user when the audio starts, and that is the
+    // point of inferring the state at all (2026-09-21).** This used to keep
+    // whatever gaze was already set, which meant a reply arriving while
+    // THINKING was looking away spent its *whole turn* aimed off the user —
+    // 11.9 deg off it in `presence.test.ts`, never returning, because nothing
+    // in SPEAKING retargets. The owner's report was of the eyes being
+    // elsewhere as the bot starts talking, and this is the half of it that
+    // survives in a real call: the audit drives the state directly and so
+    // never took this path. `keepGaze` stays for the one caller that means
+    // it — a performance that aimed the eyes with its own `gaze` verb keeps
+    // them, since that is an instruction and not a leftover schedule.
+    if (stateName !== 'SPEAKING') setState('SPEAKING', { keepGaze: gazeExplicit });
     if (o.audio && o.audio.paused) o.audio.play().catch(() => {});
     return api;
   }
@@ -1376,7 +1364,7 @@ const SPEAK_SMILE_RETAIN = 0.35;
       // composed turn in the demo already behaves.
       if (a.do === 'state') setState(a.name, { keepGaze: a.keepGaze !== false });
       else if (a.do === 'emotion') setEmotion(a.name, a.i ?? 1);
-      else if (a.do === 'gaze') setGaze(a.name);
+      else if (a.do === 'gaze') { setGaze(a.name); gazeExplicit = true; }
       else if (a.do === 'action') action(a.id);
     } catch (e) {
       console.warn(`perform: ${a.do} at ${a.t}ms skipped — ${e.message}`);
@@ -1417,7 +1405,7 @@ const SPEAK_SMILE_RETAIN = 0.35;
   }
 
   const api = {
-    setState, setEmotion, setGaze: (name, custom) => setGaze(name, custom), speak, pushCues, stopSpeaking, attend,
+    setState, setEmotion, setGaze: (name, custom) => { gazeExplicit = true; return setGaze(name, custom); }, speak, pushCues, stopSpeaking, attend,
     action, perform,
     /** Which hand the character gestures with: +1 the viewer's right (its own
      *  left), -1 the other. Both are anatomically real — the thumb splays away
@@ -1433,7 +1421,7 @@ const SPEAK_SMILE_RETAIN = 0.35;
     /** Idle body-motion gain: 1 is the liveness layer as authored, 0 freezes it. */
     setMotionGain: (g) => { idle.gain = g; return api; },
     get motionGain() { return idle.gain; },
-    blink: (dbl) => { idle.blink(dbl); return api; },
+    blink: () => { idle.blink(); return api; },
     /** Advance one frame by hand. Only meaningful under `{manual: true}`;
      *  fixed-dt stepping is what makes a motion render reproducible. */
     step: (dt) => { elapsed += dt; step(dt, dt * 1000); return api; },
@@ -1474,12 +1462,29 @@ const SPEAK_SMILE_RETAIN = 0.35;
 // this channel's neutral value" before it can map the channel onto whatever it
 // controls — a morph target's influence is `(pose - rest) / (1 - rest)`, and a
 // rig that hard-codes those rests has quietly forked `params.js`.
-export { REST, CHANNELS, RANGE } from './params.js';
+export { REST, CHANNELS, RANGE, TAU, clamp, approach, makeParams } from './params.js';
+// The smoothing law itself, for a tool that steps the rig by hand. A
+// filmstrip that reimplemented `approach` would be measuring its own copy of
+// the thing under test — and the smoothing between keyframes is what the face
+// actually does (docs/internal-mixer.md § Smoothing).
+// A pose with no mixer above it: `makeParams(overrides)` fills the rests,
+// `avatarFrame` wraps it, `createSvgRig(face).apply` draws it. That is the whole
+// path an instrument needs to hold a face at one named extreme — no clock, no
+// client, no animation — and the reason it is exported is that a pose sheet
+// that cannot reach it forks the channel rests instead.
+export { avatarFrame, createSvgRig } from './rig.js';
 export { ACTION_IDS, ACTIONS, attachAudio } from './interjections.js';
+// The full authoring catalogue and the player that steps it. Not a server
+// vocabulary — `ACTIONS` is that, and most of these clips are reachable only
+// from inside the mixer. They are exported for the filmstrip instrument,
+// which lays one clip out as frames and therefore has to drive a real
+// `ClipPlayer` rather than re-sample its keys.
+export { INTERNAL_CLIPS } from './interjections.js';
+export { ClipPlayer } from './clips.js';
 export { GAZE_NAMES, GAZE_TARGETS } from './gaze.js';
 export { normalizeActions } from './perform.js';
 export { checkHandFraming } from './hand.js';
-export { EMOTION_NAMES } from './emotions.js';
+export { EMOTION_NAMES, emotionPose } from './emotions.js';
 // The mouth clock travels with the rest of it. Someone has to turn a cue array
 // plus a clock into "which letter is on screen right now", every renderer needs
 // exactly that, and none of them should write it twice — so it is a plain class

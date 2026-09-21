@@ -192,13 +192,19 @@ describe("the mixer's `states` option", () => {
 });
 
 describe("the acknowledgement's smile", () => {
-  /** mouthCornerL over the no-action run, per frame, after `play` at 1 s in. */
+  // Entering LISTENING is itself a warmth episode now (prosody `listen`), and
+  // it is the same height as this one — the two are maxed, not added, so an
+  // acknowledgement *inside* it is a nod with the smile already on. The
+  // acknowledgement's own smile is what happens after that has faded, which is
+  // why the pre-roll below outlasts it.
+  const PRE_ROLL = 7;
+  /** mouthCornerL over the no-action run, per frame, after `play` at PRE_ROLL. */
   const corner = (play: (a: any) => void, sec = 2.5) => {
     const one = (p: ((a: any) => void) | null) => {
       vi.spyOn(Math, "random").mockImplementation(seeded());
       const avatar = mixer();
       avatar.setState("LISTENING");
-      for (let i = 0; i < 60; i++) avatar.step(DT);
+      for (let i = 0; i < Math.round(PRE_ROLL / DT); i++) avatar.step(DT);
       if (p) p(avatar);
       const out: number[] = [];
       for (let i = 0; i < Math.round(sec / DT); i++) { avatar.step(DT); out.push(avatar.params.mouthCornerL); }

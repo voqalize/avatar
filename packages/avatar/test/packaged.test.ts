@@ -25,6 +25,17 @@ const manifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as
   peerDependenciesMeta: Record<string, { optional?: boolean }>;
 };
 
+/**
+ * The 2.5-D characters, read off the built assets rather than listed here — a
+ * list written down in a test is a list that goes quietly stale, and the point
+ * of these checks is to catch a character the manifest forgot, which a hand-kept
+ * roll call cannot do for the one just added.
+ */
+const CHARACTERS = readdirSync(join(ROOT, "assets"))
+  .filter((f) => f.endsWith(".glb"))
+  .map((f) => f.replace(/\.glb$/, ""))
+  .sort();
+
 /** Every `(subpath, target)` pair in the export map, conditions flattened. */
 const targets = Object.entries(manifest.exports).flatMap(([sub, t]) =>
   (typeof t === "string" ? [t] : Object.values(t)).map((rel) => ({ sub, rel })));
@@ -34,11 +45,11 @@ describe("the export map", () => {
     expect(existsSync(join(ROOT, rel))).toBe(true);
   });
 
-  // The three 2.5-D characters and the six Canvas2D identities are one shape on
+  // The 2.5-D characters and the Canvas2D identities are one shape on
   // purpose: a consumer reads `./avatars/<name>` and does not learn which
   // renderer is behind it until they read the install line. A missing row here
   // is the single way a shipped character becomes unreachable.
-  it.each(["tara", "tushar", "tanya"])("publishes ./avatars/%s", (name) => {
+  it.each(CHARACTERS)("publishes ./avatars/%s", (name) => {
     expect(Object.keys(manifest.exports)).toContain(`./avatars/${name}`);
   });
 
@@ -55,7 +66,7 @@ describe("what the tarball carries", () => {
   // These are fetched at runtime by URL, not imported, so no bundler and no
   // compiler can report them missing. A `files` list that forgets them installs
   // a character whose GLB 404s in the consumer's app and nowhere else.
-  it.each(["tara", "tushar", "tanya"])("carries %s's compiled asset", (name) => {
+  it.each(CHARACTERS)("carries %s's compiled asset", (name) => {
     const asset = `assets/${name}.glb`;
     expect(existsSync(join(ROOT, asset))).toBe(true);
     expect(manifest.files.some((f) => asset === f || asset.startsWith(`${f}/`))).toBe(true);
@@ -80,14 +91,14 @@ describe("what the tarball carries", () => {
 
   it("holds the characters and its own licence note, and nothing else", () => {
     expect(readdirSync(join(ROOT, "assets")).sort())
-      .toEqual(["README.md", "tanya.glb", "tara.glb", "tushar.glb"]);
+      .toEqual(["README.md", "tanya.glb", "tara.glb", "tess.glb", "tushar.glb"]);
   });
 });
 
 describe("the three-dimensional engine", () => {
   // Optional, because the six drawings and the six Canvas2D identities are the
   // reason most consumers are here and none of them should download a 3-D
-  // engine. Declared, because the three characters cannot run without one and a
+  // engine. Declared, because the 2.5-D characters cannot run without one and a
   // silent `undefined` at import time is a worse failure than a resolution
   // error.
   it("is an optional peer", () => {
@@ -145,7 +156,7 @@ describe("one character costs one character", () => {
     return [...seen];
   };
 
-  it.each(["tara", "tushar", "tanya"])("%s's module graph names only her own GLB", (name) => {
+  it.each(CHARACTERS)("%s's module graph names only her own GLB", (name) => {
     // Only a real `new URL("…/assets/<name>.glb", …)` literal counts — that is
     // the one shape a bundler follows. Prose naming a file does not emit it, and
     // two comments in the rig discuss `tara.glb` for reasons of their own.
@@ -159,8 +170,8 @@ describe("one character costs one character", () => {
   // The table itself is not a defect — it is what a rig instrument switching
   // between characters wants. It may only be reachable from `/internal/three`,
   // which is a separate entry point that ships no call page.
-  it("keeps the all-three table out of the character modules", () => {
-    for (const name of ["tara", "tushar", "tanya"]) {
+  it("keeps the every-character table out of the character modules", () => {
+    for (const name of CHARACTERS) {
       expect(closure(`client/three/${name}.ts`), name).not.toContain("client/three/assets.ts");
     }
     expect(closure("client/three/internal.ts")).toContain("client/three/assets.ts");

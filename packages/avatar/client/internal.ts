@@ -47,6 +47,24 @@ export {
   LEAD_MS,
   // The body's share of a held tilt, for a page driving a rig by hand.
   SHOULDER_TILT,
+  // Stepping a gesture by hand: the catalogue, the player, and the smoothing
+  // law the mixer puts between a clip's keyframes and the face. A filmstrip
+  // instrument needs all three, and the one thing it must not do is fork the
+  // smoothing — that is the part a keyframe is authored against
+  // (docs/internal-mixer.md § Smoothing).
+  INTERNAL_CLIPS,
+  ClipPlayer,
+  TAU,
+  clamp,
+  approach,
+  // Posing a face directly, with no mixer, no clock and no client above it —
+  // what a pose sheet or a rig-conformance page does. `makeParams` fills the
+  // rests around a handful of overrides, `emotionPose` names a familiar set of
+  // them, `avatarFrame` wraps the result and `createSvgRig(face)` draws it.
+  makeParams,
+  emotionPose,
+  avatarFrame,
+  createSvgRig,
   shapeFor,
   normalizeCues,
   textToCues,
@@ -55,6 +73,8 @@ export {
 } from "../src/avatar.js";
 
 export type {
+  Clip,
+  ClipSample,
   AvatarApi,
   AvatarStateName,
   AvatarActionId,

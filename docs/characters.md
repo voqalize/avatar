@@ -1,7 +1,7 @@
 # The 2.5-D characters
 
-Three characters ship as compiled binaries: **`tara`**, **`tushar`** and
-**`tanya`**. Each is a complete `createAvatar` module, imported the same way as
+The characters ship as compiled binaries: **`tara`**, **`tushar`**, **`tanya`**
+and **`tess`**. Each is a complete `createAvatar` module, imported the same way as
 any other avatar in this package, and driven by the same wire — the same states,
 the same actions, the same cue-synced mouth
 ([contract-wire.md](contract-wire.md)).
@@ -10,6 +10,7 @@ the same actions, the same cue-synced mouth
 import { createAvatar } from '@voqalize/avatar/avatars/tara';
 // or: @voqalize/avatar/avatars/tushar
 //     @voqalize/avatar/avatars/tanya
+//     @voqalize/avatar/avatars/tess
 
 const avatar = createAvatar({ mount: el, client: pipecatClient });
 ```
@@ -27,7 +28,7 @@ have to *move* built as geometry rather than painted: the eyes, the teeth and
 the lip line. Hence 2.5-D rather than 3-D — there is no full head behind the
 face, and the camera does not orbit.
 
-None of the three depicts a real person. Each begins as an image from a
+None of them depicts a real person. Each begins as an image from a
 generative model and is licensed as artwork, which is what makes it shippable at
 all — see **Licence** below.
 
@@ -38,7 +39,7 @@ npm install three        # >=0.180 <0.187
 ```
 
 `three` is declared as an *optional* peer dependency, and the import that needs
-it lives behind these three entry points. An SVG or Canvas consumer never
+it lives behind these entry points. An SVG or Canvas consumer never
 downloads it, and installing this package without it is not a warning to
 suppress — it is the expected case.
 
@@ -121,7 +122,7 @@ declaration of what a mounted character answers to is its `supports` export
 ## What you cannot do
 
 There is no pose API, no channel access, no per-character tuning beyond the
-three gains every avatar takes (`mouthGain`, `gestureGain`, `motionGain`), and no
+gains every avatar takes (`mouthGain`, `gestureGain`, `motionGain`), and no
 renderer interface. The rig, its calibration and the pipeline that compiles a
 character are implementation details, and the pipeline is not published. A
 character is a finished binary here, the same way an SVG face is a finished
@@ -132,7 +133,7 @@ not an omission ([README.md](../README.md)).
 
 ## Licence
 
-**The three `.glb` files are artwork, licensed
+**The `.glb` files are artwork, licensed
 [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/)** — separately from the
 MIT code around them, and the package manifest declares the pair as
 `MIT AND CC-BY-4.0`. Using one in your product is fine, including commercially;

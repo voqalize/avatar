@@ -292,7 +292,7 @@ and the argument is worth keeping visible rather than quietly replacing.*
 
 The widget used to live at `src/` in the repository root, beside a `client/`
 that compiled to `client/dist/`, and this page defended the short path: moving
-it would break every rig page and every headless tool for no gain a consumer
+it would break every review page and every headless tool for no gain a consumer
 could see, and the widget is the repo's primary artifact, so it had earned the
 top of the tree.
 
@@ -311,16 +311,15 @@ consumer could get wrong on their own.
 **0.3.0 merged the two trees into one package, and the relative path became an
 ordinary sibling import.** `packages/avatar/dist/*.js` imports `../src/*.js`,
 which is within the package in every context that has ever mattered — a static
-file server, vite, an npm install — with no arrangement made for it anywhere.
-The server mounts `packages/avatar` once at `/pkg` and the browser resolves the
-rest itself. That is the whole of the gain, and it is worth more than a short
-path.
+file server, vite, an npm install — with no arrangement made for it anywhere. A
+surface serves `packages/avatar` once and the browser resolves the rest itself.
+That is the whole of the gain, and it is worth more than a short path.
 
 What is left is the canonical shape: published packages under `packages/`,
-things that are never published under `apps/`. **From 0.4.0 the two lines of this
-repository carry different sets of those,** so the tree below is what they share
-— the published packages and the contracts — and the trees that belong to one line
-are listed after it.
+surfaces that are never published under `apps/`, and the tooling that drives them
+at `tools/`. **From 0.4.0 the two lines of this repository carry different sets of
+those,** so the tree below is what they share — the published packages and the
+contracts — and the trees that belong to one line are listed after it.
 
 ```
 packages/
@@ -363,20 +362,22 @@ time: does it contain the pipeline that makes a character?
   nothing and is not importable; its only output is one GLB per character written
   into `packages/avatar/assets/`, which is the single path across which it feeds
   anything. That tree is the reason there are two lines at all.
-- **The private line adds `apps/studio/` and `apps/authoring/`** — is the
-  published interface enough, and does the drawing read? The IDE pointed at that
-  same demo server, and the workshop of rig pages, clip fixtures and headless
-  tools.
+- **The private line adds `apps/studio/` and `tools/`** — is the published
+  interface enough, and does the drawing read? Studio is one app with an
+  instrument per question, importing `@voqalize/avatar` as a consumer would, and
+  every instrument is also a URL that renders headless; `tools/` is the runners
+  that read those URLs, plus the release export.
 
-Each of those `apps/` answers exactly one question, and there is no fourth,
-which is load-bearing rather than tidy: `experiments/` was one, and a tree defined
-as "the things that are not any of those three" collects work nobody can say what
-it answers.
+Each of those `apps/` answers exactly one question, and there is no third, which
+is load-bearing rather than tidy: `experiments/` was one, and a tree defined as
+"the things that are not any of those two" collects work nobody can say what it
+answers. The workshop that used to be the third was exactly that — it grew a
+second answer to "show me the avatar", and its pages are instruments now.
 
 `apps/studio/` is the second compiled tree and the second exception to "no build
 step" (`packages/avatar/client/` is the first). Nothing in
-`packages/avatar/src/` may depend on either — what you screenshot in a rig page
-is what ships.
+`packages/avatar/src/` may depend on either — what you screenshot in an
+instrument is what ships.
 
 `packages/avatar-py/scripts/measure_durations.py` speaks the duration corpus through vql-speech
 and `packages/avatar-py/scripts/fit_durations.py` fits the two constants in `durations.py` from

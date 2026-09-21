@@ -195,7 +195,7 @@ export interface AvatarApi {
   readonly gestureGain: Gain;
   setMotionGain(g: Gain): AvatarApi;
   readonly motionGain: Gain;
-  blink(double?: boolean): AvatarApi;
+  blink(): AvatarApi;
   /** Advance one frame by hand — only meaningful under `{ manual: true }`. */
   step(dt: number): AvatarApi;
   /** Pin channels to fixed values, above the whole mix. `null` releases. */
@@ -316,7 +316,12 @@ export function createAvatar(opts: CreateAvatarOptions): AvatarApi;
 export const STATES: Readonly<Record<AvatarStateName, Readonly<Record<string, unknown>>>>;
 export const STATE_NAMES: readonly AvatarStateName[];
 export const GAZE_NAMES: readonly AvatarGazeName[];
-export const GAZE_TARGETS: Readonly<Record<AvatarGazeName, { x: number; y: number }>>;
+/** Where each named direction puts the eyes and the head: pupil offset
+ *  (`px`/`py`), the head's share of it (`hx`/`hy`) and any roll. Pose units, and
+ *  the head deliberately carries less than the whole (`src/gaze.js`). */
+export const GAZE_TARGETS: Readonly<Record<AvatarGazeName, {
+  px: number; py: number; hx: number; hy: number; roll?: number;
+}>>;
 export const EMOTION_NAMES: readonly AvatarEmotionName[];
 export const ACTIONS: Readonly<Record<AvatarActionId, unknown>>;
 export const ACTION_IDS: readonly AvatarActionId[];
@@ -334,12 +339,24 @@ export const REST: Readonly<Record<PoseChannel, number>>;
 export const CHANNELS: readonly PoseChannel[];
 /** Post-mix clamp per channel, `[min, max]`. */
 export const RANGE: Readonly<Record<PoseChannel, readonly [number, number]>>;
+/** Each channel's smoothing time constant, in seconds. */
+export const TAU: Readonly<Record<PoseChannel, number>>;
+export function clamp(v: number, lo?: number, hi?: number): number;
+/** One frame of exponential smoothing: where `cur` lands `dt` seconds into a
+ *  chase of `target` with time constant `tau`. */
+export function approach(cur: number, target: number, tau: number, dt: number): number;
 export const VISEME_LETTERS: readonly VisemeLetter[];
 export const VISEME_SHAPES: Readonly<Record<VisemeLetter, PoseOverrides>>;
 /** Cues lead the audio by this many ms — perceptual tolerance is asymmetric. */
 export const LEAD_MS: number;
 /** The shoulder line's share of a held `headRoll`, per pose unit. */
 export const SHOULDER_TILT: number;
+/** A full pose from a handful of overrides: every unnamed channel takes its
+ *  `REST` value. The only correct way to build a frame by hand. */
+export function makeParams(overrides?: PoseOverrides): Record<PoseChannel, number>;
+/** One named emotion's channel deltas at `intensity` (0..1). */
+export function emotionPose(name: AvatarEmotionName, intensity?: number): PoseOverrides;
+export { avatarFrame, createSvgRig } from "./rig.js";
 export const ARPABET_TO_VISEME: Readonly<Record<string, VisemeLetter>>;
 export const AZURE_VISEME_TO_LETTER: Readonly<Record<number, VisemeLetter>>;
 
@@ -363,6 +380,52 @@ export class VisemeTrack {
   sample(): { letter: VisemeLetter; intensity: number } | null;
   onEnd: (() => void) | null;
   readonly playing: boolean;
+}
+
+/**
+ * One authored gesture: a short multi-channel timeline of additive deltas,
+ * optionally with its own mouth track, gaze override and blink beats.
+ */
+export interface Clip {
+  readonly id: string;
+  readonly label: string;
+  readonly text: string;
+  /** Milliseconds, end to end. */
+  readonly duration: number;
+  /** Per channel, `[u, delta]` keys against normalized clip time. */
+  readonly keys: Readonly<Record<string, ReadonlyArray<readonly [number, number]>>>;
+  readonly mouthCues?: readonly Cue[];
+  readonly gaze?: AvatarGazeName;
+  readonly blinkAt?: readonly number[];
+}
+
+/**
+ * Every clip this renderer has, keyed by id — the authoring library, not the
+ * wire's vocabulary. Most are reachable only from inside the mixer: `ACTIONS`
+ * is what a server may name.
+ */
+export const INTERNAL_CLIPS: Readonly<Record<string, Clip>>;
+
+/** What one tick of a clip contributes: additive channel deltas, the ramp
+ *  weight they already carry, and the mouth when the clip owns it. */
+export interface ClipSample {
+  delta: Record<string, number> | null;
+  weight: number;
+  mouth: { letter: VisemeLetter; intensity: number } | null;
+  ownsMouth: boolean;
+}
+
+/** Plays one clip forward in ticks you supply. Fixed-`dt` stepping is what
+ *  makes a rendered gesture reproducible. */
+export class ClipPlayer {
+  constructor(hooks?: { onGaze?: (name: string | null) => void; onBlink?: () => void });
+  play(clip: Clip, audio?: HTMLMediaElement | null, opts?: { queue?: boolean }): void;
+  /** Advance by `dtMs` and report this frame's contribution. */
+  update(dtMs: number): ClipSample;
+  stop(immediate?: boolean): void;
+  onEnd: ((clip: Clip | null) => void) | null;
+  readonly playing: boolean;
+  readonly id: string | null;
 }
 
 export function attachAudio(id: string, url: string): void;

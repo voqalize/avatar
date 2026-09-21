@@ -83,10 +83,36 @@ const BLINK_FRESH_MS = 150;
 // wobble about the same one. Yaw is the narrowest in degrees because it is the
 // axis a projected photograph survives least; pitch leans slightly chin-up,
 // which is where a person talking to someone holds their head.
+// **Every axis went up on 2026-09-21, and it is paying for something
+// specific.** The speaking face used to get much of its movement from a gaze
+// aversion — a look away that took the neck with it — and that is gone
+// (gaze.js): the eyes now hold the user for the whole turn. Taking it out and
+// changing nothing else left the speaking head measurably *stiller* than
+// before, which is the defect the aversion had been introduced to fix. So the
+// movement comes back as the pose the head holds per phrase, which is what a
+// speaker's head actually does and is communicative rather than evasive.
+//
+// Sized against `presence.test.ts`, which renders a turn through the real
+// mixer and prints the degrees. On tara the widest yaw here is ~4.9° and the
+// widest chin-up ~4.4°, inside the 6° and 5° she was measured at for a *held*
+// pose; what the same table showed before the raise was a speaking head
+// reaching 4.2° of yaw and 2.1° of pitch, the second of which is under half of
+// what the aversion had been supplying. `headHold` softens the sum in any
+// case, so a character measured tighter than tara gets her own angle here for
+// free.
 const POSE = {
-  headYaw: [0.12, 0.34],
-  headPitch: [-0.20, 0.14],
-  headRoll: [0.10, 0.30],
+  headYaw: [0.15, 0.44],
+  // **Pitch widens downward only, and the chin-up end is pinned where it was.**
+  // Opening it to -0.26 with the rest measured as a speaking face reading
+  // *sleepy*: the lids follow the globe, and on a rig with a reflex a chin-up
+  // head means eyes rolled down to hold the user, which narrows the aperture
+  // for real. The audit's open-lid median went 0.149 -> 0.163 against a 0.15
+  // ceiling (research-perception.md § 6) on that change alone. So the chin-up
+  // end stays at the -0.20 it was measured safe at, and the extra travel comes
+  // off the other end, where the reflex rolls the eyes *up* and the lid opens.
+  // A phrase pose returns, so this is not the chin-drift that reads downcast.
+  headPitch: [-0.20, 0.22],
+  headRoll: [0.12, 0.34],
   // The mouth corners take a small share of each pose: a speaking mouth whose
   // corners never move reads as dubbed. They ease rather than move, since a
   // corner that jumps reads as a twitch.
@@ -195,16 +221,32 @@ const BEAT = {
   // been held a while, so a phrase does not change position twice in a breath.
   // Of the rest most are a nod and some leave the head alone: a beat on every
   // accent is a metronome, and the brows still carry it.
-  swingP: 0.3,
-  swingAfterMs: 1800,
+  //
+  // **Raised on 2026-09-21, and this is where the speaking head's motion went.**
+  // Deleting the speaking aversion (gaze.js) took its head share with it, and
+  // that share had been most of what moved the head *inside* a sentence: the
+  // per-sentence deviation fell from 0.79 deg of yaw to 0.55 measured on the
+  // audit's real cue track, because a held phrase pose contributes nothing to a
+  // deviation taken about that phrase's own mean. The swing is the honest way
+  // to put it back — it is a move to a new pose rather than a look away from
+  // the user, which is the whole distinction the removal was about, and Graf
+  // has the speaker doing it. Offered more often and after a shorter hold; the
+  // hold is still long enough that a phrase does not reposition twice in a
+  // breath.
+  swingP: 0.42,
+  swingAfterMs: 1400,
   swingMs: 320,
   nodP: 0.7,
   // The nod: down and back, over by 0.4 s, and nothing after it. It peaks just
   // ahead of the vowel so that, through the head's 160 ms smoothing, it lands on
   // it. About 2.5° asked of tara, of which the smoothing renders most.
   nod: { pitch: 0.15, attack: 130, release: 240, lead: 170 },
-  // A diagonal nod's yaw, on the turn's side.
-  yawP: 0.35,
+  // A diagonal nod's yaw, on the turn's side. Raised with the swing above, and
+  // for the same reason — a diagonal beat moves the head across the sentence
+  // where a pure pitch nod only moves it down and back. The amplitude is
+  // untouched: the nod's read defect was its geometry, never its size
+  // (3d-avatar-motion-audit.md, 2026-09-14).
+  yawP: 0.45,
   yaw: 0.12,
 };
 
@@ -217,16 +259,21 @@ const BEAT = {
 // shoulders at 0.19 s and the lean at 0.24 s. Each stroke returns through
 // neutral: a trunk that only ever lifts is a standing shrug, which is what a
 // filmstrip once showed as the figure sitting larger and lower in frame.
+// Raised on 2026-09-21 with the rest of the body: the trunk has no measured
+// hold budget the way the head does — nothing about a shoulder tells a
+// projected photograph it has been turned too far — so it is the channel where
+// "a bit more movement" is free, and it is the one the head-on-a-stick read
+// comes from.
 const BEAT_BODY = {
   keys: [[-380, 0], [-60, 1], [140, 0.25], [320, -0.30], [600, 0]],
-  shoulder: 0.28, lean: 0.11, spread: 0.35,
+  shoulder: 0.36, lean: 0.15, spread: 0.35,
 };
 // The lift a phrase carries, over its own span: up on the first stressed
 // syllable and settling below where it started as the breath goes out.
 const PHRASE_BODY = {
   keys: [[-260, 0], [180, 1], [900, 0.5], [1500, -0.30], [2400, 0]],
-  shoulder: 0.22,
-  lean: 0.16,
+  shoulder: 0.28,
+  lean: 0.21,
 };
 
 // The phrase-final settle: chin down this far from the phrase's own pose,
@@ -257,16 +304,40 @@ const HOME_MS = 700;
 // to take the mouth.
 // `ack` rises with the nod and outlasts it, since a smile that ends with the
 // head's last beat reads as part of the gesture rather than as pleasure.
+//
+// `listen` is the fourth, and it is the one episode that is not about speech at
+// all: the floor has arrived and the face receives it. Every other state change
+// the avatar makes is a change of task; this one is a change of *who is
+// talking*, and a face that takes the floor back with no expression at all is
+// where the "not smiling enough" read comes from. Its shape is the owner's
+// (2026-09-21): up, then a long fade to neutral rather than a held level, which
+// is the same argument the other three are built on — a smile that stays is
+// discounted. The full height lasts 1.8 s, inside Ekman's felt-smile window,
+// and the remaining 3.8 s is the fade. **It is the warmest of the four, raised
+// on the owner's read of 2026-09-21 that it was not arriving.** It started at
+// `ack`'s height and reasoned that `close` — the face that hands the floor
+// over — should outrank the face that takes it; on screen that had it landing
+// as a politeness rather than as a welcome, and this is the one episode a user
+// is looking straight at when it fires.
 // Times in ms.
 const WARMTH = {
   onset: { keys: [[0, 0], [350, 1], [1500, 1], [2800, 0]], corner: 0.18, squint: 0.08 },
   close: { keys: [[0, 0], [300, 1], [2600, 1], [3800, 0]], corner: 0.36, squint: 0.14 },
   ack: { keys: [[0, 0], [220, 1], [1100, 1], [2000, 0]], corner: 0.30, squint: 0.12 },
+  listen: { keys: [[0, 0], [400, 1], [2200, 1], [6000, 0]], corner: 0.42, squint: 0.17 },
 };
 // A continuer can come every second or two. Each one smiling would hold the
 // smile up for as long as the user talks, which is the fixed smile again, so
 // an acknowledgement inside this long of the last smiling one nods without it.
 const ACK_SMILE_REST_MS = 4000;
+// The listening smile rests behind *any* warmth, not just its own, and this is
+// the whole of what keeps it from becoming the fixed smile. A turn normally
+// ends SPEAKING -> `close` -> LISTENING within a few hundred ms, and `close` is
+// already that handover's smile; a state that flaps back through LISTENING —
+// through THINKING and out again, or a barge-in and a resume — would otherwise
+// re-arm one every time. Longer than the episodes themselves, so two can never
+// run end to end.
+const LISTEN_SMILE_REST_MS = 7000;
 
 /**
  * What a rig renders of the head amplitudes above, unless it says otherwise.
@@ -320,6 +391,7 @@ export class SpeechProsody {
     this._moves = [];
     this._warm = [];
     this._lastAckSmile = -Infinity;
+    this._lastWarm = -Infinity;
     this._head = new HeadPose();
     this._home = true;
     this._corner = 0;
@@ -360,7 +432,23 @@ export class SpeechProsody {
 
   /** The track played out to its end: the turn's closing warmth. */
   closeTurn() {
-    this._warm.push({ at: this._ms, w: WARMTH.close });
+    this._smile(WARMTH.close);
+  }
+
+  /**
+   * The avatar has entered LISTENING: the floor is the user's. A warmth
+   * episode, unless something smiled recently — see `LISTEN_SMILE_REST_MS`,
+   * which is what stands between this and a face that is always smiling.
+   */
+  listen() {
+    if (this._ms - this._lastWarm < LISTEN_SMILE_REST_MS) return;
+    this._smile(WARMTH.listen);
+  }
+
+  /** Start a warmth episode, and remember that the face has just smiled. */
+  _smile(w) {
+    this._lastWarm = this._ms;
+    this._warm.push({ at: this._ms, w });
   }
 
   /**
@@ -371,10 +459,12 @@ export class SpeechProsody {
   acknowledge() {
     if (this._ms - this._lastAckSmile < ACK_SMILE_REST_MS) return;
     this._lastAckSmile = this._ms;
-    this._warm.push({ at: this._ms, w: WARMTH.ack });
+    this._smile(WARMTH.ack);
   }
 
-  /** Cut off: a smile that survives being interrupted has not noticed. */
+  /** Cut off: a smile that survives being interrupted has not noticed. The
+   *  rest period is deliberately *not* cleared — being interrupted is not an
+   *  occasion to smile a fresh one at the state change that follows. */
   cool() {
     this._warm = [];
   }
@@ -480,7 +570,7 @@ export class SpeechProsody {
     if (cue.v !== SILENT) {
       if (this._onsetPending) {
         this._onsetPending = false;
-        this._warm.push({ at: this._ms, w: WARMTH.onset });
+        this._smile(WARMTH.onset);
       }
       let a = i;
       while (a > 0 && !isPause(cues, a - 1)) a--;

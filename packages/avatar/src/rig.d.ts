@@ -22,3 +22,10 @@ export type AvatarRigFactory = (mount: HTMLElement, options?: unknown) => Avatar
 
 export const HAND_GESTURE_NAMES: ReadonlyArray<HandFrame["gesture"]>;
 export function avatarFrame(pose: RigPose, hand?: HandFrame): AvatarFrame;
+/** The bundled SVG renderer as a bare rig: what `createAvatar` builds when no
+ *  `rig` option is passed, and what an instrument mounts when it wants a face
+ *  it can pose directly. */
+export function createSvgRig(
+  face: ReturnType<import("./avatar.js").FaceFactory>,
+  hand?: unknown,
+): AvatarRig;

@@ -9,12 +9,11 @@
  * `{manual: true}` avatars stepped at a fixed dt reach the same states in
  * milliseconds — so the browser was paying for nothing the gate used.
  *
- * What did NOT move here is the part that needed a browser: the authoring
- * workshop in the working tree still renders, screenshots and pixel-diffs the
- * faces, and one of its pages still runs this exact sweep in real time so you
- * can watch it happen. The assertions
- * have one copy, in `src/conformance.js` — see that file for why `advance` is
- * a parameter.
+ * What did NOT move here is the part that needed a browser: Studio's
+ * instruments still render, screenshot and pixel-diff the faces at their
+ * shipping size, from a URL a runner in `tools/` can read headless. The
+ * assertions have one copy, in `src/conformance.js` — see that file for why
+ * `advance` is a parameter.
  *
  * jsdom gap, stubbed here (not in the widget): jsdom implements neither
  * `requestAnimationFrame` nor `cancelAnimationFrame`, and `destroy()` calls the

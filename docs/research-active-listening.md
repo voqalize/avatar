@@ -482,7 +482,7 @@ braking model or trip the large-shift blink — and the head takes only 0.22 of 
 the eyes take. `attend()` cancels an aversion already running rather than merely
 postponing the next, because a turn can end mid-look.
 
-Deterministic trace, `body-lab?face=peep&state=LISTENING&seed=7`, 40 s: three
+Deterministic trace, `/motion-audit/?avatar=peep&seed=7`, 40 s: three
 episodes at 7.4 s, 17.0 s, 35.4 s (plus one below the detection floor), peak
 `pupilX` ±0.45 with `headYaw` ±0.10. Cadence and duration match Andrist.
 `sweep()` passes.
@@ -549,3 +549,64 @@ Also corrected upstream of all this: `research-biomechanics.md` §3.4 quoted
 attributes it to Hendrikse et al. (2019), whose full text does not contain the
 claim. Marked unverified. Nothing in `packages/avatar/src/` depended on it — `headPitch` is
 pixels, not degrees.
+
+### 2026-09-21 — the speaking aversion is deleted, and H1 keeps its scope
+
+H1 was about the *listener*, and that is where it stays. The speaking profile
+that later joined it — a planning look away at the start of most turns and a
+short one every few seconds at a phrase boundary, straight off Andrist — was
+watched in a live call by the owner and read as the eyes darting off and coming
+back. His words, and they are the design now: *"I dont dispute that, but I think
+it isn't just eye movement, it is face and body movement. We don't have that over
+here, so I rather prefer we look at the camera when talking."*
+
+So the literature is not what was wrong. **The rig cannot render the behaviour
+the literature describes, and an eye-only rendering of it is not a quiet version
+of it — it is a different thing.** A speaker's look away is a head-and-body
+movement that the eyes lead; strip the head and body away and
+what is left is a pair of eyes leaving the listener for no visible reason, which
+is the reading the word *shifty* exists for. The amplitude made it worse rather
+than better: the eyes had to reach `aversionGain` 1.8 to register on tara at all
+(see the 2026-08-09 note above, where peep's version was already the subtlest
+thing on the page), and that is exactly the excursion that reads as a dart.
+
+Deleted rather than disabled, like `AVERSION.THINK` before it, and for the same
+reason — a dormant profile is a second mechanism waiting to produce the look
+again. The argument sits in `gaze.js` where the profile was. If the face-and-body
+half is ever built, the eye half comes back with it, and this entry is the spec.
+
+**What the note from 2026-08-09 got right, and what it missed.** It said the head
+share was the knob and not the pupil. That was correct, and it is the whole
+finding here: the speaking face's motion belongs on the head and the trunk, where
+it is communicative, and the listening aversion survives untouched because a
+*listener* whose eyes leave is doing something a listener does.
+
+
+### 2026-09-21 — the handover is a warmth episode
+
+The owner, in the same session: *"I want to bring in a bit more smile to the
+avatars. Always smiling is a problem, not smiling enough is also a problem. We
+need to find out when to smile. Perhaps right after you get to listening state
+and then fade out from the smile slowly to neutral?"*
+
+That is the shape `research-perception.md` §3 already argues for — *"warmth must
+be episodic and motion-linked"*, because a static smile is discounted as
+insincere within tens of seconds — and the prosody layer already had the
+mechanism: warmth episodes with an onset, a hold and an offset, merged with
+`Math.max` so two that overlap are one smile rather than a bigger one. The
+handover is now one of them, fired from the state change rather than from VAD,
+because what is being welcomed is the *turn* and the server is the thing that
+knows a turn has changed hands.
+
+**Two choices in it are the ones that keep this from becoming the failure he
+named in the same breath.** The episode is the slowest one in the table — up in
+0.4 s, held, and six seconds later back at neutral — so the fade is long enough
+that no frame of it is a held expression. And it has its own rest period, longer
+than the acknowledgement's: a face flapping between LISTENING and SPEAKING cannot
+re-arm it on every entry, and a handover that lands inside the closing smile of
+the turn it just heard keeps that smile instead of restarting one.
+
+What is deliberately *not* here: nothing reads the content. The smile is a
+receipt for the floor arriving, which is a fact the pipeline already has, and it
+is the same argument as every other mark in this log.
+

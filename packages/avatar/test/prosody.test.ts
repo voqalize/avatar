@@ -241,6 +241,62 @@ describe("SpeechProsody", () => {
     expect(Math.max(...run(1000).map((f) => f.mouthCornerL))).toBeGreaterThan(0.25);
   });
 
+  it("smiles as the floor comes back, fades to neutral, and lets a flapping state pass", () => {
+    // The owner's shape, 2026-09-21: *"right after you get to listening state
+    // and then fade out from the smile slowly to neutral"* — with the rest
+    // period that is the answer to the same sentence's "always smiling is a
+    // problem". The mixer fires this from the state change; here it is the
+    // episode on its own.
+    const p = new SpeechProsody();
+    const FRAME = 1000 / 60;
+    const run = (ms: number) => {
+      const out: Frame[] = [];
+      for (let k = 0; k < Math.round(ms / FRAME); k++) out.push(p.update({ cues: [], now: 0, index: 0 }, false, 1 / 60) as Frame);
+      return out;
+    };
+    const at = (frames: Frame[], ms: number) => frames[Math.round(ms / FRAME) - 1].mouthCornerL;
+    const REST = 0.005; // the floor an exponential decays into, not zero
+
+    p.listen();
+    const take = run(6200);
+    expect(at(take, 500)).toBeGreaterThan(0.25);      // there before a sentence could be
+    expect(at(take, 2200)).toBeGreaterThan(0.29);     // still at full height
+    expect(at(take, 4000)).toBeGreaterThan(0.1);      // and then a fade, not a drop
+    expect(at(take, 4000)).toBeLessThan(0.29);
+    expect(at(take, 6200)).toBeLessThan(REST);
+
+    // A call that goes back through LISTENING inside the rest period — a
+    // barge-in and a resume, a trip through THINKING — does not re-arm it.
+    p.listen();
+    expect(Math.max(...run(1000).map((f) => f.mouthCornerL))).toBeLessThan(REST);
+
+    // Past it, the next handover is a handover again.
+    run(1000);
+    p.listen();
+    expect(Math.max(...run(1000).map((f) => f.mouthCornerL))).toBeGreaterThan(0.25);
+  });
+
+  it("keeps the closing smile when the floor passes straight to the user", () => {
+    // The ordinary handover: the track ends, `closeTurn` smiles, and LISTENING
+    // arrives a few hundred ms later. That is one smile — the one already on —
+    // and not a longer one, which is what the shared rest period buys.
+    const p = new SpeechProsody();
+    const FRAME = 1000 / 60;
+    const run = (ms: number) => {
+      const out: Frame[] = [];
+      for (let k = 0; k < Math.round(ms / FRAME); k++) out.push(p.update({ cues: [], now: 0, index: 0 }, false, 1 / 60) as Frame);
+      return out;
+    };
+    const at = (frames: Frame[], ms: number) => frames[Math.round(ms / FRAME) - 1].mouthCornerL;
+
+    p.closeTurn();
+    run(300);
+    p.listen();
+    const take = run(4500);
+    expect(at(take, 2000)).toBeGreaterThan(0.3);   // `close`'s own height
+    expect(at(take, 4200)).toBeLessThan(0.005);    // and `close`'s own ending
+  });
+
   it("drops its smile when it is cut off", () => {
     const p = new SpeechProsody();
     p.closeTurn();

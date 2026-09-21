@@ -116,15 +116,17 @@ describe("drawing-buffer ceiling", () => {
 /**
  * Every 3-D character's GLB passes the same checks; what differs is a row here.
  * The interior boxes surround the eyes, mouth and nose, in glTF x/y, and come
- * from each character's `landmarks.py` — tara's in `scripts/`, tushar's in
- * `characters/tushar/`, tanya's in `characters/tanya/`.
+ * from each character's `landmarks.py` — tara's in `scripts/`, everyone else's
+ * in `characters/<name>/`.
  *
- * The third character answered the question this table was holding open: none
- * of the interior boxes are per-face. All three carry the same three, because
- * they are generous bounds on where a feature may sit and not measurements of
- * where it does — a face whose eyes left this box would be a fitting error, not
- * a different face. The rows stay separate so a fourth character can disagree
- * without editing the other three, but the values are no longer TARA-SPECIFIC.
+ * The character after tara answered the question this table was holding open:
+ * the boxes are not per-face because they are generous bounds on where a feature
+ * may sit and not measurements of where it does — a face whose eyes left one
+ * would be a fitting error, not a different face. The rows stayed separate so a
+ * new character could disagree without editing the others, and tess is the first
+ * to: the eyes box is bounded from the *outside* as well, by the frame field's
+ * lateral onset, and on a narrower face that onset moves in while the box does
+ * not. Her row says so. The values are no longer TARA-SPECIFIC.
  */
 const CHARACTERS = [
   {
@@ -145,8 +147,8 @@ const CHARACTERS = [
   },
   {
     name: "tanya",
-    // The only one of the three whose hair hangs past the jaw, and so the only
-    // one with the `Hair` shell's roll pair. It is read from where her drawing's
+    // The only one whose hair hangs past the jaw, and so the only one with the
+    // `Hair` shell's roll pair. It is read from where her drawing's
     // hair ends and not set (`morphs.hair_hangs`): hair beside the temple is
     // stuck to the head, and a hank on a shoulder is not.
     hair: true,
@@ -156,12 +158,35 @@ const CHARACTERS = [
       { name: "nose", u: 0.12, v: [0.33, 0.60] },
     ],
   },
+  {
+    // Her hair is a low tail that clears both ears, so she is back inside
+    // tara's atlas window and nothing of hers hangs past the jaw: her `Hair`
+    // shell is rigid like tara's — see `characters/tess/`.
+    name: "tess",
+    interior: [
+      // The one box anyone has had to move, and it is her face's width and not
+      // her eyes. The frame field turns nothing until |u| passes 0.75 of the
+      // outline's half-width (`head_mesh.MOTION_LATERAL`), held at its v 0.55
+      // value above the cheekbone — which is |u| 0.3032 on tara and 0.2921 on
+      // her, because her head is narrower in absolute units at every height.
+      // The shared 0.30 hangs over that by 0.008 of cheek, so it caught the
+      // first millimetre of the onset (Δz -0.0055) on skin no eye is anywhere
+      // near. Her outer corner is at |u| 0.2670, x 0.6855 of her half-width —
+      // the same fraction as tara's 0.6802 and tanya's 0.6882, which is the
+      // fraction `MOTION_LATERAL` was set against. So 0.28: clear of her eye by
+      // 0.013 and inside her onset by 0.012, and it is her face that is narrow,
+      // not her fitting that is off.
+      { name: "eyes", u: 0.28, v: [0.52, 0.68] },
+      { name: "mouth", u: 0.20, v: [0.12, 0.30] },
+      { name: "nose", u: 0.12, v: [0.33, 0.60] },
+    ],
+  },
 ];
 
 describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
   const asset = new URL(`../../assets/${name}.glb`, import.meta.url);
 
-  // The code in this package is MIT and the three binaries beside it are not:
+  // The code in this package is MIT and the binaries beside it are not:
   // they are artwork, CC-BY 4.0 (`assets/README.md`). A published GLB is copied
   // out of a dependency tree, renamed and handed on, so the terms are written
   // into the file itself — `scripts/build_tara.COPYRIGHT`, through the glTF

@@ -54,7 +54,13 @@ import { HeadPose } from './head.js';
  */
 export const DEFAULT_PROFILE = {
   sway: 1.0,
-  settle: [1.8, 4.6],
+  // A head re-positions oftener than it used to (2026-09-21). On a character
+  // whose held angle is budgeted this is the half of "more movement" that
+  // actually arrives: the angle is capped by `headHold` and the *rate* is not,
+  // so a body that re-settles every couple of seconds reads as more alive than
+  // one that reaches further every five. Still an event every second or two at
+  // its fastest, which is nowhere near the 1.5 Hz line.
+  settle: [1.4, 3.4],
   blinkGap: [1.9, 5.4],
   slowBlink: 0,
   breathRate: 1.0,
@@ -62,7 +68,7 @@ export const DEFAULT_PROFILE = {
   hold: null,
   rhythm: null,
   flick: null,
-  shift: [9, 22],
+  shift: [7, 16],
 };
 
 const rand = ([a, b]) => a + Math.random() * (b - a);
@@ -120,7 +126,7 @@ function nextPosture(prev) {
   // a mechanism that is invisible half the time reads as a body that only
   // moves sometimes. Nobody shifts their weight by a millimetre. The 25% that
   // stays on the same side is what keeps it off a left-right metronome.
-  const mag = 0.16 + Math.random() * 0.26;
+  const mag = 0.20 + Math.random() * 0.32;
   const away = prev.torsoTurn > 0 ? -1 : prev.torsoTurn < 0 ? 1 : (Math.random() < 0.5 ? -1 : 1);
   const turn = mag * (Math.random() < 0.75 ? away : -away);
   const leanAway = prev.torsoLean > 0 ? -1 : 1;
@@ -158,11 +164,24 @@ function nextPosture(prev) {
  * and not a small number, is what keeps pitch off the wire's vocabulary. It was
  * held to under a degree as well, which measured as a listening head with no
  * pitch in it at all (1.05° peak over thirty seconds, against yaw's 5.5°), and
- * a head that only ever turns is a head on a turntable. The range is wider now
- * and still biased upward: a chin that drifts down and stays there is the
- * downcast read, which on a photographed face arrives long before any other.
+ * a head that only ever turns is a head on a turntable. The range is biased
+ * upward: a chin that drifts down and stays there is the downcast read, which
+ * on a photographed face arrives long before any other.
+ *
+ * **Widened again on 2026-09-21, on the owner's read that the whole figure is
+ * too restricted.** The ceiling here is not this table — it is `headHold` in
+ * the mixer (step 6b), which softens what the layers together ask the head to
+ * *hold* against the angle the owner measured on each character by eye
+ * (`motion-limits.json`). So these numbers are what the drawing gets and what a
+ * budgeted character gets is its own measured angle, which is the arrangement
+ * this file should have been sized against all along: on tara the widest settle
+ * yaw is 4.9° under a 6° hold budget, the widest pitch 2.6° under 5°, and roll
+ * stays the most conservative of the three because her roll *transition* is a
+ * recorded defect at any angle. The `dur` is untouched — a wider move over the
+ * same half second is a faster move, not a busier one, and the frequency is
+ * what the movement budget is about (CLAUDE.md).
  */
-const SETTLE = { yaw: [0.16, 0.34], pitch: [-0.11, 0.08], roll: [0.10, 0.28], dur: [0.45, 0.8], switchP: 0.7 };
+const SETTLE = { yaw: [0.22, 0.46], pitch: [-0.15, 0.11], roll: [0.14, 0.38], dur: [0.45, 0.8], switchP: 0.7 };
 const HOME = { headYaw: 0, headPitch: 0, headRoll: 0 };
 
 /**
@@ -186,7 +205,7 @@ const HOME = { headYaw: 0, headPitch: 0, headRoll: 0 };
  * same gate, so a quiet head does not sit on a torso still rocking under it.
  */
 const LIVE = {
-  yaw: 0.05, pitch: 0.02, roll: 0.05, breathPitch: 0.006,
+  yaw: 0.07, pitch: 0.028, roll: 0.07, breathPitch: 0.006,
   retarget: [0.6, 2.2], tau: 0.38,
   drift: [2.0, 5.0], still: [1.2, 3.5], stillGain: 0.12,
 };
@@ -208,7 +227,6 @@ export class IdleLayer {
     this._nextBlink = 2 + Math.random() * 3;
     this._blinkT = -1;
     this._blinkDur = 0.13;
-    this._double = false;
     this._lastBlinkAt = -Infinity;
     // Two incommensurate frequencies per axis so the sway never visibly loops.
     this._ph = [Math.random() * 9, Math.random() * 9, Math.random() * 9];
@@ -294,19 +312,18 @@ export class IdleLayer {
    * rate is a decision to revisit in that state, not something for the eyelids
    * to drop silently.
    */
-  blink(double = false, evoked = false, forced = false) {
+  blink(evoked = false, forced = false) {
     if (evoked) {
       if (this.t - this._lastBlinkAt < BLINK_REFRACTORY) return;
       const gap = this._nextBlink - this._lastBlinkAt;
       if (!forced && this.t - this._lastBlinkAt < EVOKED_EARLIEST * gap) return;
     }
-    this._startBlink(0.11 + Math.random() * 0.04, double);
+    this._startBlink(0.11 + Math.random() * 0.04);
   }
 
-  _startBlink(dur, double) {
+  _startBlink(dur) {
     if (this._blinkT >= 0) return;
     this._blinkT = 0;
-    this._double = double;
     this._blinkDur = dur;
     this._lastBlinkAt = this.t;
     this._nextBlink = this.t + rand(this.profile.blinkGap);
@@ -319,12 +336,12 @@ export class IdleLayer {
    * of speech with no pauses in it.
    */
   phraseBlink() {
-    this.blink(false, true);
+    this.blink(true);
   }
 
   /** A slow, deliberate blink — reads as thinking or fatigue. */
   slowBlink() {
-    this._startBlink(0.34, false);
+    this._startBlink(0.34);
   }
 
   _blinkValue(dt) {
@@ -333,7 +350,6 @@ export class IdleLayer {
     const d = this._blinkDur;
     const p = this._blinkT / d;
     if (p >= 1) {
-      if (this._double) { this._double = false; this._blinkT = 0; return 0; }
       this._blinkT = -1;
       return 0;
     }
@@ -351,10 +367,15 @@ export class IdleLayer {
       // Re-armed here as well as in _startBlink, for the frame the timer comes
       // due in the middle of a blink already running.
       this._nextBlink = t + rand(pr.blinkGap);
-      // A share of them slow if the state asks for it; roughly one in six of
-      // the rest comes in a pair.
+      // A share of them slow if the state asks for it. **The rest are single,
+      // and a paired blink is not a thing this layer does** — a share of them
+      // used to re-close the instant the lid reached open, which at this
+      // duration is a 7-9 Hz flutter and was read by the owner on 2026-09-21 as
+      // a dropped frame rather than as a pair. A human doublet is two blinks a
+      // few hundred ms apart, which is what the gap already produces when it
+      // draws short; nothing in research-biomechanics.md asks for the rest.
       if (Math.random() < pr.slowBlink) this.slowBlink();
-      else this.blink(Math.random() < 0.16);
+      else this.blink();
     }
     const blink = this._blinkValue(dt);
 
@@ -524,6 +545,12 @@ export class IdleLayer {
         // actually present on screen. `gain` is where a deployment that
         // really is paying for the pixels turns it back down.
         // The head is the exception: it settles rather than sways (SETTLE).
+        // The *idle* terms below went up again on 2026-09-21 — the owner read
+        // the figure as too restricted — and only the idle terms: the speech
+        // share is `prosody.js`'s business and is raised there, beside the
+        // words it is timed to. These are all far below 1.5 Hz, so the raise
+        // buys excursion and not rate; what it costs the encoder is a slightly
+        // larger slow motion, which is the cheap kind.
         headYaw: hs.headYaw + flickYaw + post.headYaw * ps,
         headPitch: hs.headPitch + workPitch,
         headRoll: hs.headRoll + post.headRoll * ps,
@@ -531,9 +558,16 @@ export class IdleLayer {
         // outbreath over the phrase (research-biomechanics.md §6.1), which the
         // prosody layer draws. Quiet breathing steps mostly back under it.
         breath: breath * this.gain * (1 - 0.6 * this.talk),
-        // The brows are never quite still either.
-        browRaiseL: s(0, 0.089) * 0.020 * a,
-        browRaiseR: s(1, 0.083) * 0.020 * a,
+        // The brows are never quite still either — and they were nearly still
+        // here, at an amplitude a beat could swallow whole. Two video
+        // reviewers named a motionless upper face as the biggest reason these
+        // read as uncanny; `prosody.POSE.brow` answered that for a face that
+        // is *talking*, and the avatar listens far more than it speaks
+        // (CLAUDE.md). The two rates are further apart than they were so the
+        // pair drifts out of phase inside one call rather than over several:
+        // a matched pair is the drawing, not the face.
+        browRaiseL: s(0, 0.089) * 0.032 * a,
+        browRaiseR: s(1, 0.071) * 0.032 * a,
         // Shoulders, and the body's share of speech emphasis — a head that
         // moves on its own above a torso that never does is the head-on-a-stick
         // read, and it was the loudest note in the first round of stakeholder
@@ -559,15 +593,15 @@ export class IdleLayer {
         // said should be the louder. What is left here is the part prosody
         // cannot supply: motion in the gaps *between* phrases, where there is
         // no accent to hang anything on.
-        shoulderL: (s(1, 0.11) * 0.5 + s(2, 0.22) * 0.5) * (0.040 * ad + 0.045 * say * this.gain)
+        shoulderL: (s(1, 0.11) * 0.5 + s(2, 0.22) * 0.5) * (0.052 * ad + 0.045 * say * this.gain)
           + workL + post.shoulderL * ps,
-        shoulderR: (s(2, 0.10) * 0.5 + s(0, 0.19) * 0.5) * (0.040 * ad + 0.045 * say * this.gain)
+        shoulderR: (s(2, 0.10) * 0.5 + s(0, 0.19) * 0.5) * (0.052 * ad + 0.045 * say * this.gain)
           + workR + post.shoulderR * ps,
-        torsoLean: s(0, 0.085) * (0.028 * ad + 0.035 * say * this.gain) + post.torsoLean * ps,
+        torsoLean: s(0, 0.085) * (0.036 * ad + 0.035 * say * this.gain) + post.torsoLean * ps,
         // The trunk's own drift, small next to the weight shift that dominates
         // this channel. It exists so the body is not perfectly still *between*
         // shifts, which would make each shift read as a discrete event.
-        torsoTurn: (s(2, 0.047) * 0.6 + s(1, 0.031) * 0.4) * 0.06 * a
+        torsoTurn: (s(2, 0.047) * 0.6 + s(1, 0.031) * 0.4) * 0.075 * a
           + post.torsoTurn * ps,
       },
     };
