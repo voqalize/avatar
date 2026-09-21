@@ -39,11 +39,11 @@ two trees where a pull request changes what ships.
 ## The wire is the seam you can build against without us
 
 Neither half is a dependency of the other. They are two ends of one wire format
-([docs/contract-wire.md](docs/contract-wire.md)) — three commands, no version
-field — so you can replace either end entirely and keep the other:
+([docs/contract-wire.md](docs/contract-wire.md)) — `state`, `action` and
+`cues`, no version field — so you can replace either end entirely and keep the other:
 
 - **Your own backend.** Any server that emits `state`, `action` and `cues` drives
-  every avatar in the package, including the three characters. Three ways to
+  every avatar in the package, including the 2.5-D characters. The ways to
   produce cues, best first, are in the README under *Not using our backend?*.
 - **Your own avatar.** `createAvatar({mount, client}) -> {destroy()}` is the only
   public seam ([docs/design-avatar-interface.md](docs/design-avatar-interface.md)).

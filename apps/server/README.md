@@ -60,7 +60,7 @@ code — sends the wrong thing on purpose.
 Every button is an HTTP request to the server, never a message the page
 composes: `POST /api/say`, `/api/state`, `/api/action`, `/api/misbehave`, all
 acting on the one call in progress, with `GET /api/lines` returning the corpus,
-the three states, and the action names this server offers — the two every avatar
+the states, and the action names this server offers — the two every avatar
 owes a server plus the bundled renderer's own — which is a list of buttons worth
 offering rather than a list of what will be accepted. A page
 that could make the avatar nod on its own would be a client deciding what the

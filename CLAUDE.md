@@ -57,8 +57,8 @@ made once. And every row but `backend` is exported: read it, do not edit it.
 | mixer | layer order, per-channel smoothing, gaze, idle, clips — **the driving API, `/internal`, no semver promise** | `packages/avatar/src/avatar.js` | [internal-mixer.md](docs/internal-mixer.md) |
 | rig | `apply({pose, hand})` / `destroy()`, the 30 pose channels — **internal to the SVG renderer, not a seam to implement** | `packages/avatar/src/rig.js` | [internal-rig.md](docs/internal-rig.md) |
 | SVG faces | the drawings; `createFace` / `META`, exported as a `{create, meta}` value per module — never resolved by name | `packages/avatar/src/face-*.js`, `line-art.js` | [authoring-a-face.md](docs/authoring-a-face.md) |
-| Canvas2D avatars | the six professional identities, each a complete `createAvatar` module — an internal renderer; its rig JSON and wardrobe images ship but are not a seam | `packages/avatar/src/canvas/`, `packages/avatar/client/{arjun,meera,vikram,ishita,kabir,naina}.ts` | [README.md § Professional avatars](README.md#professional-avatars) |
-| 2.5-D characters | `tara`, `tushar`, `tanya` — one `createAvatar` each over one shared rig; `three` is an *optional* peer, so a drawing never pays for a 3-D engine | `packages/avatar/client/three/`, `packages/avatar/assets/*.glb` | [characters.md](docs/characters.md) |
+| Canvas2D avatars | the professional identities, each a complete `createAvatar` module — an internal renderer; its rig JSON and wardrobe images ship but are not a seam | `packages/avatar/src/canvas/`, `packages/avatar/client/{arjun,meera,vikram,ishita,kabir,naina}.ts` | [README.md § Professional avatars](README.md#professional-avatars) |
+| 2.5-D characters | `tara`, `tushar`, `tanya`, `tess` — one `createAvatar` each over one shared rig; `three` is an *optional* peer, so a drawing never pays for a 3-D engine | `packages/avatar/client/three/`, `packages/avatar/assets/*.glb` | [characters.md](docs/characters.md) |
 
 **The state list has exactly one copy: `STATES` in
 `packages/avatar/src/avatar.js`,** with each entry's perceptual reasoning in the

@@ -28,8 +28,8 @@ the one thing this README cannot show you.
 Two minutes, in the browser, nothing to install. It is the library explaining
 itself: ask how the lipsync stays in step and it puts the timeline on screen,
 ask to see it thinking and it holds that state on its own face, ask what else it
-can look like and it swaps to another of the ten it offers — taking the
-matching voice with it. Every gesture in that call is one of the three commands documented
+can look like and it swaps to another avatar — taking the matching voice with
+it. Every gesture in that call is a `state`, `action` or `cues` message documented
 below, sent from a server — the same ones your own app would send.
 
 Running it yourself instead: a call with [`apps/server/`](apps/server/README.md)
@@ -187,14 +187,14 @@ Emission is **overwrite, never merge**: a `cues` message says "discard everythin
 queued at or after `from_ms`, then append these". The server decides; the client
 has no say and no way to refuse.
 
-**Not using our backend?** Any server can produce cues, three ways, best first.
+**Not using our backend?** Any server can produce cues; the ways, best first:
 If your TTS emits native viseme events (Azure and friends), map the integer ids
 through `AZURE_VISEME_TO_LETTER` and ship `{t, v}` as they stream — nearly free,
 and the letters are already ours. Otherwise force-align: phonemize the text,
 align it against the audio with MFA, gentle or `rhubarb-lip-sync` itself, and
 map ARPAbet through `ARPABET_TO_VISEME`. With no server work at all,
-`textToCues(text)` is a crude grapheme guesser, fit for previews only. All three
-are exported from `@voqalize/avatar/internal`; the cue format and the rules a
+`textToCues(text)` is a crude grapheme guesser, fit for previews only. Each is
+exported from `@voqalize/avatar/internal`; the cue format and the rules a
 track must satisfy are
 [internal-mixer.md § Speech](docs/internal-mixer.md).
 
@@ -244,7 +244,7 @@ createAvatar({ mount, client, face: myna });
 ```
 
 A name would need a table, and a table is a dynamic index no bundler can shake
-— three drawings in every consumer's bundle to render one. `packages/avatar/src/faces.js` still
+— every drawing in every consumer's bundle to render one. `packages/avatar/src/faces.js` still
 has that table, for tooling that genuinely wants all of them.
 
 Authoring a face of your own is a staged process that starts from a reference
@@ -290,6 +290,7 @@ module:
 import { createAvatar } from '@voqalize/avatar/avatars/tara';
 // or: @voqalize/avatar/avatars/tushar
 //     @voqalize/avatar/avatars/tanya
+//     @voqalize/avatar/avatars/tess
 
 const avatar = createAvatar({ mount, client: pipecatClient });
 ```
