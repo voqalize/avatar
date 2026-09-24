@@ -58,11 +58,11 @@ jobs:
         # now, so the check became what it was always standing in for.
         #
         # Every entry point, because a missing subpath is invisible to a build
-        # that imports one: the barrel, the two internal doors, the three faces,
-        # two of the six canvas identities and all three compiled characters. The
-        # characters are the reason `three` is installed here; they are also the
-        # only exports that read a file at runtime, and this proves the import
-        # resolves, not that the GLB fetches.
+        # that imports one — read from the installed `exports` map, so an entry
+        # added or removed is checked without anyone editing this list. The
+        # compiled characters are the reason `three` is installed here; they are
+        # also the only exports that read a file at runtime, and this proves the
+        # import resolves, not that the GLB fetches.
         run: |
           cd packages/avatar
           TARBALL="$(pnpm pack | tail -1)"
@@ -72,9 +72,11 @@ jobs:
           npm init -y >/dev/null
           npm i --silent "./$(basename "$TARBALL")" three @pipecat-ai/client-js react react-dom
           node --input-type=module -e '
-            const paths = ["", "/internal", "/internal/three", "/faces/peep",
-              "/faces/wren", "/faces/myna", "/avatars/arjun", "/avatars/naina",
-              "/avatars/tara", "/avatars/tushar", "/avatars/tanya", "/react"];
+            import { readFileSync } from "node:fs";
+            const pkg = JSON.parse(readFileSync("node_modules/@voqalize/avatar/package.json", "utf8"));
+            const paths = Object.keys(pkg.exports)
+              .filter((k) => k !== "./package.json")
+              .map((k) => k.slice(1));
             for (const p of paths) {
               const m = await import("@voqalize/avatar" + p);
               if (Object.keys(m).length === 0) throw new Error(`empty export: ${p}`);
