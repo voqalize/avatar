@@ -9,8 +9,7 @@ your client already receives plus one custom RTVI message carrying lipsync
 metadata and semantic cues.
 
 No video track, no per-minute avatar vendor, no second media path. Hand-drawn
-SVG faces, professional Canvas2D identities and 2.5-D characters all ship with
-it — one per entry point, so you pay for the one you import, and you can author
+SVG faces and 2.5-D characters ship with it — one per entry point, so you pay for the one you import, and you can author
 your own.
 
 <p>
@@ -148,10 +147,11 @@ always the renderer's.
 What is left over is small, specific, and each item is a case the library
 refuses to guess at — a deliberate nod or greeting, a tool whose calls never
 enter your pipeline, a pose richer than the core states, a backend that is not
-ours. **[docs/architecture.md](docs/architecture.md) is the canonical page for
-all of this**: how the pieces relate, the principles they rest on, and the
-free/costs-a-line table in full. Read it before deciding whether this fits your
-pipeline.
+ours. How the pieces relate is
+[docs/design-library-split.md](docs/design-library-split.md), and who has the
+final word on what the avatar is doing is
+[pipecat-lifecycle-protocol.md § Authority model](docs/pipecat-lifecycle-protocol.md).
+Read both before deciding whether this fits your pipeline.
 
 ## TTS to visemes
 
@@ -227,7 +227,7 @@ on top of whatever state is effective at the time. They never establish state
 and never need an end message. Two of them every avatar answers to; beyond those
 the id is open, and a face that does not have the name ignores it.
 
-Precedence table: [contract-behavior.md § Effective-state precedence](docs/contract-behavior.md).
+Precedence: [pipecat-lifecycle-protocol.md § Authority model](docs/pipecat-lifecycle-protocol.md).
 What the client reads straight off pipecat, and what it deliberately refuses to
 infer: [pipecat-lifecycle-protocol.md](docs/pipecat-lifecycle-protocol.md).
 
@@ -251,36 +251,6 @@ Authoring a face of your own is a staged process that starts from a reference
 image rather than a text brief:
 [authoring-a-face.md § Adding a new avatar](docs/authoring-a-face.md).
 
-## Professional avatars
-
-The code-authored avatars ship as their own `createAvatar` modules — each a
-full identity, not a face value, with a private Canvas2D renderer:
-
-```js
-import { createAvatar } from '@voqalize/avatar/avatars/arjun';
-// or: @voqalize/avatar/avatars/meera
-//     @voqalize/avatar/avatars/vikram
-//     @voqalize/avatar/avatars/ishita
-//     @voqalize/avatar/avatars/kabir
-//     @voqalize/avatar/avatars/naina
-
-const avatar = createAvatar({ mount, client: pipecatClient });
-```
-
-`arjun`/`meera` are the original interviewer pair; `vikram`/`ishita` and
-`kabir`/`naina` are two further wardrobe/hair directions on the same rig. The
-older entry points (`interviewer-male`, `interviewer-female`,
-`professional-male-a`, `professional-female-a`, `professional-male-b`,
-`professional-female-b`) still work as `@deprecated` aliases for the names
-above — use the new names in new code.
-
-They depict Indian professionals in their late twenties, without caricature
-or regional costume cues, calibrated at call-tile size, and use the same wire
-contract and Pipecat lifecycle/viseme driver as the SVG faces — their private
-renderer is Canvas2D and its rig data and bitmap assets are implementation
-details, not part of the package surface. Full detail:
-[packages/avatar/README.md § Professional avatars](packages/avatar/README.md#professional-avatars).
-
 ## The 2.5-D characters
 
 The 2.5-D characters ship as compiled binaries, each its own `createAvatar`
@@ -291,6 +261,7 @@ import { createAvatar } from '@voqalize/avatar/avatars/tara';
 // or: @voqalize/avatar/avatars/tushar
 //     @voqalize/avatar/avatars/tanya
 //     @voqalize/avatar/avatars/tess
+//     @voqalize/avatar/avatars/tanvi
 
 const avatar = createAvatar({ mount, client: pipecatClient });
 ```
@@ -302,7 +273,7 @@ orbit. None of them depicts a real person; each begins as an image from a
 generative model, which is what makes it licensable as artwork.
 
 `three` is an *optional* peer dependency (`>=0.180 <0.187`) behind the 2.5-D
-entry points only, so an SVG or Canvas consumer never downloads it. The `.glb` is
+entry points only, so an SVG consumer never downloads it. The `.glb` is
 fetched when the avatar mounts. Nothing above the renderer changes: same wire,
 same states, same cue-synced mouth, and a server that has never heard of these
 characters drives one correctly.
@@ -372,8 +343,8 @@ nowhere: [`apps/server/`](apps/server/README.md), the demo call, which is here
 rather than in the working tree because a call with no API keys in it is the
 first thing anyone runs.
 
-How the layers relate and which of them carry a semver promise:
-[docs/architecture.md § The layers](docs/architecture.md). The tree path by
+How the layers relate and which of them carry a semver promise: the seam
+table in [CLAUDE.md](CLAUDE.md). The tree path by
 path, and why this is a library rather than a product:
 [design-library-split.md § Layout](docs/design-library-split.md).
 
@@ -394,9 +365,9 @@ that list: [CONTRIBUTING.md](CONTRIBUTING.md).** Releasing either package:
 
 ## Design
 
-Four decisions the SVG renderer rests on. Each one is short because the code is
-the reference; the system-level principles are
-[docs/architecture.md](docs/architecture.md) instead.
+The decisions the SVG renderer rests on. Each one is short because the code is
+the reference; the system-level principle is
+[pipecat-lifecycle-protocol.md § Authority model](docs/pipecat-lifecycle-protocol.md).
 
 **The face is a vector, not a set of drawings.** Everything the avatar can do is
 a point in a ~30-dimensional parameter space ([`packages/avatar/src/params.js`](packages/avatar/src/params.js));
@@ -437,10 +408,8 @@ adding a character never moves the line.
 
 **MIT for the code** (`/LICENSE`): use, modify, embed and redistribute it, in
 open- or closed-source products, with no obligation beyond keeping the copyright
-notice. **The SVG faces and the Canvas2D identities are code, and ask for no
-attribution** — each is drawn by the function that ships it, and the rig data and
-wardrobe bitmaps behind a Canvas2D identity are implementation details of that
-function rather than artwork you are licensing.
+notice. **The SVG faces are code, and ask for no
+attribution** — each is drawn by the function that ships it.
 
 **CC-BY 4.0 for the 2.5-D character binaries** (`/LICENSE-CC-BY-4.0`) —
 `packages/avatar/assets/*.glb`, and nothing else in the repository. Each is a
@@ -473,7 +442,6 @@ unchanged, and travels with that directory.
 | [Open Peeps](https://www.openpeeps.com/) | the drawing *idiom* `peep` is authored in — no artwork is copied | CC0 |
 | Rhubarb Lip Sync 1.14.0 | `packages/avatar-py/native/avatarsync/` (fetched at build time, not vendored) | MIT; see `UPSTREAM-LICENSE.md` |
 | [piper](https://github.com/OHF-Voice/piper1-gpl) voices `en_US-ljspeech-high`, `en_US-libritts_r-medium` | spoke every clip in `packages/avatar-py/tests/fixtures/` (pcm) | LJSpeech public domain; LibriTTS-R CC BY 4.0 — the one row here that asks for attribution |
-| OpenAI image models | the wardrobe/hair webp images for the Canvas2D avatars, `packages/avatar/src/canvas/data/img/` | generated output, not a third-party asset under its own license; Voqalize holds the copyright per OpenAI's usage terms |
 
 The SVG avatars are original drawings. All demo audio is synthesised from
 text written for this repo; `apps/server/audio/` is Voqalize's own `omnivoice`
