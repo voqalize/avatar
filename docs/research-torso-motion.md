@@ -50,41 +50,20 @@ Three further findings shape the fix:
 ## 2. The standard parameter set
 
 **[OFFICIAL]** [Standard Parameter List](https://docs.live2d.com/en/cubism-editor-manual/standard-parameter-list/).
-
-| Parameter | ID | Range | Documented behaviour |
-|---|---|---|---|
-| Angle X / Y / Z | `ParamAngleX/Y/Z` | ±30 | head yaw / pitch / roll |
-| Body rotation X | `ParamBodyAngleX` | **±10** | + turns to screen-right |
-| Body rotation Y | `ParamBodyAngleY` | ±10 | + moves upward |
-| Body rotation Z | `ParamBodyAngleZ` | ±10 | + tilts to screen-right |
-| Breath | `ParamBreath` | 0–1 | + = inhale |
-| Shrug\* | `ParamShoulderY` | ±10 | + shrugs shoulders |
-| Bust\* | `ParamBustX` / `ParamBustY` | ±1 | chest sway |
-
-Three structural facts matter more than the rows:
+The facts out of it that are load-bearing:
 
 - **The body is ±10 where the head is ±30 — a 3:1 convention baked into the
-  standard list.** There is no shoulder-turn or chest parameter in the core set
-  at all; `ParamShoulderY` is a vertical *shrug*.
-- **Starred parameters are "to be set up only when necessary."** Arms, hands,
-  shrug and bust are starred. Body rotation X/Y/Z and Breath are **not** — they
-  are the unconditional core of any rig.
+  standard list**, and confirmed in the SDK's own sample code: `setupLook()`
+  drives pointer tracking as `ParamAngleX 30, ParamAngleY 30, ParamAngleZ −30,
+  ParamBodyAngleX 10` — body X at exactly one third of head X, with body Y and Z
+  not tracked at all
+  ([lappmodel.ts](https://raw.githubusercontent.com/Live2D/CubismWebSamples/develop/Samples/TypeScript/Demo/src/lappmodel.ts)).
+  This is the same benchmark
+  [research-head-rotation.md](research-head-rotation.md) § 5 item 6 already set
+  for the trunk follow, reached independently.
 - **There is no forward/back lean parameter.** No Z-translation, no "lean in", no
   distance-to-camera, anywhere in the standard list. That absence is itself a
   finding — see § 4.
-
-**The 3:1 ratio is confirmed in the SDK's own sample code.** `setupLook()` drives
-pointer tracking as `ParamAngleX 30, ParamAngleY 30, ParamAngleZ −30,
-ParamBodyAngleX 10` — body X at exactly one third of head X, and **body Y and Z
-are not tracked at all**
-([lappmodel.ts](https://raw.githubusercontent.com/Live2D/CubismWebSamples/develop/Samples/TypeScript/Demo/src/lappmodel.ts)).
-**[OFFICIAL]** This is the same benchmark § 5 item 6 of the head-rotation page
-already set for the trunk follow, reached independently.
-
-**[OFFICIAL data, our tabulation]** Every one of the eight shipped sample rigs
-carries `ParamBodyAngleX/Y/Z` and a breath parameter, at parameter counts from 22
-(Mark) to 181 (Mao). Newer models add `ParamLeftShoulderUp`/`ParamRightShoulderUp`
-in place of `ParamShoulderY`, and `ParamWaistAngleZ` for a separate waist.
 
 ## 3. How a flat torso is made to read in depth
 
@@ -132,17 +111,6 @@ Both sources describe the same mechanism: **the illusion is carried by parts
 sliding and scaling relative to one another inside the trunk. Nothing is scaled
 as a unit.**
 
-### 3.3 Pivots
-
-- **Torso tilt (Body Z):** pivot at the **waist** — 「体の横振りは腰あたりを支点に
-  して上半身が大きく傾く」, the sideways swing pivots at the waist with the upper
-  body tilting significantly. Riggers place a Bézier line at shoulder height so
-  the shoulders are the handle ([Palkaloid](https://palkaloid.com/590/set-z-body/)).
-  **[COMMUNITY]**
-- **Torso turn (Body X):** no pivot as such — a warp rotating about the body's
-  centre axis with differential scaling either side. **[COMMUNITY]**
-- **Head roll:** pivot at the **chin**. **[OFFICIAL]**
-
 ## 4. The forward lean, specifically
 
 **Live2D documents nothing about a forward/back lean.** No standard parameter, no
@@ -172,6 +140,15 @@ every relationship and therefore reads as focal length. The repo's own comment i
 scale"*) and `research-biomechanics.md` § 6.3's endorsement of it are **right**:
 scale is the correct rendering model. The defect is that **uniform** scale is not.
 
+**The one that inverts under an orthographic camera:** Live2D's *"thinner in the
+back, wider in the front"* is a **manually authored perspective divide**. A
+perspective camera supplies it for free; an orthographic camera never does.
+Rotating shallow geometry under ortho yields cosine foreshortening — the far side
+narrows — but **no near-side enlargement**, which is precisely the half of the cue
+that says *toward you*. So a lean or a turn under ortho must have its near-side
+widening **authored**, or it will read as a part disappearing rather than a body
+arriving.
+
 ## 5. Timing and follow
 
 **[OFFICIAL]** Live2D's guidance for body-follows-head is in the *animation*
@@ -194,6 +171,28 @@ sample models is a body or head angle.** Physics drives hair, ribbons, skirts,
 scarves, chains and bust — never the torso pose. Body-follows-head-with-lag is
 community practice, not Live2D's shipped default. (Ren is the single exception
 noted in the head-rotation page § 3.1.)
+
+**How often the trunk moves at all, and in which direction.** Measurements from
+outside Live2D bound the schedule:
+
+- Seated postural shifts run **8–19 per hour** in healthy participants — one
+  every three to seven minutes — and ergonomics work that *deliberately* raises
+  the rate to 20–30/hour describes that as frequent shifting
+  ([JMPT 2023](https://www.jmptonline.org/article/S0161-4754(23)00053-2/fulltext)).
+  Against a head that re-positions every few seconds
+  ([research-biomechanics.md](research-biomechanics.md) § 3.8), the trunk is
+  stationary.
+- When it does move, **leaning to the side is the most frequent trunk motion,
+  significantly more than leaning forward or backward** (main effect of type,
+  p < 0.001, partial ω² = 0.90) in unscripted dyads. Lateral, not sagittal. And
+  trunk movement is *modulated* by communicative effort — it rises with
+  background noise — which makes it an intensity signal rather than a metronome
+  ([arXiv 2512.03636](https://arxiv.org/abs/2512.03636)).
+
+So **the torso gets no scheduler of its own**: a slow re-settle on the order of
+minutes, and a lateral share of what the head is already doing. Anything else
+invents motion the measurements do not contain, and a jittery torso costs the
+encoder for nothing.
 
 **[INFERENCE]** tara already satisfies all three rules without new machinery. The
 mixer feeds `torsoTurn` the same target as `headYaw` at `trunkFollow`, and the
@@ -226,34 +225,6 @@ be quarantined in rotation deformers or they distort; and the motion should be
 「控えめなくらいがちょうどいい」 — understated. **No source, official or community,
 publishes a displacement magnitude.**
 
-## 7. What does not transfer
-
-**[INFERENCE]** throughout.
-
-- **Draw-order keying and Draw Order Groups.** Live2D re-layers parts at a turn's
-  extreme as a first-class parameter-driven feature. Our geometry is
-  depth-tested, so overlap resolves itself. Ignore this entire class.
-- **Glue.** Vertex-binding across separate ArtMeshes is a seam fix for layered
-  art; their own example is a torso glued at *"neck, right shoulder and left
-  shoulder"*. We get seam continuity instead from authoring displacement as a
-  function of position in face space, so two meshes sharing a formula agree by
-  construction.
-- **Warp-deformer Bézier lattices** and their division-count guidance. We deform
-  by morph targets; there is no analogue.
-- **Skinning.** Scoped to hair strands, with 3-D deferred. Not their torso answer.
-- **Redrawn artwork at the extremes.** Live2D freely redraws forms at ±30. Our
-  albedo rule forbids anything that must appear or disappear, so the only legal
-  equivalent is corrective *geometry* over a limited range.
-
-**The one that inverts under an orthographic camera:** Live2D's *"thinner in the
-back, wider in the front"* is a **manually authored perspective divide**. A
-perspective camera supplies it for free; an orthographic camera never does.
-Rotating shallow geometry under ortho yields cosine foreshortening — the far side
-narrows — but **no near-side enlargement**, which is precisely the half of the cue
-that says *toward you*. So a lean or a turn under ortho must have its near-side
-widening **authored**, or it will read as a part disappearing rather than a body
-arriving.
-
 ## 8. Implications
 
 1. **Make the lean differential and internal, not a scale of the scene.** Hem
@@ -264,9 +235,10 @@ arriving.
 3. **Spread the shoulders.** Live2D's tell for body depth is a **width** change,
    and it is the cheapest single addition that makes a flat torso read as
    three-dimensional. `BODY.widen` already exists for the breath swell.
-4. **Let the head ride rigidly.** Body angle moves every head part alike
-   (1.00 ± 0.02) and adds no differential motion inside the head. The head needs
-   no morph of its own under a lean — a transform is correct and cheaper.
+4. **Let the head ride rigidly.** Body angle adds no differential motion inside
+   the head ([research-head-rotation.md](research-head-rotation.md) § 3.1), so
+   the head needs no morph of its own under a lean — a transform is correct and
+   cheaper.
 5. **Keep the trunk follow at a third.** Confirmed twice over: the ±10/±30
    standard-list convention, and `setupLook()`'s 10-against-30. This extends
    § 5 item 6 of the head-rotation page rather than replacing it; that page set
@@ -284,28 +256,6 @@ arriving.
 - **Live2D documents no forward/back lean at all** (§ 4). The scale-plus-tip
   construction rests on a single community source, and the explanation of why
   uniform scale reads as zoom is ours, not sourced.
-- **Whether `ParamBodyAngle*` values are degrees is documented nowhere.** ±10 is
-  a parameter range. Treat 3:1 as a convention, not a unit conversion.
-- **The editor-label → `physics3.json`-field mapping is inference.** The
-  Mobility link is strong (the documented 0.7–0.99 guideline matches the observed
-  0.79–1.0 span); the Delay/Acceleration split is reasoned from the runtime
-  source and is not stated by Live2D anywhere.
-- **No official `physics3.json` schema page exists**; the field set comes from
-  the framework parser and real sample files.
-- **No official editor-side breathing magnitudes exist** — no chest or shoulder
-  displacement, no recommended cycle. Only the SDK's 3.2345 s.
-- **No official bust-up guidance exists.** バストアップ appears nowhere on
-  docs.live2d.com; the auto-deformer has one fixed whole-body configuration with
-  no upper-body variant. Haru — 45 parameters, a torso group, no leg parameters —
-  is the nearest thing to a bust-up reference rig, but no Live2D page says so.
-  **[INFERENCE]** Their implicit position is that the crop changes only which
-  parameters you bother to author, not the method.
-- **All community magnitudes are one author's examples**, explicitly labelled as
-  such by their authors. Do not treat ~1%/~3% as norms.
-- **Video-only sources were not transcribed**, and if official numeric guidance
-  on torso rigging exists it is most likely inside them: the JUKU lesson
-  ⑥体の角度XYZと肩, the Natori making-of (体の動き付け at 11:01), and the Japanese
-  tutorial 4.
 
 Nothing from Cubism Core or the Live2D sample models is copied into this
 repository. Measurements taken from them are recorded here as numbers only.

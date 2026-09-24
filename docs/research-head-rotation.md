@@ -7,10 +7,9 @@ just wrong. It is almost as if the head is translating down / The sideways
 movement of the neck is wrong."* They also asked to *"learn from Live2D — what is
 it that they do? We need limited motion to look natural and believable."*
 
-This page holds three kinds of material: what the literature says a head does,
-what Live2D does to fake it, and what tara measurably does. A research page may
-name things the code does not have. Numbers marked *unverified* are waiting on a
-second source.
+This page holds what the literature says a head does and what Live2D does to
+fake it. A research page may name things the code does not have. Numbers marked
+*unverified* are waiting on a second source.
 
 ## 1. The short answer
 
@@ -53,6 +52,8 @@ head and shears, where it should twist under it.
       was wrong.
   - The head also translates "even in the first degrees" (Ferrario 1997,
     PMID 9183030), so the axis is effective rather than fixed.
+  - The per-level share of yaw is still open: Anderst 2015's full text returns
+    403, and Anderst 2017 and Guo 2021 cover the same question.
   - Small nods are mostly this joint; Como 2024 (PMID 39084063) gives its
     living range as 17.9°. Big nods add lower-cervical flexion, which also
     carries the head forward.
@@ -125,7 +126,7 @@ nose at 0.68 and the mouth at 0.59.
 
 **tara against this table.** Her features are about 10% shallow: the nose is
 0.597 in front of the pivot against about 0.67. That is a uniform scale and does
-not change the reading, so the features stay. The frame is what is wrong (§ 4).
+not change the reading, so the features stay. The frame is what is wrong.
 
 ### 2.3 Amplitudes
 
@@ -139,7 +140,18 @@ not change the reading, so the features stay. The frame is what is wrong (§ 4).
       call them Euler angles, and Figure 1's labels are illegible.
     - α is probably pitch, because its neutral range (9.54°) is four times
       the other two (2.31° and 2.27°).
-    - It stays *unverified*.
+    - It stays *unverified*: neither paper defines the axis labels, so
+      [research-biomechanics.md](research-biomechanics.md) § 3.8 carries the
+      proportions and treats the range as indicative.
+- **Turning to look at something.** Head rotation undershoots target
+  eccentricity with a slope of about **0.6**, and in multi-talker listening
+  heads settle **10–15° short of the target talker**. The eyes make up the
+  difference, so a head that fully faces what it is attending to is wrong
+  before any question of amplitude arises — and the head and the eyes must be
+  *allowed* to disagree, which a full-gain VOR removes. A tight yaw envelope is
+  therefore not fighting the research: it is short of a target the head would
+  have undershot anyway.
+  ([Frontiers in Psychology 2023, *Head movement and its relation to hearing*](https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2023.1183303/full))
 - **Backchannel nods.**
   - Blomsma 2024 (Language & Cognition): nods at backchannel opportunities
     average **5.95° peak-to-peak**, about 1.9° larger than elsewhere.
@@ -160,12 +172,15 @@ not change the reading, so the features stay. The frame is what is wrong (§ 4).
   - Poggi: a continuer is a "brief fast repeated downward movement";
     agreement is "single, ample and stressed".
   - Hadar et al. 1983 find listener nods narrow compared with speaker head
-    movement. Their "ordinary" nod band of 1.8–3.7 Hz, and Birdwhistell's
-    5–15° arcs, come from search snippets only and are *unverified*.
+    movement; their frequency bands are in
+    [research-biomechanics.md](research-biomechanics.md) § 3.8. Birdwhistell's
+    5–15° arcs come from a search snippet only and are *unverified*.
   - The three-type nod corpus (arXiv 2507.23298, summarised in
     [research-biomechanics.md](research-biomechanics.md) § 3.3) separates
     `short`, `long` and `long_p` nods by range and duration.
-- **What that means for a nod**, peak-to-peak:
+- **What that means for a nod**, peak-to-peak. This table is a synthesis of the
+  rows above rather than any one source's result, and it is what the nod
+  sequences and their tests are gated against:
 
   | nod | amplitude | shape | duration |
   |---|---|---|---|
@@ -202,8 +217,6 @@ answer is structural, not a sprite swap.
     less than the features.
   - Side hair and back hair also get physics (a pendulum) driven by head and
     body angle.
-  - Hiyori's physics takes about 60% of its input from the head and 40% from
-    the body.
 - **Cubism 5's "3D Rotation Expression"** automates this.
   - The artist hand-draws one turned keyform (left, right, up or down).
   - "Depth estimation" then infers a Z for every warp-deformer control point
@@ -325,75 +338,6 @@ moves 0.06–0.11 H.
 Nothing from Cubism Core or the Live2D sample models is copied into this
 repository. Measurements taken from them are recorded here as numbers only.
 
-## 4. What tara measurably does (2026-09-14)
-
-**Rig facts.**
-- The head is a rigid group: skin, ears, hair, both eyes, the mouth cavity,
-  teeth and tongue.
-- It rotates with Euler order YXZ about a pivot at glTF (0, 0.36, −0.22).
-- The camera is orthographic.
-- Scale: 151.5 px per unit on the 400 × 300 tile, and 216.2 px per unit in the
-  664 × 428 recording.
-
-**Motion depth by region, in front of the pivot.** These come from an
-independent geometry pass over `tara.glb`.
-
-| region | tara | anatomical, in front of the pivot (§ 2.2) |
-|---|---|---|
-| crown | 0.306 | ≈ 0 |
-| side hair | 0.337 | 0.00–0.05 |
-| jaw contour | 0.344 | 0.22–0.38 |
-| chin | 0.353 | 0.42 underside, 0.55 front |
-| cheek outline | 0.406 | ≈ 0.21 |
-| hairline | 0.458 | ≈ 0.45 (no headform landmark) |
-| ears | 0.460 | ≈ 0 (rim −0.03) |
-| mouth | 0.461 | 0.52–0.59 |
-| brows | 0.507 | ≈ 0.56 |
-| eyes | 0.512 | ≈ 0.52 |
-| nose | 0.597 | ≈ 0.67 |
-
-**The nod** (13.7° rendered; tile px). The "real head" column was computed from
-the first agent's table, before the headforms; the direction of every row holds.
-
-| measure | tara | a real head |
-|---|---|---|
-| crown drop | −15.0 | −1.3 |
-| ears, relative to the outline | −2.0 | +4.1 (the sign is wrong) |
-| chin, relative to the outline | +3.9 | −13.6 (the sign is wrong) |
-| brow-to-hairline gap | barely changes | changes by 4–5 px |
-
-In the recorded aura call, `ACK_NOD` peaks at 14.9° simulated and 15.2°
-measured. At the bottom of the nod, in recording px:
-
-| part | drop |
-|---|---|
-| ears | −26.4 / −27.2 |
-| nose | −31.3 |
-| crown | −23.8 |
-
-Every part drops by nearly the same amount: an onion overlay shows each part
-doubled by one vertical offset.
-
-A secondary contributor is the clip's `torsoLean`, which also lowers the
-figure, but only by about 1 px.
-
-**The neck.**
-- **At 9° of yaw:**
-  - The throat moves +6.1 px, against the outline's +0.3–1.8.
-  - The jaw rim slips about 7 px across the neck, a texture slip line rather
-    than a gap.
-  - The trunk follow accounts for 25–33% of the outline's motion at the yaw
-    peak.
-- **At 8° of roll:**
-  - 17 neck triangles fold.
-  - The chin moves against the crown, because the roll pivots at jaw height
-    rather than low.
-- **No correction exists:** ears and hair have no morph targets, and nothing
-  compensates for their depth.
-
-The scripts that produced these numbers live with the character sources rather
-than in a scratch directory, so every number here can be regenerated.
-
 ## 5. Implications
 
 1. **Fix the frame, not the features.** Pull the ears, crown, side hair and
@@ -423,22 +367,25 @@ than in a scratch directory, so every number here can be regenerated.
    matches where the lower cervical spine puts the visible motion.
 6. **The body follows yaw by about a third.** The SDK's 10/30 ratio is the
    benchmark. Tune the trunk follow against it, not above it.
-
-## 6. Open, being verified
-
-These questions were sent to web-enabled research agents on 2026-09-14. This
-section is updated as each returns.
-
-- ~~Where the nod axis sits relative to the ear canal~~: behind and below it
-  (§ 2.1).
-- ~~Silhouette depths against NIOSH headforms~~: measured (§ 2.2).
-- ~~Live2D per-part ratios, physics and VTube Studio mappings~~: answered in
-  § 3.1.
-- ~~Whether Rivers' anchor depths are artist-set~~: derived from the key
-  drawings (§ 3).
-- ~~Nod amplitude in degrees~~: answered in § 2.3.
-- **Still open: Busso's axis labels.** Neither paper defines them (§ 2.3).
-- **Still open: Anderst 2015's per-level yaw shares.** The full text returned
-  403; Anderst 2017 and Guo 2021 cover the same question (§ 2.1).
-- Everything the second agent fetched, including its headform analysis
-  scripts, is in the session scratch directory, not in the repository.
+7. **Pitch is the scarce axis, and it is the axis that matters.** The speech
+   literature wants pitch first by about four to one
+   ([research-biomechanics.md](research-biomechanics.md) § 3.8), and pitch is
+   the axis this projection gives up first. So the pitch budget is spent rather
+   than saved: it goes to phrase poses and nods, and the small continuous
+   layers get as little of it as will still read as alive. Yaw and roll have
+   slack and must not be given the pitch they cannot substitute for — a head
+   that turns instead of nodding is a head on a turntable, which is a failure
+   this rig has actually shipped.
+8. **Amplitude is the wrong dial for a nod that will not fit.** A wide listener
+   nod cannot be scaled down to a tight pitch envelope and stay a nod; at that
+   size it disappears. What the nod research offers instead is *cycles* — most
+   real nods are one cycle and nearly all are within five, and a cycle costs
+   about 0.15 s (§ 2.3). A nod living inside a small envelope buys back its
+   salience with repetition and with speed, up to the impatience cap in § 2.3.
+   That is a documented alternative to amplitude, not a consolation.
+9. **Roll is sufficient, and nothing should depend on it.** The research asks
+   for under a degree of standard deviation, which fits inside every measured
+   envelope, and recorded calls peak far below it. The roll defect that matters
+   is not amplitude: it is that the transition reads as a hinge, which is the
+   absence of a body under the head and is fixed by coupling the shoulders and
+   trunk to it, not by widening anything.

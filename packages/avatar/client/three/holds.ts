@@ -26,7 +26,7 @@
  */
 
 import LIMITS from "./motion-limits.json" with { type: "json" };
-import { HEAD_CLAMP, HEAD_DEG } from "./tara-rig.js";
+import { HEAD_CLAMP, HEAD_DEG } from "./character-rig.js";
 
 /** Degrees of each axis per pose unit, which is `HEAD_DEG` at the clamp. */
 const PER_UNIT = {

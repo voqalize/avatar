@@ -66,6 +66,10 @@ export {
   avatarFrame,
   createSvgRig,
   shapeFor,
+  // The one number that says how far the mandible falls for a given aperture.
+  // Anything composing a mouth pose without `shapeFor` — a retarget, a driver —
+  // needs it, and the amplitudes behind the lips are calibrated at it.
+  JAW_OF_OPEN,
   normalizeCues,
   textToCues,
   ARPABET_TO_VISEME,

@@ -12,8 +12,10 @@ message received. Its precedence is fixed:
 5. Server state `CANT_HEAR`.
 6. Server state `THINKING`.
 7. Server state `WORKING`.
-8. Client `LISTENING`, then client-owned `IDLE` after 12 seconds of quiet in
-   an established Pipecat session. A newly mounted avatar begins available,
+8. Client `LISTENING`, then client-owned `IDLE` after `idleDelayMs` of quiet in
+   an established Pipecat session (`packages/avatar/client/AvatarClient.ts`).
+   It is an `AvatarClient` option, not a `createAvatar` one: nothing on the
+   public seam sets it, and nothing reads the resulting state back. A newly mounted avatar begins available,
    never already "stepped aside".
 
 Connection failure is lower than observed speech. A new user turn and Pipecat
@@ -28,29 +30,11 @@ ordering is applied where several conditions genuinely hold at once, which is
 the server (`AvatarStateMachine._resolve`). Ranking them a second time on the
 client would be a duplicate ladder, and the two would drift.
 
-The server sends only three kinds of avatar intent:
-
-```json
-{ "type": "avatar", "cmd": "state", "state": "THINKING" }
-{ "type": "avatar", "cmd": "state", "state": null }
-{ "type": "avatar", "cmd": "action", "id": "ACKNOWLEDGE" }
-```
-
-An action is self-completing. It can include face, torso, and hand motion. A
-new effective state applies immediately underneath it, while the action's own
-channels finish their natural landing. `RESPONSE_INTERRUPTED` is special only in timing:
-it is server-confirmed, arms while bot output is active, and starts after the
-output interval stops so it cannot override an active viseme track.
-
-This is the binding for an avatar mounted with a live
-`@pipecat-ai/client-js` client. It replaces the old duplicated `user` avatar
-wire command.
-
 ## The silence problem
 
-Two of the eight rungs are easy. The bot is speaking, or the user is — Pipecat
-reports both, the browser has them first-hand, and nothing here improves on
-that. Every hard question is about the stretch when *neither* is speaking, which
+The speech rungs are easy. The bot is speaking, or the user is — Pipecat reports
+both, the browser has them first-hand, and nothing here improves on that. Every
+hard question is about the stretch when *neither* is speaking, which
 in a real call is most of it.
 
 `IDLE` is the wrong answer to nearly all of that stretch. Something is
@@ -70,15 +54,11 @@ name a failure mode for is a heuristic that will be wrong silently.
 
 | state | the condition | armed by | retired by |
 |---|---|---|---|
-| `SPEAKING` | Pipecat's bot-output interval is active | `BotStartedSpeakingFrame` | `BotStoppedSpeakingFrame` |
-| `LISTENING` | the user is speaking | `UserStartedSpeakingFrame` | `UserStoppedSpeakingFrame` |
-| `MUTED` | a mute strategy holds the user's microphone | `UserMuteStartedFrame` | `UserMuteStoppedFrame` |
 | `CANT_HEAR` | the turn produced nothing to answer | an empty final transcript, or `AvatarProcessor`'s grace timer expiring | the next user turn, or any sign of a response |
 | `THINKING` | a reply is outstanding | `UserStoppedSpeakingFrame`, `UserTurnInferenceCompletedFrame`, `LLMFullResponseStartFrame`, a tool's result | `BotStartedSpeakingFrame` |
 | `WORKING` | a tool is running | `FunctionCallsStartedFrame` / `FunctionCallInProgressFrame` | the last call's result — or its cancel |
-| `IDLE` | none of the above, for 12 s | the client's quiet timer | any of the above |
 
-Four of those need their reasoning stated, because in each case the obvious
+Each of those needs its reasoning stated, because in each case the obvious
 implementation is wrong.
 
 **`THINKING` starts at the end of the user's turn, not at the LLM's.** The
@@ -156,46 +136,9 @@ In particular, the renderer must never autonomously emit a nod, brow
 acknowledgement, spoken continuer or empathy reaction. Those are always
 explicit `action` messages sent by application/backend code.
 
-## Browser subscriptions and default projection
+## What the server owns, and why
 
-`AvatarClient.attach(pipecatClient)` subscribes to the following standard
-Pipecat events. It uses the fixed defaults below; there are deliberately no
-application extension hooks in this version.
-
-| Pipecat event | Default projection |
-|---|---|
-| `UserStartedSpeaking` | `LISTENING`; stop the work loop; `setUserSpeaking(true)` enables only the sustained engagement lean. |
-| `UserStoppedSpeaking` | `setUserSpeaking(false)` and hold `LISTENING`; the server sends `THINKING` from this point. No acknowledgement is emitted. |
-| `BotStartedSpeaking` | `SPEAKING`; it pre-empts and consumes any lower-priority server state. |
-| `BotStoppedSpeaking` | Stop any still-open viseme track immediately, then return to `LISTENING`. |
-| `UserMuteStarted` / `UserMuteStopped` | `MUTED`, then back to `LISTENING`. The quiet under a mute never earns `IDLE`: the silence was imposed, and letting the timer run behind it would reveal a stepped-aside face the moment the microphone came back. |
-| `Error` | `DEGRADED`, or `OFFLINE` when `data.fatal` is true. |
-| `Disconnected` | `OFFLINE`. |
-| `Connected` / `BotReady` | Clear a prior offline presentation and resume normal projection. |
-
-## The resolved state does not leave the avatar
-
-There is no presence callback and no `data-avatar-state`. The projection above
-is what the avatar acts on, not something the host reads back — an avatar
-renders its own state if it wants to, and the caller does not get to read the
-avatar's internal state. Publishing that projection would make it a contract:
-every implementation would owe these nine names with this precedence, which is
-the second public contract [design-avatar-interface.md](design-avatar-interface.md)
-exists to avoid.
-
-A host that genuinely wants a status pill has the same `PipecatClient` and can
-subscribe to it directly — with its own precedence, for its own chrome.
-`RemoteAudioLevel` is not subscribed at all: remote gain may come from another
-participant, so it never had state authority, and relaying it would be a
-high-frequency subscription serving decoration.
-
-`IDLE` is reached by a quiet timer — `idleDelayMs`, default 12 s
-(`packages/avatar/client/AvatarClient.ts`). It is an `AvatarClient` option, not a
-`createAvatar` one: nothing on the public seam sets it, and nothing reads the
-resulting state back. Shortening it to *watch* the transition means
-constructing `AvatarClient` yourself, which is what the tests below do.
-
-The server owns the three because the frames they are inferred from do
+The server owns the states it sends because the frames they are inferred from do
 not all reach the browser: function-event reporting there is optional, and the
 LLM response boundaries are not exposed at all. The client behavior library owns
 how each one is *rendered* — `CANT_HEAR` selects this renderer's lean-in,
@@ -206,38 +149,16 @@ JavaScript extension API.
 
 ## How the ladder is verified
 
-The ladder is asserted, not watched: `packages/avatar/test/AvatarClient.test.ts`
-drives the real `AvatarClient` against a Pipecat-shaped fake — no transport, no
-server, no browser — because `AvatarClient` takes a client object and listens to
-it, so the fake is a `Map` of listeners. Each rung of the precedence table is one
-`it`, and the ones that earn their place are where two authorities disagree: bot
-speech arriving over a server `WORKING`, observed speech over a concurrent
-recoverable failure, a confirmed interruption held until playout actually stops,
-prefetched cues from interrupted audio discarded, and quiet earning `IDLE` on a
-fake clock.
-
-What a test cannot assert is that the ladder is *right*, and that is read in the
-live call — Studio's `/` against the demo server in the public checkout, where
-the same resolver runs on real RTVI events. The invariant to watch there is the
-negative one: no acknowledgement appears unless a server sent an `action`.
-
-The server state machine deduplicates Pipecat function calls by `tool_call_id`,
-so repeated Started/InProgress notifications cannot strand `WORKING`.
-
-## Streaming and event order
-
-LLM and audio events overlap in streaming pipelines. `BotStartedSpeaking` can
-arrive while a `THINKING` state is still present; Pipecat bot output wins
-immediately and consumes it.
-
-The Pipecat JavaScript client has no standalone interruption event. The server
-observes the actual `InterruptionFrame` and emits `action:RESPONSE_INTERRUPTED` only
-when bot speech is active. The browser treats the end of Pipecat's bot-output
-interval as the mouth safety boundary, then plays that action.
+`packages/avatar/test/AvatarClient.test.ts` drives the real `AvatarClient`
+against a Pipecat-shaped fake, one `it` per rung. What a test cannot assert is
+that the ladder is *right*, and that is read in the live call — Studio's `/`
+against the demo server in the public checkout, where the same resolver runs on
+real RTVI events. The invariant to watch there is the negative one: no
+acknowledgement appears unless a server sent an `action`.
 
 ## What the backend does and does not send
 
-The three commands, and which `action.id`s every avatar owes a server, are
+The commands, and which `action.id`s every avatar owes a server, are
 [contract-wire.md](contract-wire.md) — one copy, and it is that one. What
 belongs here is the part that is about *lifecycle* rather than vocabulary:
 
@@ -247,29 +168,12 @@ races and obscured ownership.
 
 **`AvatarProcessor` deliberately does not mirror Pipecat lifecycle.** Its
 `cues.ctx` is the stock base-TTS `context_id`; it does not make up a fallback.
-Because browser speaking events carry no context, the client FIFO-binds the
-next buffered `ctx` when `BotStartedSpeaking` arrives and closes it at
-`BotStoppedSpeaking`. The event decides *which* context plays; the cue clock's
-zero is where the bot's audio track goes off digital silence, heard in the
-browser — backdated if the sound came first, held until it does if the event
-did. The two reach the browser on different channels and have been measured
-57 ms apart one way and 160 ms the other, so no constant offset is right. Where
-the track cannot be heard, the event is the anchor. The clock runs a little ahead
-of that zero, by what the mixer's mouth smoothing will cost the picture, less any
-output-device latency the display does not match. Each resumption after a pause
-in the track is listened for again. A mouth opens before its sound, so a sound
-heard within the track's usual lead over it agrees with the clock; a
-disagreement beyond that is slewed out rather than jumped. The FIFO holds only
-because `AvatarProcessor` never sends a context the
-browser will not hear: cues wait for their context's first audio and are dropped
-if an interruption lands first. `AvatarProcessor` passes
-`AvatarControlFrame` states/actions through for explicit application intent.
+Because browser speaking events carry no context, the client FIFO-binds the next
+buffered one and anchors the cue clock itself. That binding and that anchor are
+`packages/avatar/client/AvatarClient.ts`, which carries the measurements each
+choice was made from; the FIFO holds only because `AvatarProcessor` never sends
+a context the browser will not hear.
 
 **Actions are layered over the effective state** resolved by the Authority
 model above, and finish their natural landing; they never create a durable
 state or need an action-end message.
-
-## Compatibility
-
-This is a coordinated frontend/backend change. A newer client ignores unknown
-avatar commands as before; deploy matching package versions together.

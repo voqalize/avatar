@@ -22,21 +22,14 @@ backend.**
 
 ## Decisions
 
-### 1. This repo is the library. Everything moves here.
+### This repo is the library. Everything moves here.
 
-This repo already owned the two binding contracts, the three rigs and the whole
+This repo already owned the binding contracts, the rigs and the whole
 visual-verification apparatus. The backend halves came to the contracts, not
 the other way round. Each consumer keeps its own deploy plumbing — that is the
 application's, not the library's.
 
-### 2. Two published packages, one of them platform-specific
-
-| artifact | registry | contents | deps |
-|---|---|---|---|
-| `@voqalize/avatar` | npm | `createAvatar` (`.`), `<Avatar>` (`./react`), the mixer (`./internal`), one face each (`./faces/*`) | optional peers: react, `@pipecat-ai/client-js` |
-| `voqalize-avatar` | pypi | processor, state machine, wire, viseme engine, `avatarsync` runtime | `pipecat-ai>=1.4,<2` |
-| `packages/avatar-py/native/avatarsync` | *inside the pypi wheel* | the C++ fork, its build, the model tree | — |
-| — | — | `docs/` contracts, binding for all of them | — |
+### Two published packages, one of them platform-specific
 
 **One npm package, and the subpaths have to earn their place.** It shipped as
 three — the bare widget, the dispatcher, the React binding — and 0.2 collapsed
@@ -118,7 +111,7 @@ gets, and what a platform outside the wheel matrix gets. The degradation is
 bounded and it is exactly one thing: the face still listens, thinks, claims the
 floor and yields it; its mouth does not move while it speaks.
 
-### 3. Distribution: public registries, permissive licence
+### Distribution: public registries, permissive licence
 
 The repo is **public at `voqalize/avatar` under MIT**, and both halves publish
 to public registries: `@voqalize/avatar` on npm, `voqalize-avatar` on PyPI. The
@@ -160,10 +153,7 @@ of both. Neither registry holds a long-lived credential — both accept an OIDC
 token minted for this repository running that workflow. Setup and the token
 fallback are in `RELEASING.md`.
 
-The native aligner is not a package of its own either — it ships inside the
-pypi wheel; see the `packages/avatar-py/native/avatarsync` note in decision 2.
-
-### 4. Two tiers of state, and the seam between them
+### Two tiers of state, and the seam between them
 
 This is the core of the design and the thing the library exists to get right.
 
@@ -174,7 +164,7 @@ adoptable.
 
 What the backend actually puts on the wire is narrower than "the states",
 because the states are not the backend's to send. The processor reads only
-frames any pipecat pipeline produces and emits three commands —
+frames any pipecat pipeline produces and emits the commands —
 `state` (`CANT_HEAR`, `THINKING`, `WORKING`, or cleared), `action`, and `cues`
 off `TTSAudioRawFrame` ([contract-wire.md](contract-wire.md), the one copy).
 Everything else the presence state depends on — is the bot speaking, is the user
@@ -183,7 +173,7 @@ own events, and reads there rather than being told. A state the server sends is
 a *candidate* underneath those facts; the precedence ladder that resolves them
 lives once, in `packages/avatar/client/AvatarClient.ts`
 ([pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md)). The behavior
-vocabulary those two inputs resolve to is exactly nine names, and
+vocabulary those two inputs resolve to is named once, and
 [contract-behavior.md](contract-behavior.md) owns the list.
 
 The pin is `pipecat-ai >= 1.4, < 2`, and it is an honest one: every frame the
@@ -201,7 +191,7 @@ library that guessed would nod at the wrong moment.
 Where 0.3 landed is narrower than this section originally promised, and
 deliberately: the composite *render* states are no longer wire vocabulary at
 all. `AvatarControlFrame` carries an `AvatarMessage`, so a seam can say
-`WORKING`, or send one of the seven actions, and that is the whole of it. The
+`WORKING`, or send an action, and that is the whole of it. The
 richer poses (`REVIEWING_SCREEN`, `SEARCHING_SCREEN`, `CANT_HEAR`,
 `TYPING_CHAT`, `DISTRACTED`, `WANTS_IN`, …) are still real, still authored, and
 still reachable — through `avatar.setState` on the mixer, which is `./internal`
@@ -260,23 +250,7 @@ can say so in one `AvatarControlFrame`. What stays is the bookkeeping
 nobody should write twice — call ids are deduped and parallel calls are held, so
 a turn with three tools shows one settled `THINKING` rather than a flicker.
 
-### 5. The reorganization stops above the waist
-
-Nothing in this work touches the drawings, the pose channels or the mixer's
-motion. If a face module or `packages/avatar/src/params.js` changes because the packaging
-changed, something has gone wrong — the waist is exactly where this should not
-reach, and it held: `packages/avatar/src/` is still dependency-free ES modules with no build
-step.
-
-Above the waist it did change, and the direction was inward. The public seam is
-now `createAvatar({mount, client}) -> {destroy()}` — no `setState`, no `action`,
-no `speak`, no readback. Those verbs still exist on the mixer, which is
-`./internal` and carries no semver promise. The reasoning is decision 4's: an
-imperative surface on the public package is an invitation for the client to
-decide what the agent is doing, and the client does not get to decide.
-[design-avatar-interface.md](design-avatar-interface.md) is the seam.
-
-### 6. React is a peer at `>=18`, not a dependency at 19
+### React is a peer at `>=18`, not a dependency at 19
 
 The two consumers were on different major versions of React, and a binding
 pinned to one of them would have been vendored by the other — which is the
@@ -317,72 +291,16 @@ That is the whole of the gain, and it is worth more than a short path.
 
 What is left is the canonical shape: published packages under `packages/`,
 surfaces that are never published under `apps/`, and the tooling that drives them
-at `tools/`. **From 0.4.0 the two lines of this repository carry different sets of
-those,** so the tree below is what they share — the published packages and the
-contracts — and the trees that belong to one line are listed after it.
+at `tools/`. **From 0.4.0 the two lines of this repository carry different sets
+of those** — the published packages and the contracts are shared, and which line
+a tree is on is the same question every time: does it contain the pipeline that
+makes a character? `ls` is the map; CLAUDE.md § The seams says which tree owns
+which layer.
 
-```
-packages/
-  avatar/               @voqalize/avatar — one package, one manifest
-    src/                the mixer, the rig, the faces — reached through
-                        ./internal and ./faces/*, never by deep path
-      *.d.ts            its types, hand-maintained next to the code
-    client/             AvatarClient (splice, clock anchor) + React binding,
-                        the TypeScript that dist/ is compiled from
-      three/            the 2.5-D renderer and the three characters that use it,
-                        behind ./avatars/* and ./internal/three like any other
-                        avatar — a dynamic import, so an SVG consumer pays
-                        nothing for it
-    assets/             the compiled characters. The only non-JavaScript thing
-                        this package ships, fetched at runtime by URL, and the
-                        one directory another tree writes into
-    dist/               tsc output; gitignored, and the tarball's entry point
-    test/              the client suite, the package boundary, the rig sweep
-      three/            the characters' own numbers: the shipped GLBs, and what
-                        the mixer renders at their tuning
-    package.json        the published manifest and its export map
-  avatar-py/            voqalize-avatar: pyproject + src/voqalize_avatar/ + tests
-    native/avatarsync/  the rhubarb fork: patch, capi.cpp, build.sh,
-                        libavatarsync.* — nested inside the package whose
-                        wheel ships it
-
-docs/                   the contracts, binding for both packages
-package.json            the workspace manifest — private, publishes nothing
-```
-
-Then one tree per line, and which line a tree is on is the same question every
-time: does it contain the pipeline that makes a character?
-
-- **The public line adds `apps/server/`** — does it work in a real call? One
-  pipecat process, canned services, zero API keys, and the only place lipsync is
-  verified. It sits with the Python package because both are the backend, and
-  because a demo call with no keys in it is the first thing a consumer runs.
-- **The private line adds `packages/avatar-3d/`** — the forge: Blender scripts,
-  each character's sources and the instruments that drive them. It publishes
-  nothing and is not importable; its only output is one GLB per character written
-  into `packages/avatar/assets/`, which is the single path across which it feeds
-  anything. That tree is the reason there are two lines at all.
-- **The private line adds `apps/studio/` and `tools/`** — is the published
-  interface enough, and does the drawing read? Studio is one app with an
-  instrument per question, importing `@voqalize/avatar` as a consumer would, and
-  every instrument is also a URL that renders headless; `tools/` is the runners
-  that read those URLs, plus the release export.
-
-Each of those `apps/` answers exactly one question, and there is no third, which
-is load-bearing rather than tidy: `experiments/` was one, and a tree defined as
-"the things that are not any of those two" collects work nobody can say what it
-answers. The workshop that used to be the third was exactly that — it grew a
-second answer to "show me the avatar", and its pages are instruments now.
-
-`apps/studio/` is the second compiled tree and the second exception to "no build
-step" (`packages/avatar/client/` is the first). Nothing in
-`packages/avatar/src/` may depend on either — what you screenshot in an
-instrument is what ships.
-
-`packages/avatar-py/scripts/measure_durations.py` speaks the duration corpus through vql-speech
-and `packages/avatar-py/scripts/fit_durations.py` fits the two constants in `durations.py` from
-what came back — measure, then fit, then paste. Both live beside the corpus they
-read, `packages/avatar-py/tests/fixtures/duration_corpus.json`.
+An `apps/` tree answers exactly one question, and a tree defined as "the things
+that are not any of the others" is how that goes wrong: `experiments/` was one,
+and so was the workshop that grew a second answer to "show me the avatar". Its
+pages are instruments now.
 
 `packages/avatar/client/` is compiled with plain `tsc` — no bundler, no tsup —
 with `rootDir: client` and `outDir: dist`, which is what makes the emitted
@@ -391,29 +309,17 @@ consumer's graph. A bundler would have inlined a second one into the React
 binding, which is how a "widget updated but the React tile didn't" bug gets
 built.
 
-`files` is `src`, `client`, `dist`, `assets`, `LICENSE-CC-BY-4.0` — the widget,
-the sources the maps point at, the compiled entry point, the compiled characters
-and the licence those carry. `dist` is named explicitly rather than left to the
-directory walk because it is gitignored and npm applies `.gitignore` *within* a
-`files` entry; an explicitly named path is the documented way to win that
-argument. `LICENSE-CC-BY-4.0` is named for a blunter reason: npm adds `LICENSE`
-to a tarball on its own and nothing else, so a second licence file that is not
-listed simply does not ship — which is how a first attempt shipped the artwork
-and left its terms behind. **The contract documents no longer ship in the tarball.** They shipped
-until 0.3.0, on the reasoning that the wire is what an implementer needs; what
-that produced was a second copy of `docs/` going stale on npm between releases,
-against a repository that is public and always current. `README.md` and
-`LICENSE` are what npm includes on its own, and the README links out. `npm pack
---dry-run` is the check.
+`package.json`'s `files` is the canonical list of what ships. Two traps in it are
+worth saying out loud, because neither is visible from reading the list:
+**npm applies `.gitignore` semantics *within* a `files` entry**, so a gitignored
+build output has to be named explicitly to survive the walk; and **npm adds
+`LICENSE` to a tarball on its own and nothing else**, so a second licence file
+that is not listed simply does not ship — which is how a first attempt shipped
+the artwork and left its terms behind. `npm pack --dry-run` is the check.
 
-## What the split cost, and what it left behind
+## What the split left behind
 
-The first cutover moved ~3,570 lines out of the consumer and put 90 back. The
-consumer's pipeline file changed by six lines. Its frontend package went from a
-vendored widget plus its own dispatcher to a ~30-line preset of one `accept`
-predicate. Everything stayed green on both sides.
-
-Two things worth recording because they will recur:
+Worth recording, because they will recur:
 
 **A `link:`-shaped trap.** While a consumer points at a sibling checkout rather
 than a published version, the linked package brings its own `node_modules` —

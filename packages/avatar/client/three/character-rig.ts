@@ -1,30 +1,14 @@
 
 /**
- * tara's renderer: the `AvatarRig` contract (`apply(frame)` / `destroy()`)
- * over the Blender-authored GLB.
+ * The Blender characters' renderer: the `AvatarRig` contract (`apply(frame)` /
+ * `destroy()`) over a Blender-authored GLB. One of these drives every compiled
+ * character, and `createCharacter.ts` is what hands it one.
  *
  * The whole file is one idea — **the pose channel is the interface, and every
  * mapping here is a translation of one channel into the one control that
  * renders it.** `scripts/morphs.py` authored the shape keys under the library's
  * own channel names precisely so this file never has to interpret a viseme, a
  * state or an emotion; it receives a fully mixed pose and moves geometry.
- *
- * Three kinds of control, in the order they appear below:
- *
- *   morph targets  the face itself — lips, jaw, lids, brows, and the mouth
- *                  interior that has to choreograph with them
- *   head group     `headYaw` / `headPitch` / `headRoll`, as a rotation of the
- *                  parts that ride the skull about the jaw-angle pivot
- *   eye globes     `pupilX` / `pupilY`, as a rotation of the eyeball, because
- *                  the iris is painted onto a sphere and cannot slide
- *
- * and a fourth, for the body: `shoulderL/R` are morph targets on the torso
- * shell like any face channel, and `breath`, `torsoLean` and `torsoTurn` are
- * each one transform of a group — a swell, a scale, a sway (see `BODY`).
- *
- * An asset may add a fifth: expression maps, which change the face's *light*
- * where a smile or a raised brow would, because moving the geometry cannot
- * (see `expressive`).
  */
 
 import { REST } from "../internal.js";
@@ -40,96 +24,47 @@ import { HARD_BUDGET, pixelRatioFor } from "./budgets.js";
  * depth the triangle carrying it has. A perspective camera disagrees by
  * (offset from the axis) x (depth / distance) — which put the hair rim 3 px
  * above the hairline it is textured to and opened a black band across the
- * forehead. `build_tara.setup_scene` has the measurement.
+ * forehead. `build_character.setup_scene` has the measurement.
  */
 const FRAME = { bottom: -0.52, top: 1.46 };
 const FRAME_HEIGHT = FRAME.top - FRAME.bottom;
 const FRAME_CENTRE = (FRAME.top + FRAME.bottom) / 2;
 
 /**
- * Head motion, in degrees at the channel's own clamp of ±1.4.
+ * Head motion, in degrees at the channel's own clamp, so the envelope is
+ * unreachable by construction rather than by a second clamp nobody runs.
  *
- * These are the program's *working* envelope, mapped so that a channel pinned to
- * its limit lands exactly on it. That is the point of scaling by the clamp
- * rather than by 1: the mixer cannot ask for more than the envelope allows, and
- * the hard ceiling stays unreachable by construction instead of by a second
- * clamp nobody runs.
+ * Yaw is the tight axis: the albedo is a front-orthographic projection of a
+ * shallow shell, and a large turn is where that reads as a cardboard cutout
+ * rather than a head. A ladder rendered at 9/12/15/18/21/25/30 and read at crop
+ * is clean to 21° on tara and to 18° on the tightest of the others, so 15°
+ * keeps headroom; pitch and roll opened once `NECK_QUAD` made the neck's follow
+ * exact. How far a pose may be *held* is a stricter question, measured per
+ * character (`motion-limits.json`, applied through `holds.ts`).
  *
- * **It opened on 2026-09-12, from yaw ±6°, pitch ±5°, roll ±3°.** That
- * envelope made Busso's neutral-speech numbers unreachable: his mean
- * per-sentence pitch *range* is 9.5°, which is 95 % of everything ±5° could
- * ever produce, so speaking alone would have swung the channel corner to corner
- * and a deliberate nod on top of it would have had nowhere left to go. What had
- * held it there was the asset, not anatomy — the neck's follow was linear and
- * drew a second jawline past a few degrees — and once that follow became exact
- * (`NECK_QUAD` below) pitch could open to 24 and roll to 8.
+ * The yaw twist's two fields are an expansion in the angle, so their error
+ * grows as θ²/6 — 0.85 % at 15°, on a displacement that is itself a fraction of
+ * the neck's radius (`morphs.neck_twist`).
  *
- * Yaw is still the smallest because it is the one axis this rig is genuinely
- * constrained on: the albedo is a front-orthographic projection of a 0.34-deep
- * shell, and a large turn is where that reads as a cardboard cutout rather than
- * a head. **It opened from 9° to 15° on 2026-09-18.** The cutout was measured
- * rather than assumed — a ladder rendered at 9/12/15/18/21/25/30 and read at
- * crop on the characters that existed then is clean to 21° on tara and to 18°
- * on tanya and tushar. 9° was therefore set at half of where the artefact
- * actually begins, and the stiffness the owner reported on tanya's turns was
- * that margin, not her asset. 15° keeps 3° of headroom under the 18° the
- * tightest of them read.
- *
- * This is not for speech: Busso wants ±1.15° of yaw in neutral conversation and
- * always did. It is for a head that turns to *look* at something, which is what
- * mocap drives and what pegged the channel — a real 25° turn still saturates at
- * 15°, so this widens the envelope without making it generous.
- *
- * And it is not the angle a pose may be *held* at, which is a stricter question
- * with its own measurement per character (`motion-limits.json`, applied through
- * `holds.ts`): a turn that returns is forgiven what a sustained one is not. The
- * two numbers differ by about 3x on yaw and neither is a correction of the
- * other.
- *
- * **Editing these needs no rebuild, but it is not free.** The neck's fields
- * carry no angle, so `tara.glb` cannot go stale against them. What a number
- * here does move:
- *
- * - Every clip is authored in channel units, so a degree here re-sizes every
- *   clip driving that axis. `test/nods.test.ts` bands *pitch* only — `down`,
- *   `up`, `upFirst` — and computes `yawPP` without ever asserting it. A yaw
- *   change moves nothing there; a pitch change moves four tests.
- * - `head_parallax.py` and `validate_morphs.py` quote their gates at this
- *   envelope. `validate_morphs` reads `morphs.head_envelope()`, but
- *   `head_parallax.POSES` hardcoded `yaw 9` until 2026-09-18 and would have
- *   gone on grading 9° while the rig shipped 15° — a gate defending a number
- *   nothing used. It derives both angles from here now.
- * - The yaw twist's two fields are an expansion in the angle, so their error
- *   grows as θ²/6. Against the exact rotation at the maximum ramp
- *   (`NECK_TWIST` = 0.5) that is 0.31 % at 9°, 0.85 % at 15°, 1.23 % at 18°
- *   (`morphs.neck_twist`). The note here used to read as a wall at 9°; it is
- *   not one — 15° costs under a percent of a displacement that is itself a
- *   fraction of the neck's radius.
- *
- * TARA-SPECIFIC: each number is her reach before an artefact shows — yaw by
- * the cutout, pitch by the neck fold that starts to crease at 24° chin-up.
- * Both were measured on the shipping surface, one axis at a time. This is still
- * one shared pair of
- * constants for all three characters, which holds only because 15° is inside
- * every one of them; the first character that wants more than its neighbours
- * forces the envelope onto `TaraRigOptions` as a per-character fact. A second
- * avatar measures its own with the audit.
+ * TARA-SPECIFIC: reach before an artefact; see 3d-avatar-tara-specific.md.
  */
 // Exported through `internal.ts` for the instruments that need to put a real
 // angle *into* a channel, which is this scaling run backwards. The mocap
 // instrument kept its own copy for want of that export and said in a comment
-// that the copy would lie the day the envelope moved; it moved on 2026-09-18.
+// that the copy would lie the day the envelope moved; it moved.
 export const HEAD_CLAMP = 1.4;
 export const HEAD_DEG = { yaw: 15, pitch: 24, roll: 8 };
 
 /**
- * Where the head turns about, from `build_tara.PIVOT`, in glTF's Y-up frame:
- * Blender (x, y, z) exports as (x, z, −y). v 0.36 is the jaw angle and the
- * earlobe, and it sits a fifth of a face height *behind* the face plane —
- * a pivot on the surface spins the face in place, where a real yaw swings the
- * chin across as well as around, which is most of what makes a small turn read.
+ * Where the head turns about. v 0.36 is the jaw angle and the earlobe, and it
+ * sits a fifth of a face height *behind* the face plane — a pivot on the
+ * surface spins the face in place, where a real yaw swings the chin across as
+ * well as around, which is most of what makes a small turn read.
+ *
+ * The asset carries this (`stamp_abi`, as `head_pivot`); this is the fallback
+ * for a GLB built before the stamp.
  */
-const PIVOT = new THREE.Vector3(0.0, 0.36, -0.22);
+export const PIVOT = new THREE.Vector3(0.0, 0.36, -0.22);
 
 /**
  * Where the head *tilts* about, from `morphs.ROLL_PIVOT`: the midline just
@@ -140,56 +75,51 @@ const PIVOT = new THREE.Vector3(0.0, 0.36, -0.22);
  * pendulum hung from the ears.
  *
  * It sits inside the yaw and pitch, so a turned head still tilts about its own
- * chin. TARA-SPECIFIC: see `morphs.ROLL_PIVOT` for what fixed the height and
- * what a second avatar supplies.
+ * chin. The asset carries it (`stamp_abi`, as `roll_pivot`); this is the
+ * fallback for a GLB built before the stamp, and `morphs.ROLL_PIVOT` has what
+ * sets the height.
  */
-const ROLL_PIVOT = new THREE.Vector3(0.0, 0.05, -0.22);
+export const ROLL_PIVOT = new THREE.Vector3(0.0, 0.05, -0.22);
 
 /**
- * What the head takes with it, from `build_tara.HEAD_PARTS`. `Body` stays
- * behind, and so does `Neck` — but the neck is not *static*: it carries
- * `headYaw` / `headPitch` / `headRoll` morph targets of its own, ramped from
- * full under the jaw to nothing at the collar (`morphs.neck_targets`). Pitch and
- * roll are the same rotation this group gets; yaw is a twist about the neck's
- * own axis at half the angle, which keeps the neck's outline where it is
- * (`morphs.neck_twist`). They need no code here at all, which is the
- * whole reason they are morphs: they are named for pose channels that rest at
- * 0, so the loop below drives them like any other channel and the influence law
- * hands them the raw pose value.
+ * What the head takes with it, from `build_character.HEAD_PARTS`. `Body` stays
+ * behind, and so does `Neck` — but the neck is not *static*: it follows the
+ * skull through morph targets of its own (`NECK_QUAD` below).
  *
- * Without it a turn dragged the skull's jaw rim across a throat that had not
- * moved, and the rim landed mid-neck as a second jawline — invisible at the
- * 400 × 300 tile, obvious at a 3× crop.
+ * Without that follow a turn dragged the skull's jaw rim across a throat that
+ * had not moved, and the rim landed mid-neck as a second jawline — invisible at
+ * the 400 × 300 tile, obvious at a 3× crop.
+ *
+ * The asset carries its own list (`stamp_abi`, as `head_parts`); this is the
+ * fallback for a GLB built before the stamp.
  */
-const HEAD_PARTS = ["Head", "Ears", "Hair", "Eye_L", "Eye_R", "Cavity",
-  "Teeth_Upper", "Teeth_Lower", "Tongue"];
+export const HEAD_PARTS = ["Head", "Ears", "Hair", "Eye_L", "Eye_R", "Cavity",
+  "Teeth_Upper", "Teeth_Lower", "Tongue", "HairLayer"];
+
+/** One stamped vector, in glTF's frame already, or the rig's own fallback. */
+function stampedVec(extras: Record<string, unknown>, key: string, fallback: THREE.Vector3) {
+  const v = extras[key];
+  return Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number")
+    ? new THREE.Vector3(v[0], v[1], v[2]) : fallback.clone();
+}
 
 /**
  * The body, in face-space units (glTF y is face-space v) and degrees.
  *
- * Every mechanism is the SVG faces' (`face-core.poseTransforms`); the
- * amplitudes are set from the anatomy, which on this face is ~8.8 px per
- * centimetre at the 400 × 300 tile (crown to chin is 1.39 units of ~24 cm),
- * and land at about peep's travel as a share of the same tile. The first cut
- * was 0.6 of peep, on the theory that a photograph shows a millimetre a line
- * drawing cannot. Measured in a 30-second listening hold it moved the
- * shoulders 2 px, under 1 % of the tile, and read as a still with a tremor:
- * the head was moving more than the body carrying it. Anatomy is the floor,
- * not a fraction of a cartoon — these now put a listening hold at 4-5 px at
- * the shoulders, still slow, and still well under the 1.5 Hz ceiling.
+ * Every mechanism is the SVG faces' (`face-core.poseTransforms`), but anatomy
+ * is the floor here, not a fraction of a cartoon: at 0.6 of peep's travel a
+ * 30-second listening hold moved the shoulders 2 px and read as a still with a
+ * tremor — the head moving more than the body carrying it. These put that hold
+ * at 4-5 px, still slow, and still well under the 1.5 Hz ceiling.
  *
  * breath  A swell, not a slide (`docs/research-biomechanics.md` §6.1): the
- *         torso scales about a point 0.35 of a frame below the frame, as peep's
- *         does about its hem, so the shoulder line comes up 2.4 px at full
- *         inhale against a lower edge that moves two-thirds of that, and the
- *         chest widens 2 px a side. Quiet breathing changes chest
- *         circumference 2-3 %; 1.2 % wide is the calm end of that in linear
- *         scale, and the rise is a little more because in this crop — about
- *         5 cm of chest below the collar — what a breath shows is the upper
- *         ribs and clavicles lifting as much as the rib cage widening. The
- *         neck and head ride the lift at the collar, derived rather than tuned
- *         (peep's `neckLift`), so the neck cannot telescope: ~2.4 px, the
- *         2-3 mm a seated head really moves with a breath.
+ *         torso scales about a point below the frame, as peep's does about its
+ *         hem. The rise is a little more than the widening because what a
+ *         breath shows in this crop is the upper ribs and clavicles lifting as
+ *         much as the rib cage widening. The neck and head ride the lift at the
+ *         collar, derived rather than tuned (peep's `neckLift`), so the neck
+ *         cannot telescope — the 2-3 mm a seated head really moves with a
+ *         breath.
  * lean    `torsoLean` as a deformation of the trunk, on the shell itself
  *         (`morphs.torso_targets`) — hem pinned at the frame's lower edge, the
  *         shoulders spreading and tipping as they come nearer. Only the head's
@@ -197,18 +127,7 @@ const HEAD_PARTS = ["Head", "Ears", "Hair", "Eye_L", "Eye_R", "Cavity",
  *         head take a pure translation of `leanRide` and nothing else. That is
  *         Live2D's measured behaviour rather than a simplification — body angle
  *         moves every head part by 1.00 ± 0.02 and adds no differential motion
- *         inside the head (`docs/research-torso-motion.md` § 8 item 4).
- *
- *         It replaced a uniform `figure.scale.setScalar()`, which was peep's
- *         `LEAN_SCALE` carried onto photographic geometry and, with the
- *         orthographic camera outside the group it scaled, was arithmetically a
- *         zoom: fit the displacement as a linear map and its singular values
- *         came back equal to three decimals with no residual, at every lean the
- *         mixer produces. What it looked like was the owner's report — the
- *         shoulders swelling and dropping in half a second. The crown travelled
- *         4.56× what the eyes did, which is a head being scaled, not carried.
- *         A headless audit of what the crown travels against the eyes is that
- *         measurement, and its gates are what this change had to turn green.
+ *         inside the head (`docs/research-head-rotation.md` § 3.1).
  * sway    `torsoTurn` as the seated body's inverted pendulum: the whole figure
  *         rolls about the hips, ~45 cm below the collar, so the trunk shifts
  *         sideways and tips by a fraction of a degree together. peep slides
@@ -232,6 +151,9 @@ const BODY = {
    * plateaus `torsoLean`'s field at it above the collar, so the body's
    * deformation and the head's transform are one number and meet without a
    * seam — the same arrangement `lift.position.y` already has with the breath.
+   * A uniform scale of the whole figure in its place is a zoom and not a lean:
+   * the crown travels 4.56× what the eyes do, which is a head being scaled
+   * rather than carried.
    */
   leanRide: 0.021,
   hip: -2.9,
@@ -260,34 +182,28 @@ const EYE_TILE = 0.3;
 /** Degrees per pose unit: the globe turns `pupil * GAZE_TRAVEL / GLOBE_RADIUS`
  *  radians, and the head reaches `HEAD_DEG` at the clamp.
  *
- *  Exported through `internal.ts` for the same reason as the head envelope: an
- *  instrument that asks for "eyes on the camera through a head turn" is running
- *  this conversion backwards, and a second copy of it would be a second thing to
- *  update when the eye tile or the globe changes. */
+ *  Exported through `internal.ts` for the same reason as the head envelope. */
 export const EYE_DEG = { x: (GAZE_TRAVEL.x / GLOBE_RADIUS) * 180 / Math.PI, y: (GAZE_TRAVEL.y / GLOBE_RADIUS) * 180 / Math.PI };
 const HEAD_UNIT_DEG = { x: HEAD_DEG.yaw / HEAD_CLAMP, y: HEAD_DEG.pitch / HEAD_CLAMP };
 
 /**
- * The mixer's per-rig calibration for tara, passed by `tara.ts` and the motion
- * audit so both measure the same face. A pose unit is an angle here and a
- * pixel count on an SVG face, so the speech layer's amplitudes are tuned per
- * rig rather than in the library: `prosodyHeadGain` sizes speech-rhythm head
- * motion against this face's own motion envelope.
+ * The mixer's per-rig calibration, passed by the character's entry point and by
+ * the motion audit so both measure the same face. A pose unit is an angle here
+ * and a pixel count on an SVG face, so the speech layer's amplitudes are tuned
+ * per rig rather than in the library.
  *
- * `oculomotor` is the eye-head system sized for this face (`gaze.js`). Her eye
- * turns 10° a pupil unit and her head 6.4° of yaw a head unit, and the shared
- * look table — drawn for a line face, whose pupils cross most of an eye — put
- * every look in the eyes: a thinking look away was the iris parked in the
- * corner of the socket for two thirds of the state, which is side-eye, not
- * thought. Here the head carries about 60 % of a look and the eyes land a third
- * of the way off centre, where a real eye-head shift leaves them (Freedman &
- * Sparks; Pejsa & Andrist). The comment on each target is its world angle,
- * x right and y down.
+ * The shared look table is drawn for a line face, whose pupils cross most of an
+ * eye, so it put every look in the eyes: a thinking look away was the iris
+ * parked in the corner of the socket for two thirds of the state, which is
+ * side-eye, not thought. Here the head carries about 60 % of a look and the
+ * eyes land a third of the way off centre, where a real eye-head shift leaves
+ * them (Freedman & Sparks; Pejsa & Andrist). The comment on each target is its
+ * world angle, x right and y down.
  *
  *   vor        Real gain in the light is close to 1. A little under leaves the
  *              head some say, so a nod carries the eyes a touch with it rather
- *              than pinning them to the lens. Vertically it is well under
- *              (2026-09-15): her pitch is a shell tipping on a photograph and
+ *              than pinning them to the lens. Vertically it is well under:
+ *              her pitch is a shell tipping on a photograph and
  *              reads as a fraction of what it is, so the eyes' full answer to
  *              it read as the eyes moving on their own — at 0.8, THINKING's
  *              up-look rolled the iris to the lid with white beneath it, and
@@ -321,10 +237,9 @@ const HEAD_UNIT_DEG = { x: HEAD_DEG.yaw / HEAD_CLAMP, y: HEAD_DEG.pitch / HEAD_C
  * does not have: the neck's outline holds under a twist by construction
  * (`morphs.neck_twist`), so the trunk's sway is what is left moving it — a
  * quarter to a third of it at the yaw peak in the recorded call, read as the
- * neck sliding. TARA-SPECIFIC in its evidence only: a second Blender avatar
- * starts from 0.3 and checks its own outline at crop.
+ * neck sliding.
  */
-export const TARA_TUNING = {
+export const CHARACTER_TUNING = {
   prosodyHeadGain: 1.0, prosodyFaceGain: 1, saccadeGain: 2.4, aversionGain: 1.8,
   trunkFollow: 0.3,
   // **The speaking face's upper half, sized for a photograph.** A reviewer read
@@ -350,9 +265,6 @@ export const TARA_TUNING = {
   // is being relaxed for holds `browInner` at 0.22 for the whole of `CANT_HEAR`
   // and was praised for it. Still a transient on a 0.55 s envelope, never a
   // held shape: the prohibition is on the hold, not the event.
-  //
-  // TARA-SPECIFIC, and fork debt: on a driver of her own these are three
-  // constants beside the research comment, not an option on a shared mixer.
   brows: {
     range: [-0.28, 0.24],
     floor: 0.11,
@@ -369,8 +281,6 @@ export const TARA_TUNING = {
     // closes them to a squint the owner read as straining at the screen, not
     // working. Her reading scan carries the state instead: eyes off the user,
     // stepping along a line, the way a person at their own display looks.
-    // TARA-SPECIFIC: a photographic face with a deeper lid crease may want
-    // some of the knit back; judge it at crop against LISTENING.
     WORKING: {
       pose: { headPitch: 0.04, lidL: -0.08, lidR: -0.08, shoulderL: 0.06, shoulderR: 0.06 },
     },
@@ -382,23 +292,11 @@ export const TARA_TUNING = {
     // which the shared comment already says of them. The brows keep a small
     // knit with the inner ends up: effort that is also asking. The mouth is
     // pressed at a photograph's scale; the shared -0.22 corners clear peep's
-    // drawn smile, and hers rests neutral. TARA-SPECIFIC: the squint morph's
-    // cheek push is what darkens, so a face built without one might keep a
-    // little squint — check the band under the eye at crop.
+    // drawn smile, and a compiled face rests neutral.
     //
-    // The lean is attentive-sized, not the shared 0.70. Until 2026-09-16 her
-    // lean scaled the whole figure about mid-face (`BODY`), so 0.70 plus the
-    // engage add was a 4.4% zoom arriving on torsoLean's 0.24 s tau: the
-    // shoulders swelled and dropped in half a second, read by the owner as a
-    // lurch nothing like a lean. 0.22 sits in the research's sustained band
-    // (+0.15–0.25, research-biomechanics.md §6.3) and the ear and chin carry
-    // the rest.
-    //
-    // The lean deforms the trunk now, which is exactly the condition the old
-    // note here predicted might afford more. It is left at 0.22 on purpose: the
-    // cut was made by eye at crop, and putting it back is the same kind of
-    // judgement rather than a consequence of the field changing. TARA-SPECIFIC,
-    // and the thing to re-judge first if she reads as under-committed.
+    // The lean is attentive-sized, not the shared 0.70: 0.22 sits in the
+    // sustained band (+0.15–0.25, research-biomechanics.md §6.3), and the ear
+    // and chin carry the rest.
     CANT_HEAR: {
       pose: {
         torsoLean: 0.22, headPitch: 0.10,
@@ -410,7 +308,7 @@ export const TARA_TUNING = {
     // at 0.40 left the eyes half-lidded from below over a dark band. The hunt
     // is the wander and the flick; the face only has to be not smiling, and
     // on a mouth that rests neutral that is a small press, not peep's -0.25
-    // corners. TARA-SPECIFIC, the same way as CANT_HEAR.
+    // corners.
     SEARCHING_SCREEN: {
       pose: { mouthPress: 0.40, mouthCornerL: -0.08, mouthCornerR: -0.08,
               browRaiseL: -0.10, browRaiseR: -0.06 },
@@ -430,7 +328,6 @@ export const TARA_TUNING = {
       // sat — hooded to a lid of 0.25-0.43 against listening's 0.14, read as
       // a squint rather than reading. Here it holds 0.12-0.18 through the
       // scan, and being off the user to the side is what says "busy".
-      // TARA-SPECIFIC: the depth that hoods is her lid crease's.
       OWN_SCREEN:    { px:  0.14, py:  0.24, hx:  0.10, hy:  0.06 },
       // 2.6° of head turn toward the user's side and 3.1° of roll, the eyes
       // countered 2.0° back onto them: the ear offered, contact held from
@@ -471,6 +368,15 @@ export const TARA_TUNING = {
   },
 } as const;
 
+/** How far a closing lid darkens the eye it covers, from where it starts to.
+ * The lid's margin and lashes throw the strip of white still showing into
+ * shadow; the atlas's socket shade was measured with the eye open and cannot
+ * know that, so without this the last frames before a blink closes show a
+ * bright line under a dark lash band — what a reviewer called the sclera
+ * tearing across the lid. */
+const LID_SHADE = 0.55;
+const LID_SHADE_FROM = 0.3;
+
 /**
  * The eye material, taught to hold its socket still while the globe turns.
  *
@@ -485,7 +391,8 @@ export const TARA_TUNING = {
  * texture read on two small meshes; no pass, no draw call.
  */
 function socketed(base: THREE.MeshStandardMaterial, side: number,
-                  gaze: { value: THREE.Matrix3 }, deep: boolean) {
+                  gaze: { value: THREE.Matrix3 }, deep: boolean,
+                  lid: { value: number }) {
   const material = base.clone();
   // d(u)/dx and d(v)/dy of `head_mesh.eye_uvs`: the globe is half the atlas
   // wide, the right eye reads it mirrored, and glTF flips v.
@@ -493,6 +400,7 @@ function socketed(base: THREE.MeshStandardMaterial, side: number,
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uGaze = gaze;
     shader.uniforms.uSocket = socket;
+    shader.uniforms.uLidShade = lid;
     // The globe's hidden skirt turns at the frame's motion depth like the skin
     // that hides it; its visible cap carries a field of exactly zero, so the
     // socket, the iris and gaze below are unaffected by this. It turns at the
@@ -506,9 +414,10 @@ function socketed(base: THREE.MeshStandardMaterial, side: number,
         "#include <uv_vertex>\nvSocketUv = vMapUv + vec2(0.5, 0.0)"
         + " + uSocket * ((uGaze * position).xy - position.xy);");
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <uv_pars_fragment>", "#include <uv_pars_fragment>\nvarying vec2 vSocketUv;")
+      .replace("#include <uv_pars_fragment>",
+        "#include <uv_pars_fragment>\nvarying vec2 vSocketUv;\nuniform float uLidShade;")
       .replace("#include <map_fragment>",
-        "vec3 socket = 2.0 * texture2D( map, vSocketUv ).rgb;\n#include <map_fragment>\ndiffuseColor.rgb *= socket;")
+        "vec3 socket = uLidShade * 2.0 * texture2D( map, vSocketUv ).rgb;\n#include <map_fragment>\ndiffuseColor.rgb *= socket;")
       .replace("#include <emissivemap_fragment>",
         "#include <emissivemap_fragment>\ntotalEmissiveRadiance *= socket;");
   };
@@ -516,133 +425,245 @@ function socketed(base: THREE.MeshStandardMaterial, side: number,
   return material;
 }
 
-/** `cavityShade`'s two measured heights, in the cavity patch's own normalised
- * rest height — 0 at the bottom of its bounding box, 1 at the top, morph deltas
- * included, because `computeBoundingBox` counts them and the shader normalises
- * by that same call.
+/**
+ * tess's "ah" photograph, down the midline of her open mouth: the colour at
+ * each depth into the lip opening, 0 at the upper lip's inner rim and 1 at the
+ * lower's, in sRGB as the photograph has it. Read at MediaPipe's inner-lip
+ * points 13 and 14, which is the same rim `build_character.lip_aperture` stamps.
  *
- * Both were read off a ruler build that painted the normalised height into the
- * emissive term, where the output bypasses the lamps and decodes straight back
- * to the height that produced it. It found two things worth keeping.
- *
- * `seam` is the height a *closed* mouth shows: pixel-weighted 0.805 on tara and
- * 0.808 on tushar, near enough identical to be one constant rather than a
- * per-character tuning. It is deliberately the pivot — see `cavityShade`.
- *
- * `falloff` is sized against the band an *open* mouth exposes, and that band is
- * why this is measured rather than guessed: it is 0.70..0.89, the top fifth of
- * the patch, with nothing below it even at jaw 1 and mouthOpen 1 — the patch
- * runs far past the aperture on purpose, so that its lower edge can chase the
- * lip without ever reaching the chin (`build_tara`, the cavity's lower edge). A
- * ramp laid across the whole patch would put a fifth of its range in the only
- * part anyone sees, which is the mistake the lower arch's `floor` made one
- * commit ago by being sized against its tile instead of its visible band.
- *
- * At 8 the multiplier runs 0.51 at the top of that band to 2.32 at the bottom.
- * Neither clamp engages anywhere the aperture reaches; they are there so that a
- * future morph exposing more of the patch cannot blow the exponential up.
+ * The shape is the thing to keep, and every reviewer's "pink and flat" is its
+ * absence: dark in the shadow of the upper arch, rising to the tongue's front
+ * two-thirds of the way down, and falling again into the floor of the mouth
+ * above the lower arch. Where either arch covers a stretch of this, what the
+ * photograph measured there is enamel and was left out — the arches draw
+ * themselves.
  */
-const CAVITY_SHADE = { seam: 0.805, falloff: 8, min: 0.35, max: 2.6 };
+const INTERIOR: ReadonlyArray<readonly [number, readonly [number, number, number]]> = [
+  [0.15, [60, 22, 26]],
+  [0.30, [84, 35, 41]],
+  [0.45, [122, 62, 68]],
+  [0.60, [159, 87, 93]],
+  [0.70, [144, 60, 61]],
+  [0.80, [52, 17, 15]],
+  [0.90, [40, 12, 12]],
+];
 
 /**
- * The inside of the mouth, shaded by how far the light has to reach into it.
- *
- * Both video reviewers called the open mouth "a dark void", and a luminance
- * profile says why in one number: through viseme D's aperture the cavity
- * renders ten consecutive rows inside a single level of 255 — 49.6 down to 48.7
- * on tara, 49.3 to 48.6 on tushar — between an upper arch at 232 and a lower
- * one at 163. Every other band in that column moves tens of levels per row. The
- * complaint is not that the interior is too dark, then. It is that it is the
- * one surface on this face with no variation in it at all, and a
- * constant-valued region reads as a hole cut in the head rather than as a space
- * behind it.
- *
- * It is flat because it is the only mouth surface that is genuinely *lit*.
- * `build_tara.flat_material` gives it no emissive term, where the teeth beside
- * it carry `emissiveFactor` 0.75 and their photograph's own light with it — so
- * all of the cavity comes from the lamps, and those are 0.62π of ambient
- * against a patch whose normal barely turns. Ambient on a constant normal is a
- * constant.
- *
- * This is authored rather than sampled, which is the wrong way round for this
- * repo and worth saying why: the reference is a *smile*, and a smile shows no
- * interior — the same fact that left the lower arch with no enamel to copy.
- * There is no photograph of this mouth's inside to project, so the choice is an
- * authored gradient or the flat colour, and it is kept modest for it.
- *
- * Authored rather than derived, too. The true form factor from a flat backdrop
- * to the aperture in front of it is *brightest at the centre*, which is exactly
- * backwards: a real mouth is darkest in the middle because it is a tunnel
- * there, and this one is a curtain — `build_tara` parks it in front of the
- * teeth so a closed mouth has something dark to show, and walks it back past
- * them as the jaw drops. So this shades the mouth it stands for, not the
- * geometry it is drawn on.
- *
- * The pivot is what makes that safe. `CAVITY_SHADE.seam` is the height the
- * closed mouth shows, so the multiplier is 1.0 there by construction and the
- * rest pose barely moves: measured over the whole mouth region, at most 4
- * levels of 255 on tara and 3 on tushar. Not nothing, and not worth claiming as
- * nothing — but it matters that it is small, because "a closed mouth is a dark
- * line" is this surface's first job, and `landmarks.PALETTE.cavity` is the
- * colour of that line and stays the authority on it.
- *
- * Opening the mouth reveals the rest: darker above the seam, lighter below it.
- * Where those two halves actually land is not symmetric and not the same on the
- * two characters, because what hides the cavity is the upper arch, and the
- * arches differ. Down the middle of tara's mouth the arch reaches to roughly
- * the seam, so the centre gets the lighter half nearly alone — the ten flat
- * rows above become 50 at the top of the aperture rising to 83 at its bottom,
- * which is the floor the aperture faces. The darker half surfaces instead in
- * two lobes flanking the arch, where the aperture runs wider than the teeth do
- * and so exposes cavity above the seam: −4 levels on tara, −5 on tushar. Those
- * lobes are the commissures, and their being the deepest part of the mouth is
- * right for a reason this shader did not plan — it falls out of a vertical ramp
- * meeting a curved arch.
- *
- * tushar gets the darker half down the centre as well, 49.3 to 43.6, because
- * his teeth are narrower — `TEETH.half_width` 0.110 against tara's 0.132 — so
- * his aperture exposes cavity above the seam in the middle too. One constant,
- * two characters, two different-looking mouths, and the difference between them
- * is the arch's width showing through. That is the argument for the constant
- * staying shared rather than being tuned per character: it is already reading a
- * per-character fact, just not one of its own.
+ * The same photograph across the opening: the middle two-fifths hold the
+ * midline's colour and the rest falls to a fifth of it at the commissure — her
+ * 0.65 of enamel at the widest row is 0.44 halfway out and 0.1–0.2 at the
+ * corner. `from` is where the fall starts and `to` what is left at the corner,
+ * both as a share of the opening's half-width.
  */
-function cavityShade(base: THREE.MeshStandardMaterial, lo: number, hi: number) {
+const INTERIOR_RIM = { from: 0.4, to: 0.2 };
+
+/**
+ * The photograph's enamel is 158 of 255 and the rendered upper arch's is about
+ * 232, so the profile is carried over at the ratio of the two: the interior is
+ * as dark *against the teeth* as hers is, which is the only comparison anyone
+ * makes looking into a mouth.
+ */
+const INTERIOR_GAIN = 232 / 158;
+
+/**
+ * How open her mouth is in that photograph: 185 px between the inner rims at the
+ * midline over 229 between the inner corners (MediaPipe 13/14 and 78/308). A
+ * speaking mouth is rarely a third of that, and the light reaching into it
+ * falls with the opening, so the profile is dimmed by the square root of the
+ * ratio — between the solid angle's own square law, which turned every
+ * conversational viseme into a hole, and none at all, which left each one the
+ * lit pink band reviewers called flat.
+ */
+const INTERIOR_OPEN = 185 / 229;
+
+/** That dimming, in GLSL, over the `uAperture` the mouth's shaders share. */
+const OPENNESS = `sqrt(clamp(uAperture.w / (2.0 * uAperture.z * ${INTERIOR_OPEN.toFixed(3)}), 0.0, 1.0))`;
+
+/**
+ * Where a raised tongue is read from: `tongue` = 1 paints the surface it lifts
+ * into the opening as if it were at this depth — the photograph's brightest
+ * row — rather than in the shadow of the upper arch it has moved into.
+ */
+const TONGUE_LIFT_AT = 0.60;
+
+/** An `INTERIOR` knot as linear light, at `INTERIOR_GAIN`. */
+function interiorKnot(rgb: readonly [number, number, number]) {
+  return new THREE.Color().setRGB(
+    ...(rgb.map((v) => Math.min(1, (v * INTERIOR_GAIN) / 255)) as [number, number, number]), THREE.SRGBColorSpace);
+}
+
+const glslColor = (c: THREE.Color) => `vec3(${c.r.toFixed(5)}, ${c.g.toFixed(5)}, ${c.b.toFixed(5)})`;
+
+/** GLSL: `vec3 interior`, the profile at depth `mouthA` in the opening. */
+function interiorProfile() {
+  let profile = `vec3 interior = ${glslColor(interiorKnot(INTERIOR[0][1]))};\n`;
+  for (let i = 1; i < INTERIOR.length; i++) {
+    const [a0] = INTERIOR[i - 1];
+    const [a1, rgb] = INTERIOR[i];
+    profile += `interior = mix(interior, ${glslColor(interiorKnot(rgb))}, clamp((mouthA - ${a0.toFixed(3)}) / ${(a1 - a0).toFixed(3)}, 0.0, 1.0));\n`;
+  }
+  return profile;
+}
+
+/**
+ * The inside of the mouth — the tongue and the cavity behind it — painted from
+ * a photograph of one, at where each point sits in the lip opening the pose
+ * has made.
+ *
+ * The opening, and not the surface, because that is how the photograph's
+ * profile arises: the light reaching into a mouth is gated by the lips and
+ * shadowed by the upper arch, so the same point of tongue is bright when the
+ * jaw drops and dark when it closes. A shade stuck to the surface — what this
+ * replaced — reads as a lit object behind a hole, which at viseme D was a flat
+ * mauve plate, and at C and H put the tongue's bright crest directly under the
+ * upper teeth with dark below it: the order of the photograph, inverted.
+ *
+ * Emitted rather than lit, and entirely: this is sampled light, like the 75%
+ * of the face that is the photograph verbatim, and a key from above lights the
+ * dorsum brightest at its back, which is the one thing a mouth never looks
+ * like. Both surfaces take the same profile, so her mouth's absence of any
+ * tongue-to-cavity edge carries over; only a raised tongue is told apart, by
+ * `lift`, because a tongue tip at the teeth is what viseme H is.
+ */
+function mouthInterior(base: THREE.MeshStandardMaterial,
+                       aperture: { value: THREE.Vector4 }, lift: { value: number }) {
   const material = base.clone();
-  const span = { value: new THREE.Vector2(lo, (hi - lo) || 1) };
-  const shade = {
-    value: new THREE.Vector4(CAVITY_SHADE.seam, CAVITY_SHADE.falloff,
-                             CAVITY_SHADE.min, CAVITY_SHADE.max),
-  };
+  const profile = interiorProfile();
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.uCavitySpan = span;
-    shader.uniforms.uCavityShade = shade;
+    shader.uniforms.uAperture = aperture;
+    shader.uniforms.uMouthLift = lift;
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>",
-        "#include <common>\nvarying float vCavityAt;\nuniform vec2 uCavitySpan;")
-      // `position`, not `transformed`: `morphs.cavity_targets` translates this
-      // patch back and drops its lower edge as the jaw opens, and this shading
-      // is painted *on* the surface — so it has to ride that, not be swept
-      // across it. The raw attribute is the rest frame, before the morphs.
-      .replace("#include <begin_vertex>",
-        "#include <begin_vertex>\nvCavityAt = (position.y - uCavitySpan.x) / uCavitySpan.y;");
+      .replace("#include <common>", "#include <common>\nvarying vec2 vMouthAt;")
+      // `transformed` after the morphs, unlike every other shade in this file:
+      // where the surface *is* in the opening is the whole question.
+      .replace("#include <morphtarget_vertex>",
+        "#include <morphtarget_vertex>\nvMouthAt = transformed.xy;");
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>",
-        "#include <common>\nvarying float vCavityAt;\nuniform vec4 uCavityShade;")
-      // No `emissivemap_fragment` half, unlike `jawShadow` and `socketed`:
-      // those modulate surfaces that emit 75% of a photograph verbatim, and
-      // this one has no emissive term at all. The diffuse is the whole output.
+        "#include <common>\nvarying vec2 vMouthAt;\nuniform vec4 uAperture;\nuniform float uMouthLift;")
+      .replace("#include <map_fragment>",
+        "#include <map_fragment>\ndiffuseColor.rgb = vec3(0.0);")
+      .replace("#include <emissivemap_fragment>",
+        "#include <emissivemap_fragment>\n"
+        + "float mouthA = (uAperture.y - vMouthAt.y) / uAperture.w;\n"
+        + `mouthA = mouthA < ${TONGUE_LIFT_AT.toFixed(2)} ? mix(mouthA, ${TONGUE_LIFT_AT.toFixed(2)}, uMouthLift) : mouthA;\n`
+        + "float mouthS = abs(vMouthAt.x - uAperture.x) / uAperture.z;\n"
+        + profile
+        + `interior *= ${OPENNESS};\n`
+        + `totalEmissiveRadiance = interior * mix(1.0, ${INTERIOR_RIM.to.toFixed(2)}, smoothstep(${INTERIOR_RIM.from.toFixed(2)}, 1.0, mouthS));`);
+  };
+  material.customProgramCacheKey = () => "mouth-interior";
+  return material;
+}
+
+/**
+ * The lower arch, lit by the light the tongue beside it is lit by.
+ *
+ * Its tile is toned against the upper arch on a smile (`project_albedo`), a
+ * mouth open wide and pulled back, where the lower teeth take nearly the upper
+ * ones' light. Speaking, they are the deepest thing the opening shows, and
+ * tess's "ah" — open wider than any viseme — shows no lower crown at all: the
+ * row above where they would be is the darkest in the photograph. Left at the
+ * smile's tone, the sliver a C or D uncovers was a lit grey rule between that
+ * dark and the lip, which reads as a wire and not as teeth.
+ *
+ * So the arch takes the interior's light where it stands: the profile at its
+ * depth in the opening over the profile's brightest row, which is the tongue
+ * lit as well as anything in a mouth is, and the same openness dimming. The
+ * ratio is in linear light and per channel, so the enamel goes as dark and as
+ * warm as the mouth around it, and its top edge — higher in the opening —
+ * keeps the most. The upper arch, at the lip and in the light, keeps its own.
+ */
+function lowerArch(base: THREE.MeshStandardMaterial, aperture: { value: THREE.Vector4 }) {
+  const material = base.clone();
+  const peak = interiorKnot(INTERIOR.reduce((a, b) => (b[1][0] + b[1][1] + b[1][2] > a[1][0] + a[1][1] + a[1][2] ? b : a))[1]);
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uAperture = aperture;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vMouthAt;")
+      .replace("#include <morphtarget_vertex>", "#include <morphtarget_vertex>\nvMouthAt = transformed.xy;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vMouthAt;\nuniform vec4 uAperture;")
+      // Both terms: the teeth are three-quarters sampled light (`emissive`
+      // in the build's `flat_material`), so dimming the lit part alone does
+      // almost nothing.
       .replace("#include <map_fragment>",
         "#include <map_fragment>\n"
-        + "float cavityK = exp(uCavityShade.y * (uCavityShade.x - vCavityAt));\n"
-        + "diffuseColor.rgb *= clamp(cavityK, uCavityShade.z, uCavityShade.w);");
+        + "float mouthA = (uAperture.y - vMouthAt.y) / uAperture.w;\n"
+        + interiorProfile()
+        + `vec3 archLight = min(interior / ${glslColor(peak)}, vec3(1.0)) * ${OPENNESS};\n`
+        + "diffuseColor.rgb *= archLight;")
+      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance *= archLight;");
   };
-  material.customProgramCacheKey = () => "tara-cavity-shade";
+  material.customProgramCacheKey = () => "lower-arch";
+  return material;
+}
+
+/**
+ * The upper arch, with the gaps between its teeth showing the mouth.
+ *
+ * `project_albedo.project_teeth` paints everything under the incisal edge
+ * that is not a tooth — the notches between the tips — in `notch`, a neutral
+ * near-black, because the tile cannot know what the mouth behind it will be.
+ * Rendered, that strip came out a hard grey saw along the bottom of the arch:
+ * neutral against a warm interior, and at the arch's light rather than the
+ * mouth's. A gap in a row of teeth is a window onto the cavity, so it takes
+ * the cavity's own light at that height in the opening, and only the gap does
+ * — `notch` is darker than any enamel the tile carries, shaded overhang
+ * included, so the test is the texel's own brightness, and a filtered texel
+ * on a tip's edge takes a share of each.
+ */
+function upperArch(base: THREE.MeshStandardMaterial, aperture: { value: THREE.Vector4 }) {
+  const material = base.clone();
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uAperture = aperture;
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vMouthAt;")
+      .replace("#include <morphtarget_vertex>", "#include <morphtarget_vertex>\nvMouthAt = transformed.xy;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying vec2 vMouthAt;\nuniform vec4 uAperture;")
+      .replace("#include <map_fragment>",
+        "#include <map_fragment>\n"
+        + "float archGap = 1.0 - smoothstep(0.01, 0.30, dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));\n"
+        + "diffuseColor.rgb *= 1.0 - archGap;")
+      .replace("#include <emissivemap_fragment>",
+        "#include <emissivemap_fragment>\n"
+        + "float mouthA = (uAperture.y - vMouthAt.y) / uAperture.w;\n"
+        + interiorProfile()
+        + `totalEmissiveRadiance = mix(totalEmissiveRadiance, interior * ${OPENNESS}, archGap);`);
+  };
+  material.customProgramCacheKey = () => "upper-arch";
   return material;
 }
 
 /** `scripts/head_mesh.MOTION_DEPTH_ATTR`, as GLTFLoader names it: lowercased. */
 const MOTION_DEPTH = "_motion_depth";
+
+/**
+ * The vertex half of `motionDepth`, which the eye's socket shader needs too.
+ *
+ * It is a free function rather than inheritance because `Material.copy` does not
+ * carry `onBeforeCompile`: cloning a motion-depth material and giving the clone
+ * a second injection drops the first one silently, with no error and a rest pose
+ * that looks right. The two are composed by hand instead.
+ */
+function turnDeep(shader: { vertexShader: string }, undoGaze = false) {
+  // `undoGaze` is for the globes, and without it the cure draws a worse defect
+  // than the one it removes. A globe is *rotated* for gaze, so its own
+  // `modelViewMatrix` carries that rotation: building the offset from it tilts
+  // (0, 0, Δz) into the screen plane and slides the hidden skirt out past the
+  // temple on a look alone, head square on, where the skin it hides behind has
+  // not moved at all. The frame's rotation is the one the skirt must follow, and
+  // `uGaze` is exactly the extra rotation to take back out — multiplying the
+  // vector from the left is its inverse, so this needs no second uniform.
+  const depth = `vec3(0.0, 0.0, ${MOTION_DEPTH})`;
+  shader.vertexShader = shader.vertexShader
+    .replace("#include <common>", `#include <common>\nattribute float ${MOTION_DEPTH};`)
+    .replace("#include <project_vertex>",
+      "#include <project_vertex>\n"
+      + `mvPosition.xy += (modelViewMatrix * vec4(${undoGaze ? `${depth} * uGaze` : depth}, 0.0)).xy;\n`
+      + "gl_Position = projectionMatrix * mvPosition;");
+}
 
 /**
  * The head's frame, taught to turn as if it sat deeper than it does.
@@ -659,40 +680,25 @@ const MOTION_DEPTH = "_motion_depth";
  *
  * The attribute decides, not the mesh name: the neck shares the skin material
  * and has no field, which is why each head shell gets a clone. The same clone
- * wears the expression maps, when the asset has them: the three shells are
- * exactly the ones textured from the face atlas the maps are registered to.
+ * wears the expression maps, when the asset has them: the shells textured from
+ * the face atlas are exactly the ones those maps are registered to.
  */
-/**
- * The vertex half of `motionDepth`, which the eye's socket shader needs too.
- *
- * It is a free function rather than inheritance because `Material.copy` does not
- * carry `onBeforeCompile`: cloning a motion-depth material and giving the clone
- * a second injection drops the first one silently, with no error and a rest pose
- * that looks right. The two are composed by hand instead.
- */
-function turnDeep(shader: { vertexShader: string }, undoGaze = false) {
-  // `undoGaze` is for the globes, and without it the cure draws a worse defect
-  // than the one it removes. A globe is *rotated* for gaze, so its own
-  // `modelViewMatrix` carries that rotation: building the offset from it tilts
-  // (0, 0, Δz) into the screen plane and slides the hidden skirt out past the
-  // temple on a look alone, head square on, where the skin it hides behind has
-  // not moved at all. The frame's rotation is the one the skirt must follow, and
-  // `uGaze` is exactly the extra rotation to take back out. A rotation's inverse
-  // is its transpose, and a vector multiplied from the left is the transpose
-  // multiply, so this needs no second uniform and no `transpose()`.
-  const depth = `vec3(0.0, 0.0, ${MOTION_DEPTH})`;
-  shader.vertexShader = shader.vertexShader
-    .replace("#include <common>", `#include <common>\nattribute float ${MOTION_DEPTH};`)
-    .replace("#include <project_vertex>",
-      "#include <project_vertex>\n"
-      + `mvPosition.xy += (modelViewMatrix * vec4(${undoGaze ? `${depth} * uGaze` : depth}, 0.0)).xy;\n`
-      + "gl_Position = projectionMatrix * mvPosition;");
-}
-
-function motionDepth(base: THREE.MeshStandardMaterial, expression?: Expression) {
+function motionDepth(base: THREE.MeshStandardMaterial, expression?: Expression, shut?: Shut) {
   const material = base.clone();
   material.onBeforeCompile = (shader) => {
     turnDeep(shader);
+    if (shut) {
+      Object.assign(shader.uniforms, shut.uniforms);
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", `#include <common>\n${SHUT_VERTEX_HEAD}`)
+        .replace("#include <uv_vertex>", `#include <uv_vertex>\n${SHUT_VERTEX}`);
+      shader.fragmentShader = shader.fragmentShader
+        .replace("#include <common>", `#include <common>\n${SHUT_UNIFORMS}`)
+        .replace("#include <map_fragment>", `#include <map_fragment>\n${SHUT_FRAGMENT}`)
+        .replace("#include <emissivemap_fragment>",
+          "#include <emissivemap_fragment>\n"
+          + "totalEmissiveRadiance = mix(totalEmissiveRadiance, emissive * shutColour, shutWeight);");
+    }
     if (!expression) return;
     const n = expression.names.length;
     Object.assign(shader.uniforms, expression.uniforms);
@@ -703,7 +709,8 @@ function motionDepth(base: THREE.MeshStandardMaterial, expression?: Expression) 
         "#include <emissivemap_fragment>\ntotalEmissiveRadiance *= expression;");
   };
   material.customProgramCacheKey = () =>
-    (expression ? `tara-motion-depth-expression-${expression.names.length}` : "tara-motion-depth");
+    ["tara-motion-depth", expression && `expression-${expression.names.length}`, shut && "shut"]
+      .filter(Boolean).join("-");
   return material;
 }
 
@@ -711,31 +718,19 @@ function motionDepth(base: THREE.MeshStandardMaterial, expression?: Expression) 
  * Expression maps: the light a smile or a raised brow changes, which the
  * geometry cannot.
  *
- * A pixel of this face is 75% photograph, emitted, and 25% lit (the lamps,
- * below), so the most a morph can change by moving skin is a quarter of its
- * shading — and the shading it moves is the neutral photograph's, which has no
- * nasolabial fold to deepen and no forehead line to show. A cheek morph
- * measured 0.00% of the tile changed. So an asset can carry, per expression, a
- * grey ratio taken from a photograph of the same face making it
- * (`scripts/expression_maps.py`): the fold's shadow, the cheek's lift into the
- * light, the lines of a raised brow, the two creases of a knit one. Here each
- * is raised to the power of its weight and multiplies the albedo's diffuse and
- * emitted halves alike, as the jaw's shadow does — so at weight 0 it is exactly
- * 1 and the face is the photograph, and at 1 it is the expression's light.
- *
- * Read at the texel's *rest* position, which is where the build registered it:
- * the morph that lifts the cheek carries the lifted cheek's light up with its
- * texture, so light and shape arrive together without the shader knowing
- * where anything went.
+ * A pixel of this face is 75% photograph, emitted, so the most a morph can
+ * change by moving skin is a quarter of its shading — and that shading is the
+ * neutral photograph's, which has no nasolabial fold to deepen and no forehead
+ * line to show. A cheek morph measured 0.00% of the tile changed. So an asset
+ * can carry, per expression, a grey ratio taken from a photograph of the same
+ * face making it (`scripts/expression_maps.py`), read at the texel's *rest*
+ * position: the morph that lifts the cheek carries the lifted cheek's light up
+ * with its texture, so light and shape arrive together.
  *
  * Per side, because the channels are. The weights cross over at the midline
  * rather than switching there, so a one-sided smile does not cut its fold's
- * light off in a line down the philtrum.
- *
- * The maps are the one thing in the asset nothing draws: they ride on a
- * carrier mesh (`build_tara.py`, "Expression") that exists to get the texture
- * into the GLB, and is taken out of the scene on load. An asset without one is
- * a face whose light never changes, which is every asset built before these.
+ * light off in a line down the philtrum. An asset with no maps is a face whose
+ * light never changes, which is a correct face.
  */
 const EXPRESSION_SPLIT = 0.03;
 /**
@@ -750,8 +745,6 @@ const EXPRESSION_SPLIT = 0.03;
  * A map named here that the asset lacks is simply not read, and a map the
  * asset has that is not named here stays at weight 0: an asset newer than its
  * rig loses the light the rig cannot place, not the face.
- * TARA-SPECIFIC: judged on tushar's maps at the 400 × 300 tile, the only ones
- * that exist.
  */
 const EXPRESSION_WEIGHT: Record<string, (at: (channel: string) => number) => number> = {
   smile: (at) => at("mouthCorner") / 0.8,
@@ -822,30 +815,111 @@ function expressive(carrier: THREE.Mesh): Expression | null {
   };
 }
 
+/** `scripts/build_character.LID_SHUT_ATTR`'s fields, as GLTFLoader names
+ *  them: the displacement's u and v, and the weight. */
+const LID_SHUT_ATTRS = ["_lid_shut_u", "_lid_shut_v", "_lid_shut_w"] as const;
+
+/**
+ * The shut lids: a closing lid shows the photograph of the eyes closed.
+ *
+ * A 2.5-D shell has no hidden skin, so the lid that closes is the open eye's
+ * lid, stretched: the lash band and the fold drawn down over the eyeball in
+ * pale streaks, and a white edge where the stretched margin met the sclera. A
+ * reviewer watching a real call called it the eye tearing mid-blink, and at
+ * any distance it read as an eye that did not shut at all.
+ *
+ * So the build carries the neutral edited to close the eyes
+ * (`scripts/shut_lids.py`), and each lid vertex says where its texel lands
+ * when the lid is shut. A lid fragment reads that photograph *there*: shut,
+ * every pixel the lid covers is the closed photograph's own; half-shut, the
+ * margin already wears the closed lash line and the band above it closed lid
+ * skin, because that is what those texels become. The blend follows the lid's
+ * own influence, so a lid held part-way on purpose — a downward glance, a
+ * degraded link — changes a little of its content, and a blink all of it.
+ *
+ * How much each vertex may show is the build's to say (`_lid_shut_w`,
+ * `morphs.lid_shut_weight`): all of the upper lid, fading out above the crease
+ * with the lid's own pull, so the rest of the face is the photograph to the
+ * byte at any lid value, and not at rest at all.
+ */
+// The lid's influence over which the closed photograph arrives. Not from 0, so
+// the lid a glance lowers keeps nearly all of its own texture; full before the
+// lid is, so the frames a blink is seen on are the closed photograph's.
+const SHUT_FROM = 0.1;
+const SHUT_FULL = 0.55;
+// ...and over which the lower lid's lash fringe does (`_lid_shut_w` below 0).
+// The lower lid hardly moves, so its fringe can only arrive with the upper
+// margin: any earlier and a half-open eye wears it as a heavy lower liner.
+const SHUT_FRINGE_FROM = 0.7;
+const SHUT_FRINGE_FULL = 0.95;
+const SHUT_VERTEX_HEAD = [
+  ...LID_SHUT_ATTRS.map((name) => `attribute float ${name};`),
+  "uniform vec2 uShutScale;", "varying vec2 vLidShut;", "varying float vLidShare;",
+].join("\n");
+const SHUT_VERTEX = [
+  `vLidShut = vec2(${LID_SHUT_ATTRS[0]}, ${LID_SHUT_ATTRS[1]}) * uShutScale;`,
+  `vLidShare = ${LID_SHUT_ATTRS[2]};`,
+].join("\n");
+const SHUT_UNIFORMS = [
+  "uniform sampler2D uShut;", "uniform vec4 uShutTile;", "uniform vec2 uShutU;",
+  "uniform vec2 uShutLid;", "uniform vec2 uShutFringe;", "varying vec2 vLidShut;", "varying float vLidShare;",
+].join("\n");
+const SHUT_FRAGMENT = [
+  "vec2 shutAt = clamp(uShutTile.xz + uShutTile.yw * (vMapUv + vLidShut), 0.0, 1.0);",
+  "vec3 shutColour = texture2D(uShut, shutAt).rgb;",
+  `float shutSide = smoothstep(-${EXPRESSION_SPLIT}, ${EXPRESSION_SPLIT}, uShutU.x + uShutU.y * vMapUv.x);`,
+  "float shutWeight = max(vLidShare, 0.0) * mix(uShutLid.x, uShutLid.y, shutSide)",
+  "  + max(-vLidShare, 0.0) * mix(uShutFringe.x, uShutFringe.y, shutSide);",
+  "diffuseColor.rgb = mix(diffuseColor.rgb, diffuse * shutColour, shutWeight);",
+].join("\n");
+
+interface Shut {
+  readonly map: THREE.Texture;
+  readonly lid: THREE.Vector2;
+  readonly fringe: THREE.Vector2;
+  readonly uniforms: Record<string, THREE.IUniform>;
+}
+
+/** The closed photograph from its carrier's node, or `null` for an asset
+ *  without one, whose lids shut on their own texels as they always have. */
+function shutLids(carrier: THREE.Mesh): Shut | null {
+  const { shut_tile: tile, shut_u: u, shut_scale: scale } = carrier.userData;
+  const map = (carrier.material as THREE.MeshStandardMaterial).map;
+  if (!map || !Array.isArray(tile) || !Array.isArray(u) || !Array.isArray(scale)) return null;
+  const lid = new THREE.Vector2();
+  const fringe = new THREE.Vector2();
+  return {
+    map, lid, fringe,
+    uniforms: {
+      uShut: { value: map },
+      uShutTile: { value: new THREE.Vector4(tile[0], tile[1], tile[2], tile[3]) },
+      uShutU: { value: new THREE.Vector2(u[0], u[1]) },
+      uShutScale: { value: new THREE.Vector2(scale[0], scale[1]) },
+      uShutLid: { value: lid },
+      uShutFringe: { value: fringe },
+    },
+  };
+}
+
 /**
  * The neck, taught to wear the jaw's shadow where the jaw is.
  *
  * The photograph paints the shadow the chin casts on the throat, and a painted
  * shadow stays where it was painted: under a 9° turn the jaw crossed the top of
- * the neck by 8 px and its shadow did not move, which read as the neck sliding
- * out from under the head. So the
- * build lifts it out of the albedo into a ratio tile
- * (`project_albedo.lift_jaw_shadow`), and this puts it back from the head's
- * frame: each neck fragment finds the point of the *turned* head in front of it
- * — the view ray met with the plane the jaw's rim turns in — and reads the
- * ratio at that point's rest position. At rest that point is the fragment's
- * own, so the drawing is the photograph; under a turn the shadow's edge rides
- * the rim, whatever the neck's own follow is doing.
+ * the neck by 8 px and its shadow did not, which read as the neck sliding out
+ * from under the head. So the build lifts it into a ratio tile
+ * (`project_albedo.lift_jaw_shadow`) and each neck fragment reads it at the
+ * *turned* head's rim, offset by how far the jaw has dropped — a rigid
+ * transform does not carry a morph, which was the other half of the same
+ * defect: an open mouth left the shadow banded across the throat at the closed
+ * rim with nothing casting it.
  *
- * The tile lives in the albedo atlas (`face_texture.JAW_SHADOW_AT`), the way
- * the eye's socket multiplier lives beside its globe, so it is one more read of
- * a texture already bound and no draw call. Its edges are white — no shadow —
- * and the lookup is clamped to it, so a ray that lands past the tile (the
- * throat's far side under a hard turn) reads "no shadow" rather than the hair
- * or the iris the atlas keeps beside it.
+ * The tile's edges are white and the lookup clamped to it, so a ray landing
+ * past it reads "no shadow" rather than the hair or the iris beside it.
  */
 function jawShadow(base: THREE.MeshStandardMaterial, uv: number[], extent: number[],
-                   rimZ: number, headInverse: { value: THREE.Matrix4 }) {
+                   rimZ: number, headInverse: { value: THREE.Matrix4 },
+                   jawDrop: { value: number }) {
   const material = base.clone();
   const tile = { value: new THREE.Vector4(uv[0], uv[1], uv[2], uv[3]) };
   const bounds = { value: new THREE.Vector4(extent[0], extent[1], extent[2], extent[3]) };
@@ -855,18 +929,21 @@ function jawShadow(base: THREE.MeshStandardMaterial, uv: number[], extent: numbe
     shader.uniforms.uJawTile = tile;
     shader.uniforms.uJawBounds = bounds;
     shader.uniforms.uJawRim = rim;
+    shader.uniforms.uJawDrop = jawDrop;
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", "#include <common>\nvarying vec3 vJawView;")
       .replace("#include <project_vertex>", "#include <project_vertex>\nvJawView = mvPosition.xyz;");
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>",
         "#include <common>\nvarying vec3 vJawView;\nuniform mat4 uHeadInverse;\n"
-        + "uniform vec4 uJawTile;\nuniform vec4 uJawBounds;\nuniform float uJawRim;")
+        + "uniform vec4 uJawTile;\nuniform vec4 uJawBounds;\nuniform float uJawRim;\n"
+        + "uniform float uJawDrop;")
       .replace("#include <map_fragment>",
         "#include <map_fragment>\n"
         + "vec3 jawFrom = (uHeadInverse * vec4(vJawView, 1.0)).xyz;\n"
         + "vec3 jawRay = (uHeadInverse * vec4(0.0, 0.0, 1.0, 0.0)).xyz;\n"
         + "vec2 jawAt = jawFrom.xy + jawRay.xy * ((uJawRim - jawFrom.z) / jawRay.z);\n"
+        + "jawAt.y += uJawDrop;\n"
         + "jawAt = clamp(jawAt, uJawBounds.xz, uJawBounds.yw);\n"
         + "vec3 jawShadow = texture2D(map, uJawTile.xz + uJawTile.yw * jawAt).rgb;\n"
         + "diffuseColor.rgb *= jawShadow;")
@@ -877,7 +954,7 @@ function jawShadow(base: THREE.MeshStandardMaterial, uv: number[], extent: numbe
   return material;
 }
 
-/** Lamps, standing in for the four area lights `build_tara.setup_scene` uses.
+/** Lamps, standing in for the four area lights `build_character.setup_scene` uses.
  *
  * The albedo is a photograph and already holds this face's light, so 75% of it
  * is emitted verbatim (`emissiveFactor` in the GLB) and only the remaining 25%
@@ -893,15 +970,6 @@ const WRAP = 0.10 * Math.PI;
 
 /** Frames drawn per second, capped rather than left at the display's rate.
  *
- * `setAnimationLoop` is `requestAnimationFrame`, so uncapped this face is drawn
- * as fast as the viewer's hardware refreshes — 60 on most panels, 120 on a
- * ProMotion Mac or a current flagship phone. That is the wrong way round: the
- * device most likely to care about the battery is the one that would draw the
- * most, and it buys nothing, because idle motion here is deliberately held
- * under ~1.5 Hz (CLAUDE.md) and the head's travel is a few degrees, slowly, in
- * a 400 × 300 tile. 30 samples that twenty times a cycle. Character animation
- * ships lipsync at 24 for a living.
- *
  * Measured on an M1 over four paired reps against `peep`, which is the SVG
  * avatar that already ships: uncapped at 60 the 3-D face cost 13.8 points of
  * one core more than peep; capped at 30 the difference was inside the noise
@@ -915,19 +983,18 @@ const WRAP = 0.10 * Math.PI;
 const RENDER_FPS = 30;
 const MIN_FRAME_MS = 1000 / RENDER_FPS;
 
-export interface TaraRigOptions {
+export interface CharacterRigOptions {
   /** Called once the GLB is in the scene, for a capture tool that must wait. */
   readonly onReady?: () => void;
-  /** The character's GLB. The second-character seam: every build fact the rig
-   *  reads (jaw-shadow tile, rim depth, morph names) travels in the GLB's own
-   *  extras, so a character built by the same scripts needs nothing else. Tara's
-   *  tuning is still applied, which is the experiment.
+  /** The character's GLB. Every build fact the rig reads (jaw-shadow tile, rim
+   *  depth, morph names) travels in the GLB's own extras, so a character built
+   *  by the same scripts needs nothing else.
    *
-   *  Required, and it used to default to tara's. A default meant this module
-   *  imported one character's URL, and a bundler emits assets per module — so
-   *  every consumer of *any* character shipped tara's GLB whether or not they
-   *  mounted her. The caller knows which character it is building; this file
-   *  must not ([tara-asset.ts](./tara-asset.ts)). */
+   *  Required, and deliberately not defaulted: a default would make this module
+   *  import one character's URL, and a bundler emits assets per module — so
+   *  every consumer of *any* character would ship that one's GLB whether or not
+   *  they mounted it. The caller knows which character it is building; this
+   *  file must not ([tara-asset.ts](./tara-asset.ts)). */
   readonly url: string;
   /** `false` leaves an asset's expression maps unread, for a capture tool
    *  comparing the face with and without them. */
@@ -936,14 +1003,11 @@ export interface TaraRigOptions {
    *  a caller can copy the canvas out at any moment rather than only from
    *  inside the frame that drew it.
    *
-   *  A pose sheet needs this and a consumer must not have it. WebGL contexts are
-   *  a handful per page, so a sheet of thirty poses cannot be thirty canvases —
-   *  it holds one pose still, copies the canvas into a tile, and moves on. Copy
-   *  outside the drawing frame and the buffer has already been cleared, which is
-   *  a blank tile and not an error. The cost is that the buffer cannot be
-   *  discarded, which on some drivers means a second copy of every frame; the
-   *  consumer renders thirty frames a second forever and pays nothing for a
-   *  readback it never performs. */
+   *  A pose sheet reuses one context, holding a pose still and copying the
+   *  canvas into a tile; copy outside the drawing frame without this and the
+   *  buffer has already been cleared, which is a blank tile and not an error.
+   *  A consumer must not have it: the buffer can no longer be discarded, which
+   *  on some drivers means a second copy of every frame. */
   readonly readback?: boolean;
 }
 
@@ -963,23 +1027,6 @@ function webglRenderer(readback = false): THREE.WebGLRenderer | null {
 }
 
 /**
- * Where a lid channel's influence reaches a shut eye. Not at 1, because the
- * mixer never asks for 1: a blink is a 0.11–0.15 s triangle, the lid channel's
- * 18 ms smoothing rounds its peak off, and this rig draws at 30 fps, so the
- * frame a viewer actually sees peaks at influence 0.74 on the median blink and
- * 0.66 at the fifth percentile. A lid morph that shut only at 1 left every
- * blink a quarter open — the lid came down and the iris was still there.
- *
- * So above `LID_KNEE` the influence is eased up to meet 1 at `LID_SHUT`, and
- * held there: past that point the lid has landed on the lower one. Below the
- * knee it is untouched, and that is every lid held part-way on purpose — the
- * lowered lid of a degraded link, the lid following a downward gaze — so those
- * look exactly as they did. The ease is quadratic from the knee, so both the
- * value and its slope are continuous there.
- *
- * `scripts/morphs.py:influence` parses both numbers out of this file.
- */
-/**
  * The lower lid follows the eye down. Its retractor is tied to the inferior
  * rectus, so a look down pulls the lower margin down with it by a millimetre
  * or two — the upper lid's half of this is the mixer's `lidBias`, and a face
@@ -990,6 +1037,26 @@ function webglRenderer(readback = false): THREE.WebGLRenderer | null {
  */
 const LOWER_LID_FOLLOW = 0.35;
 
+/**
+ * Where a lid channel's influence reaches a shut eye. Not at 1, because the
+ * mixer never asks for 1: a blink is a triangle (`idle.BLINK_DUR`), the lid
+ * channel's 18 ms smoothing rounds its peak off, and this rig draws at 30 fps.
+ * `LID_SHUT` was set when blinks ran 0.11–0.15 s, at the fifth percentile of
+ * the peak a viewer actually saw (median 0.74). At the present 0.19–0.23 s
+ * that peak is 0.85 median and 0.81 at the fifth percentile — simulated over
+ * the same smoothing and frame phase — so every blink still lands shut, with
+ * margin. A lid morph that shut only at 1 left every blink a quarter open — the
+ * lid came down and the iris was still there.
+ *
+ * So above `LID_KNEE` the influence is eased up to meet 1 at `LID_SHUT`, and
+ * held there: past that point the lid has landed on the lower one. Below the
+ * knee it is untouched, and that is every lid held part-way on purpose — the
+ * lowered lid of a degraded link, the lid following a downward gaze — so those
+ * look exactly as they did. The ease is quadratic from the knee, so both the
+ * value and its slope are continuous there.
+ *
+ * `scripts/morphs.py:influence` parses both numbers out of this file.
+ */
 const LID_KNEE = 0.35;
 const LID_SHUT = 0.66;
 
@@ -997,24 +1064,22 @@ const LID_SHUT = 0.66;
  * A squint's influence rises faster than its channel. The mixer's values are
  * set where a line face's lower lid reads — a smile's squint is 0.30 — and a
  * photographic lower lid rising 0.30 of its travel is a pixel or two, so the
- * squint that makes a smile real was not there. A power curve lifts the small
- * values into sight. The lower-lid follow, which runs this target backwards,
- * is added after it and stays linear.
+ * squint that makes a smile real was not there. The lower-lid follow, which
+ * runs this target backwards, is added after the curve and stays linear.
  *
- * TARA-SPECIFIC. The curve needs a ceiling as well as a lift, because the
- * squint stacks and the mouth does not. A *silent* smile takes squint from
- * three layers at once — an approval clip, the encouraging emotion and
- * prosody's warmth — which reach 0.51 together, while the smile map saturates
- * at a mouth corner of 0.8 and no layer drives the jaw, so the last third of a
- * smile arrives as narrowing eyes over lips that cannot part any further. On a
- * line face that reads as warmth. On a photograph it reads as sedation: a
- * reviewer watching a recorded call read those two moments as the avatar
- * falling asleep or heavily medicated, and named the eyes, not the mouth. The
- * ceiling is where the face stops reading drugged, judged at crop. The knee is
- * low enough that an ordinary one-layer smile is untouched (0.22 renders
- * 0.402, against 0.403 with no ceiling at all), and the approach is
- * exponential rather than a clamp so the slope is continuous where the two
- * meet and the lower lid never visibly sticks.
+ * The curve needs a ceiling as well as a lift, because the squint stacks and
+ * the mouth does not. A *silent* smile takes squint from three layers at once —
+ * an approval clip, the encouraging emotion and prosody's warmth — which reach
+ * 0.51 together, while the smile map saturates at a mouth corner of 0.8 and no
+ * layer drives the jaw, so the last third of a smile arrives as narrowing eyes
+ * over lips that cannot part any further. On a line face that reads as warmth.
+ * On a photograph it reads as sedation: a reviewer watching a recorded call
+ * read those two moments as the avatar falling asleep or heavily medicated, and
+ * named the eyes, not the mouth. The ceiling is where the face stops reading
+ * drugged, judged at crop. The knee is low enough that an ordinary one-layer
+ * smile is untouched (0.22 renders 0.402 against 0.403 with no ceiling), and
+ * the approach is exponential rather than a clamp so the slope is continuous
+ * where the two meet and the lower lid never visibly sticks.
  */
 const SQUINT_CURVE = 0.6;
 const SQUINT_KNEE = 0.2;
@@ -1037,17 +1102,6 @@ const lidClosure = (i: number): number => {
 };
 
 /**
- * A channel's morph influence. One line — and the lid and squint curves above — and the
- * same one `scripts/morphs.py:influence` uses, so a Blender preview and the
- * browser pose the face identically.
- *
- * It is allowed to go negative, which is what lets one target serve a
- * bidirectional channel: `mouthCornerL` at −1.4 is the smile target run
- * backwards into a frown, and `lidL` below its 0.12 rest opens the eye wider
- * than neutral. A rig that clamped this at 0 would silently delete the negative
- * half of six channels.
- */
-/**
  * The neck's follow targets, and the one place a morph is not driven by
  * `influence`.
  *
@@ -1060,8 +1114,8 @@ const lidClosure = (i: number): number => {
  *
  * So under pitch and roll the throat tracks the skull exactly at any angle,
  * and — the part worth having — the asset stops depending on the envelope.
- * These fields carry no angle, so `HEAD_DEG` below is a runtime number that can
- * move without leaving `tara.glb` stale. Yaw's pair is a partial twist rather
+ * These fields carry no angle, so `HEAD_DEG` above is a runtime number that can
+ * move without leaving a built GLB stale. Yaw's pair is a partial twist rather
  * than the skull's own rotation, and the build weights its two fields so these
  * same two influences drive it (`morphs.neck_twist`).
  */
@@ -1081,40 +1135,24 @@ const neckInfluence = (channel: string, pose: RigPose): number | null => {
 
 /**
  * The hair's roll, which is the one thing in this rig that is not a function of
- * the pose alone.
+ * the pose alone. `hold` is the share of the head's roll the hanging hair
+ * declines to take, and `hz`/`damping` are how it gets there.
  *
- * A hank that hangs past the jaw is lying on a shoulder, and a shoulder does not
- * tilt when the head does. Rolled rigidly with the skull it lifts off the collar
- * and the page shows through behind it, so the shell gives up `hold` of the
- * roll at its lowest rows and none at the crown, graded by `morphs.hair_hold`.
- * That is the static half and it is what fixes the gap.
+ * A hank that hangs past the jaw is lying on a shoulder, and a shoulder does
+ * not tilt when the head does: rolled rigidly with the skull it lifts off the
+ * collar and the page shows through behind it, so the shell gives up `hold` of
+ * the roll at its lowest rows and none at the crown (`morphs.hair_hold`).
  *
  * The other half is why roll read as a hinge at all. A rigid rotation about a
- * fixed point is a hinge — there is nothing else in it — and what a real head
- * tilt has that this lacked is hair that arrives late and settles. Live2D gives
- * every hank a spring for exactly this (`docs/research-head-rotation.md` § 3.1:
- * mobility ~0.95, delay 0.8-0.9, one clear overshoot), so this is a spring on
- * the hair's own angle chasing the share of the roll it agrees to take.
- *
- * It is on the hair and not on the head's channels on purpose. The mixer's
- * per-channel time constants are shared with the SVG faces and every clip in the
- * library is authored pre-compensated for them, so a spring on `headRoll` would
- * silently re-time every nod ever authored. Secondary motion on a shell that
- * only this renderer has costs nothing outside it.
- *
- * 1.5 Hz is the band the library already keeps gesture under, and a hank of hair
- * on a real head swings near it (a 7 cm pendulum is 1.9 Hz); the damping is a
- * single visible overshoot, settling inside 0.8 s. Faster reads as a flick and
+ * fixed point *is* a hinge, and what a real tilt has that this lacked is hair
+ * that arrives late and settles (`docs/research-head-rotation.md` § 3.1:
+ * mobility ~0.95, delay 0.8-0.9, one clear overshoot). At 0.65 that is a single
+ * visible overshoot, inside 5% of the hold in 450 ms — faster reads as a flick,
  * slower as wet hair.
- */
-/**
- * `hold` is the share of the head's roll the hanging hair declines to take, and
- * `hz`/`damping` are how it gets there. 1.5 Hz is the ceiling the repo's idle
- * constraint sets on *driven* oscillation; a settle is a one-shot and could
- * defensibly go faster, but there is no reason to spend the exemption: what
- * unhinges the roll is the hair arriving late, not the ring. At 0.65 it trails
- * by 93% of its travel a frame in, overshoots 5% and is inside 5% of the hold in
- * 450 ms — well within a phrase's hold.
+ *
+ * It is on the hair and not on `headRoll` on purpose: every clip in the library
+ * is authored pre-compensated for the mixer's per-channel time constants, so a
+ * spring on the channel would silently re-time every nod ever authored.
  */
 export const HAIR_ROLL = { hold: 0.85, hz: 1.5, damping: 0.65 };
 
@@ -1124,9 +1162,8 @@ export const HAIR_ROLL = { hold: 0.85, hz: 1.5, damping: 0.65 };
  * stiffness and 30 fps; this does not, which is the only reason the order of
  * those two lines is worth a sentence.
  *
- * Exported for `test/nods.test.ts`, because settle time and overshoot are
- * numbers and not something a still frame can show. It is not part of the
- * package's surface — `packages/avatar/client/tara.ts` is.
+ * Exported for `test/nods.test.ts`: settle time and overshoot are numbers, not
+ * something a still frame can show.
  */
 export const hairRollStep = (angle: number, rate: number, target: number, dt: number) => {
   const w = 2 * Math.PI * HAIR_ROLL.hz;
@@ -1142,6 +1179,16 @@ const hairInfluence = (channel: string, extra: number): number | null => {
   return null;
 };
 
+/**
+ * A channel's morph influence — the same law `scripts/morphs.py:influence`
+ * uses, so a Blender preview and the browser pose the face identically.
+ *
+ * It is allowed to go negative, which is what lets one target serve a
+ * bidirectional channel: `mouthCornerL` at −1.4 is the smile target run
+ * backwards into a frown, and `lidL` below its rest opens the eye wider than
+ * neutral. A rig that clamped this at 0 would silently delete the negative half
+ * of every channel that has one.
+ */
 const influence = (channel: string, value: number): number => {
   const rest = (REST as Record<string, number>)[channel] ?? 0;
   const i = (value - rest) / (1 - rest);
@@ -1164,27 +1211,22 @@ const expressionWeights = (pose: RigPose, side: "L" | "R", expression: Expressio
   });
 };
 
-// `options` is `unknown` in the contract, and stays `unknown` here: the mixer
-// passes `rigOptions` through verbatim and has no way to know any rig's shape.
-export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig {
+export function createCharacterRig(mount: HTMLElement, options?: unknown): AvatarRig {
   const { onReady, url, expression: readExpression = true, readback = false } =
-    (options ?? {}) as TaraRigOptions;
+    (options ?? {}) as CharacterRigOptions;
   // A missing `url` is a caller's defect, not a browser condition — the WebGL
   // path below degrades because a driver is nobody's fault, whereas this would
   // otherwise be a 404 on a path spelled `undefined`.
-  if (!url) throw new TypeError("createTaraRig: `url` is required");
+  if (!url) throw new TypeError("createCharacterRig: `url` is required");
   const scene = new THREE.Scene();
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   camera.position.set(0, FRAME_CENTRE, 6);
   camera.lookAt(0, FRAME_CENTRE, 0);
 
   const renderer = webglRenderer(readback);
-  // No context, no face — and that has to be the whole of it. `createAvatar` is
-  // synchronous and returns `{ destroy }`, so a consumer has nothing to catch:
-  // anything thrown here lands in *their* window and takes the call page with
-  // it, over a browser condition that is nobody's defect. WebGL is unavailable
-  // more often than it looks — a driver on a blocklist, a hardened profile, a
-  // remote desktop — and the right outcome is a call that still has audio,
+  // `createAvatar` is synchronous, so anything thrown here lands in the
+  // consumer's window and takes the call page with it over a browser condition
+  // that is nobody's defect. The right outcome is a call that still has audio,
   // captions and states, with an empty tile where the head would be.
   //
   // `warn` rather than `error` on purpose: `[avatar]` console errors mean a
@@ -1221,20 +1263,18 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
   // `trunk` sways everything, and `lift` carries the neck and head on the
   // breath the torso takes inside `trunk` — and on the lean's rigid share,
   // which reaches the head the same way for the same reason.
-  //
-  // There were three. The outermost was `figure`, and it existed only to scale
-  // the whole character for `torsoLean`; with the camera a sibling rather than
-  // a child, that was a zoom and not a lean. The trunk deforms on the shell now
-  // (`morphs.torso_targets`), so the group has no work left and is gone rather
-  // than left behind as an identity transform for someone to wonder about.
   const trunk = new THREE.Group();
   const lift = new THREE.Group();
   const head = new THREE.Group();
-  head.position.copy(PIVOT);
+  // The asset's own, once it has loaded; these hold the shape of the hierarchy
+  // until then, and nothing draws before that.
+  let pivot = PIVOT.clone();
+  let rollPivot = ROLL_PIVOT.clone();
+  head.position.copy(pivot);
   // Yaw and pitch turn `head`; roll turns `tilt`, which rides inside them at
-  // the chin (ROLL_PIVOT), so the parts hang from `tilt`.
+  // the chin (`rollPivot`), so the parts hang from `tilt`.
   const tilt = new THREE.Group();
-  tilt.position.subVectors(ROLL_PIVOT, PIVOT);
+  tilt.position.subVectors(rollPivot, pivot);
   scene.add(trunk);
   trunk.add(lift);
   lift.add(head);
@@ -1252,34 +1292,49 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
   const eyes: THREE.Object3D[] = [];
   // Both globes turn together, so one rotation serves both sockets.
   const gaze = { value: new THREE.Matrix3() };
+  const lidShade = { L: { value: 1 }, R: { value: 1 } };
   const turn = new THREE.Matrix4();
   let expression: Expression | null = null;
+  let shut: Shut | null = null;
   // The `Hair` shell, on a character whose hair hangs low enough to have the
-  // roll pair; null on one whose hair stops beside the temple (`HAIR_ROLL`).
-  let hairMesh: THREE.Mesh | null = null;
+  // roll pair, and the `HairLayer` over the body, on one whose hair is a layer
+  // of its own; empty where the hair stops beside the temple (`HAIR_ROLL`).
+  const hairMeshes: THREE.Mesh[] = [];
   // The head's roll in the asset's own frame — what both the neck's follow and
   // the hair's are authored about — and the hair's own, which chases it.
   let headRollRad = 0;
   let hairRollRad = 0;
   let hairRate = 0;
   let hairSeeded = false;
+  // How far the jaw's rim travels at jaw = 1 on this asset, and the uniform the
+  // neck's shadow reads it through at the pose's influence (`jawShadow`).
+  let jawRimTravel = 0;
+  const jawDrop = { value: 0 };
+  // The lip opening at rest and each channel's move of it, off the shell
+  // (`build_character.lip_aperture`), as [top, bottom, left, right]; and what
+  // `mouthInterior` reads it through, as (centre, top, half-width, height).
+  let aperture: { rest: number[]; deltas: [string, number[]][] } | null = null;
+  const mouthOpening = { value: new THREE.Vector4(0, 0, 1, 1) };
+  const tongueLift = { value: 0 };
 
   /** The share of the head's roll the hair settles at. */
   const hairTarget = () => headRollRad * (1 - HAIR_ROLL.hold);
 
   const writeHair = () => {
-    const dictionary = hairMesh?.morphTargetDictionary;
-    const influences = hairMesh?.morphTargetInfluences;
-    if (!dictionary || !influences) return;
     const extra = hairRollRad - headRollRad;
-    for (const [channel, index] of Object.entries(dictionary)) {
-      const term = hairInfluence(channel, extra);
-      if (term !== null) influences[index] = term;
+    for (const mesh of hairMeshes) {
+      const dictionary = mesh.morphTargetDictionary;
+      const influences = mesh.morphTargetInfluences;
+      if (!dictionary || !influences) continue;
+      for (const [channel, index] of Object.entries(dictionary)) {
+        const term = hairInfluence(channel, extra);
+        if (term !== null) influences[index] = term;
+      }
     }
   };
 
   const stepHair = (dt: number) => {
-    if (!hairMesh || !hairSeeded) return;
+    if (!hairMeshes.length || !hairSeeded) return;
     ({ angle: hairRollRad, rate: hairRate } =
       hairRollStep(hairRollRad, hairRate, hairTarget(), dt));
   };
@@ -1293,9 +1348,10 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
     // of the wrong aspect shows more or less background rather than a face of
     // the wrong shape. The atlas cannot be stretched: it is a photograph.
     // Symmetric about the camera, which is *already* at the frame's centre
-    // height. Offsetting the frustum by that centre as well applies it twice:
-    // the face rendered 0.47 face heights low, at exactly the right size, which
-    // reads as a framing choice rather than as the arithmetic error it was.
+    // height — offsetting the frustum by that centre as well applies it twice,
+    // and the face rendered 0.47 face heights low, at exactly the right size,
+    // which reads as a framing choice rather than as the arithmetic error it
+    // was.
     const halfHeight = FRAME_HEIGHT / 2;
     const halfWidth = (halfHeight * width) / height;
     camera.top = halfHeight;
@@ -1319,7 +1375,7 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
       const influences = mesh.morphTargetInfluences;
       if (!dictionary || !influences) continue;
       const neck = mesh.name === "Neck";
-      const hair = mesh === hairMesh;
+      const hair = hairMeshes.includes(mesh);
       for (const [channel, index] of Object.entries(dictionary)) {
         // The hair carries the head's roll channel too, and it is neither a
         // channel value nor the head's own angle: it is how much *further* than
@@ -1330,9 +1386,11 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
           if (term !== null) { influences[index] = term; continue; }
         }
         // The neck's head targets are the rotation's two terms, not a channel
-        // scaled by the influence law. Only on the neck: the same three channel
-        // names on the head group are a rigid transform, and nowhere else.
-        if (neck) {
+        // scaled by the influence law. Only on the neck and the hair layer's
+        // yaw hold (`morphs.hair_layer_targets`), whose field carries the hold
+        // and takes the skull's own angle: the same three channel names on the
+        // head group are a rigid transform, and nowhere else.
+        if (neck || (hair && mesh.name === "HairLayer")) {
           const term = neckInfluence(channel, pose);
           if (term !== null) { influences[index] = term; continue; }
         }
@@ -1342,6 +1400,23 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
         influences[index] = (value === undefined ? 0 : influence(channel, value)) - follow;
       }
     }
+    // The chin's shadow on the throat rides the same channel the chin does.
+    jawDrop.value = jawRimTravel
+      * (pose.jaw === undefined ? 0 : influence("jaw", pose.jaw));
+    if (aperture) {
+      const at = aperture.rest.slice();
+      for (const [channel, delta] of aperture.deltas) {
+        const value = pose[channel];
+        if (value === undefined) continue;
+        const k = influence(channel, value);
+        for (let i = 0; i < 4; i++) at[i] += k * delta[i];
+      }
+      // A floor on the height so a shut mouth divides by something: the seam
+      // it shows is a line, and what colour a line is does not read.
+      mouthOpening.value.set((at[2] + at[3]) / 2, at[0], Math.max((at[3] - at[2]) / 2, 1e-3),
+                             Math.max(at[0] - at[1], 2e-3));
+    }
+    tongueLift.value = pose.tongue === undefined ? 0 : influence("tongue", pose.tongue);
     // Blender's Z is face-space v, so its yaw is about Z, its pitch about X and
     // its roll about Y. The export maps Blender (x, y, z) to glTF (x, z, −y),
     // so Blender +Z *is* glTF +Y and Blender +X is glTF +X: yaw and pitch carry
@@ -1349,15 +1424,9 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
     // is glTF −Z, and that is a statement about two axes and not about the
     // channel.
     //
-    // Yaw was negated here as well until 2026-09-10, on the belief that the
-    // export flips the handedness of a turn. It does not — both frames are
-    // right-handed — and the cost was a head that turned toward the viewer's
-    // *left* on a positive `headYaw`, against `params.js`'s stated sign. It
-    // survived because the same negation was in `build_tara.pose_head`, so the
-    // Blender preview and the browser agreed with each other and only disagreed
-    // with the library. `gaze.js` is what makes it a defect rather than a
-    // convention: it hands `pupilX` and `headYaw` the same aversion term, so
-    // tara's eyes went one way and her head went the other.
+    // Yaw is not negated, and a negation here survived for a long time because
+    // `build_character.pose_head` had the same one: the Blender preview and the
+    // browser agreed with each other and only disagreed with the library.
     //
     // YXZ because that is the order a neck composes in — yaw carrying the pitch
     // — rather than the order three.js defaults to.
@@ -1402,14 +1471,43 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
       );
     }
     if (eyes.length) gaze.value.setFromMatrix4(turn.makeRotationFromEuler(eyes[0].rotation));
+    for (const side of ["L", "R"] as const) {
+      const value = pose[`lid${side}`];
+      const i = value === undefined ? 0 : influence(`lid${side}`, value);
+      lidShade[side].value = 1 - LID_SHADE * THREE.MathUtils.smoothstep(i, LID_SHADE_FROM, 1);
+    }
     if (expression) {
       expressionWeights(pose, "L", expression, expression.left);
       expressionWeights(pose, "R", expression, expression.right);
+    }
+    if (shut) {
+      const closure = (channel: "lidL" | "lidR") => {
+        const value = pose[channel];
+        return value === undefined ? 0 : influence(channel, value);
+      };
+      const [l, r] = [closure("lidL"), closure("lidR")];
+      const { smoothstep } = THREE.MathUtils;
+      shut.lid.set(smoothstep(l, SHUT_FROM, SHUT_FULL), smoothstep(r, SHUT_FROM, SHUT_FULL));
+      shut.fringe.set(smoothstep(l, SHUT_FRINGE_FROM, SHUT_FRINGE_FULL),
+                      smoothstep(r, SHUT_FRINGE_FROM, SHUT_FRINGE_FULL));
     }
   };
 
   new GLTFLoader().load(url, (gltf) => {
     if (destroyed) return;
+    // Where this head turns and tilts, and what rides its skull, are facts
+    // about this head — measured by the build, stamped into the scene, and read
+    // here before anything is reparented into the frames they define. An asset
+    // that predates the stamp keeps the constants above, which are the numbers
+    // it was built with.
+    const stamp = (gltf.scene.userData ?? {}) as Record<string, unknown>;
+    pivot = stampedVec(stamp, "head_pivot", PIVOT);
+    rollPivot = stampedVec(stamp, "roll_pivot", ROLL_PIVOT);
+    head.position.copy(pivot);
+    tilt.position.subVectors(rollPivot, pivot);
+    const headParts = Array.isArray(stamp.head_parts)
+      && stamp.head_parts.every((n) => typeof n === "string")
+      ? stamp.head_parts as string[] : HEAD_PARTS;
     trunk.add(gltf.scene);
     // Collect the morphed meshes *before* reparenting: every one of them is a
     // head part, so a traverse of `gltf.scene` after the move finds only the
@@ -1420,7 +1518,15 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
       if (mesh.isMesh && mesh.morphTargetDictionary) morphed.push(mesh);
       // Kept aside as well: its roll pair is driven by a clock and not only by a
       // pose, so the render loop has to reach it between poses (`HAIR_ROLL`).
-      if (mesh.isMesh && mesh.name === "Hair" && mesh.morphTargetDictionary) hairMesh = mesh;
+      if (mesh.isMesh && (mesh.name === "Hair" || mesh.name === "HairLayer")
+        && mesh.morphTargetDictionary) hairMeshes.push(mesh);
+      // Hair that lies over the body is in front of everything the portrait
+      // has, and it turns with the skull where the chest does not: tested
+      // against depth, a nod swings the lower hank back through the chest.
+      if (mesh.isMesh && mesh.name === "HairLayer") {
+        (mesh.material as THREE.Material).depthTest = false;
+        mesh.renderOrder = 1;
+      }
     });
     // Out of the scene before anything draws it: it carries the maps, and is
     // one triangle behind the body that nothing should pay a draw call for.
@@ -1432,26 +1538,40 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
       carrier.geometry.dispose();
       (carrier.material as THREE.Material).dispose();
     }
-    for (const name of HEAD_PARTS) {
+    const shutCarrier = gltf.scene.getObjectByName("Shut") as THREE.Mesh | undefined;
+    if (shutCarrier) {
+      shutCarrier.removeFromParent();
+      shut = shutLids(shutCarrier);
+      if (!shut) (shutCarrier.material as THREE.MeshStandardMaterial).map?.dispose();
+      shutCarrier.geometry.dispose();
+      (shutCarrier.material as THREE.Material).dispose();
+    }
+    for (const name of headParts) {
       const part = gltf.scene.getObjectByName(name);
       // Reparenting moves the object into the tilt's frame, whose origin is
-      // ROLL_PIVOT, so subtract that to leave the part where it was authored.
-      // `attach()` would do this from the world matrix, which has not been
-      // computed yet at load.
+      // the roll pivot, so subtract that to leave the part where it was
+      // authored. `attach()` would do this from the world matrix, which has
+      // not been computed yet at load.
       if (part) {
-        part.position.sub(ROLL_PIVOT);
+        part.position.sub(rollPivot);
         tilt.add(part);
       }
     }
     // One clone per source material, shared by every shell that carries the
     // field; a mesh without it keeps the material it came with.
+    // The shell with the lids is a clone of its own: the ears and the hair
+    // share its material and have no lid attributes to read.
     const turned = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+    const lidded = new Map<THREE.Material, THREE.MeshStandardMaterial>();
     head.traverse((object) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh || !mesh.geometry.getAttribute(MOTION_DEPTH)) return;
       const base = mesh.material as THREE.MeshStandardMaterial;
-      const own = turned.get(base) ?? motionDepth(base, expression ?? undefined);
-      turned.set(base, own);
+      const withLids = shut !== null && LID_SHUT_ATTRS.every((name) => mesh.geometry.getAttribute(name) !== undefined);
+      const cache = withLids ? lidded : turned;
+      const own = cache.get(base)
+        ?? motionDepth(base, expression ?? undefined, withLids ? shut ?? undefined : undefined);
+      cache.set(base, own);
       mesh.material = own;
     });
     // The neck rides the breath with the head; the torso *is* the breath. Both
@@ -1459,15 +1579,18 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
     // origin until a pose arrives, so moving the neck needs no correction.
     const neck = gltf.scene.getObjectByName("Neck") as THREE.Mesh | undefined;
     if (neck) lift.add(neck);
-    // The shadow's map comes from the build (`build_tara.py`, the neck); an
+    // The shadow's map comes from the build (`build_character.py`, the neck); an
     // asset without it keeps the shadow painted on, as every build did before.
     const skull = head.getObjectByName("Head");
-    const { jaw_shadow_uv: jawUv, jaw_shadow_extent: jawExtent, jaw_shadow_rim_z: jawRim } =
-      neck?.userData ?? {};
+    const { jaw_shadow_uv: jawUv, jaw_shadow_extent: jawExtent, jaw_shadow_rim_z: jawRim,
+            jaw_shadow_drop: jawTravel } = neck?.userData ?? {};
     if (neck && skull && Array.isArray(jawUv) && Array.isArray(jawExtent) && typeof jawRim === "number") {
       const headInverse = { value: new THREE.Matrix4() };
+      // A build that predates the travel keeps the shadow rotating but not
+      // opening, which is where this started and is still better than no tile.
+      jawRimTravel = typeof jawTravel === "number" ? jawTravel : 0;
       neck.material = jawShadow(neck.material as THREE.MeshStandardMaterial, jawUv, jawExtent,
-                                jawRim, headInverse);
+                                jawRim, headInverse, jawDrop);
       neck.onBeforeRender = (_renderer, _scene, camera) => {
         headInverse.value.multiplyMatrices(camera.matrixWorldInverse, skull.matrixWorld).invert();
       };
@@ -1493,21 +1616,29 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
       // before the globes carried the field keeps the socket shader alone.
       mesh.material = socketed(mesh.material as THREE.MeshStandardMaterial,
                                name === "Eye_L" ? -1 : 1, gaze,
-                               mesh.geometry.getAttribute(MOTION_DEPTH) !== undefined);
+                               mesh.geometry.getAttribute(MOTION_DEPTH) !== undefined,
+                               name === "Eye_L" ? lidShade.L : lidShade.R);
       eyes.push(globe);
     }
-    // The mouth's inside, which is otherwise the one flat-lit surface on this
-    // face. Found by *mesh* name rather than material name: `flat_material`
-    // hard-codes a `tara_` prefix, so tushar's cavity material is called
-    // `tara_cavity` as well, and the mesh is what distinguishes it.
-    const cavity = head.getObjectByName("Cavity") as THREE.Mesh | undefined;
-    if (cavity) {
-      cavity.geometry.computeBoundingBox();
-      const box = cavity.geometry.boundingBox;
-      if (box) {
-        cavity.material = cavityShade(cavity.material as THREE.MeshStandardMaterial,
-                                      box.min.y, box.max.y);
+    // The mouth's inside, painted against the opening the lips make
+    // (`mouthInterior`). Found by *mesh* name rather than material name:
+    // `flat_material` hard-codes a `tara_` prefix, so tushar's cavity material
+    // is called `tara_cavity` as well, and the mesh is what distinguishes it.
+    // An asset built before the shell carried its opening keeps the flat fill.
+    const opening = skull?.userData?.aperture as
+      { rest?: unknown; deltas?: Record<string, unknown> } | undefined;
+    if (opening && Array.isArray(opening.rest) && opening.rest.length === 4) {
+      aperture = { rest: opening.rest as number[],
+                   deltas: Object.entries(opening.deltas ?? {})
+                     .filter((e): e is [string, number[]] => Array.isArray(e[1]) && e[1].length === 4) };
+      for (const [name, lift] of [["Cavity", { value: 0 }], ["Tongue", tongueLift]] as const) {
+        const mesh = head.getObjectByName(name) as THREE.Mesh | undefined;
+        if (mesh) mesh.material = mouthInterior(mesh.material as THREE.MeshStandardMaterial, mouthOpening, lift);
       }
+      const lower = head.getObjectByName("Teeth_Lower") as THREE.Mesh | undefined;
+      if (lower) lower.material = lowerArch(lower.material as THREE.MeshStandardMaterial, mouthOpening);
+      const upper = head.getObjectByName("Teeth_Upper") as THREE.Mesh | undefined;
+      if (upper) upper.material = upperArch(upper.material as THREE.MeshStandardMaterial, mouthOpening);
     }
     // A rig with no morph targets still renders a perfectly good rest pose, so
     // the failure mode of losing them is a face that simply never moves — which
@@ -1519,15 +1650,11 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
     onReady?.();
   }, undefined, (error: unknown) => console.error("[avatar] could not load this character", url, error));
 
-  // The tolerance is not a fudge factor, it is the whole of what makes the cap
-  // land on 30. rAF fires on the panel's own grid, so the elapsed time is only
-  // ever a multiple of the refresh interval and lands *near* 33.3 ms rather than
-  // on it: 33.33 on a 60 Hz panel, and either side of it under any timestamp
-  // jitter. A bare `elapsed < MIN_FRAME_MS` therefore rejects the frame it wants
-  // and waits for the next one — 50 ms, i.e. 20 fps, not 30. Four milliseconds
-  // is under half the interval of every rate worth caring about (8.3 at 120,
-  // 11.1 at 90, 16.7 at 60), so it can never admit two frames where one belongs,
-  // and it puts 60, 90 and 120 Hz all on 30 fps.
+  // rAF fires on the panel's own grid, so elapsed lands *near* the frame
+  // interval and never on it, and a bare `elapsed < MIN_FRAME_MS` rejects the
+  // frame it wants and waits for the next — 20 fps, not 30. The tolerance is
+  // under half the interval at 120, 90 and 60 Hz, so it can never admit two
+  // frames where one belongs.
   const GRID_TOLERANCE_MS = 4;
   let lastFrameMs = 0;
   renderer.setAnimationLoop(() => {
@@ -1578,6 +1705,7 @@ export function createTaraRig(mount: HTMLElement, options?: unknown): AvatarRig 
       });
       // A uniform, not a material's map, so the traverse above never meets it.
       expression?.map.dispose();
+      shut?.map.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },

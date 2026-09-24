@@ -1,10 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { HARD_BUDGET, pixelRatioFor } from "../../client/three/budgets.js";
+// The rig's fallbacks for the facts the asset now carries. A stamp that has
+// drifted from them is the hand-copy this test exists to make impossible.
+import { HEAD_PARTS, PIVOT, ROLL_PIVOT } from "../../client/three/character-rig.js";
 // `packages/avatar/src/params.js` is a dependency-free ES module and the one
 // definition of the pose vocabulary; see the tara block below for why this test
 // compares against it rather than a copy.
 import { CHANNELS, REST } from "../../src/params.js";
+// The viseme table is the library's own, for the same reason: a letter's pose
+// retyped here would be a test of the retyping.
+import { shapeFor } from "../../src/visemes.js";
 
 /** `scripts/morphs.NECK_QUAD` — the suffix on a neck field's second-order half. */
 const NECK_QUAD = "_q";
@@ -15,7 +21,11 @@ interface Accessor {
   byteOffset?: number;
   componentType?: number;
   type?: string;
-  sparse?: unknown;
+  sparse?: {
+    count: number;
+    indices: { bufferView: number; byteOffset?: number; componentType: number };
+    values: { bufferView: number; byteOffset?: number };
+  };
 }
 interface Primitive {
   indices?: number;
@@ -75,23 +85,85 @@ function meanVec3(json: GltfJson, bin: Buffer, index: number): [number, number, 
   return sum.map((total) => total / (accessor?.count ?? 1)) as [number, number, number];
 }
 
-/** Every element of one tightly packed FLOAT or index accessor, flattened. */
+const COMPONENT: Record<number, [number, (bin: Buffer, at: number) => number]> = {
+  5126: [4, (bin, at) => bin.readFloatLE(at)],
+  5125: [4, (bin, at) => bin.readUInt32LE(at)],
+  5123: [2, (bin, at) => bin.readUInt16LE(at)],
+};
+
+/** Every element of one tightly packed view, flattened. */
+function readView(json: GltfJson, bin: Buffer, view: number, byteOffset: number,
+                  count: number, width: number, componentType: number): number[] {
+  const bufferView = json.bufferViews?.[view];
+  expect(bufferView, "bufferView").toBeDefined();
+  const base = (bufferView?.byteOffset ?? 0) + byteOffset;
+  const [size, get] = COMPONENT[componentType] ?? [0, () => NaN];
+  expect(size, `component type ${componentType}`).toBeGreaterThan(0);
+  return Array.from({ length: count * width }, (_, i) => get(bin, base + i * size));
+}
+
+/**
+ * Every element of one accessor, flattened.
+ *
+ * Sparse is not an exotic case to tolerate here, it is how the exporter writes
+ * the shell's morph targets: a viseme moves the lips and leaves the skull, the
+ * ears and the hairline alone, so most of the target is zero and glTF stores
+ * only the rest. The mouth's own bands move every vertex they have and come out
+ * dense, which is why the check that reads only those never met one.
+ */
 function readAccessor(json: GltfJson, bin: Buffer, index: number): number[] {
   const accessor = json.accessors?.[index];
   expect(accessor, `accessor ${index}`).toBeDefined();
-  expect(accessor?.sparse, `accessor ${index} is sparse`).toBeUndefined();
   const width = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[accessor?.type ?? ""] ?? 0;
-  const view = json.bufferViews?.[accessor?.bufferView ?? -1];
-  expect(view, "bufferView").toBeDefined();
-  const base = (view?.byteOffset ?? 0) + (accessor?.byteOffset ?? 0);
-  const read: Record<number, [number, (at: number) => number]> = {
-    5126: [4, (at) => bin.readFloatLE(at)],
-    5125: [4, (at) => bin.readUInt32LE(at)],
-    5123: [2, (at) => bin.readUInt16LE(at)],
-  };
-  const [size, get] = read[accessor?.componentType ?? 0] ?? [0, () => NaN];
-  expect(size, `accessor ${index} component type`).toBeGreaterThan(0);
-  return Array.from({ length: (accessor?.count ?? 0) * width }, (_, i) => get(base + i * size));
+  const count = accessor?.count ?? 0;
+  const dense = accessor?.bufferView !== undefined
+    ? readView(json, bin, accessor.bufferView, accessor.byteOffset ?? 0, count, width,
+               accessor?.componentType ?? 0)
+    : new Array<number>(count * width).fill(0);
+  const sparse = accessor?.sparse;
+  if (!sparse) return dense;
+  const at = readView(json, bin, sparse.indices.bufferView, sparse.indices.byteOffset ?? 0,
+                      sparse.count, 1, sparse.indices.componentType);
+  const values = readView(json, bin, sparse.values.bufferView, sparse.values.byteOffset ?? 0,
+                          sparse.count, width, accessor?.componentType ?? 0);
+  at.forEach((vertex, k) => {
+    for (let c = 0; c < width; c += 1) dense[vertex * width + c] = values[k * width + c];
+  });
+  return dense;
+}
+
+/**
+ * One mesh's vertices at a pose, in glTF axes — so +z is toward the viewer and
+ * +y is up.
+ *
+ * The weight is the plain influence law, `(value - rest) / (1 - rest)`, which
+ * is what `character-rig` applies to every channel but the lids, the squints and the
+ * neck's pair — and none of those is a mouth channel. A rig's copy of the law
+ * is not what is under test here; the geometry it drives is.
+ */
+function posed(json: GltfJson, bin: Buffer, mesh: Mesh, pose: Record<string, number>): number[] {
+  const primitive = mesh.primitives?.[0];
+  expect(primitive?.attributes?.POSITION, `${mesh.name} POSITION`).toBeDefined();
+  const out = readAccessor(json, bin, primitive!.attributes!.POSITION!);
+  (mesh.extras?.targetNames ?? []).forEach((channel, at) => {
+    const value = pose[channel];
+    const position = primitive!.targets?.[at]?.POSITION;
+    if (value === undefined || position === undefined) return;
+    const rest = (REST as Record<string, number>)[channel] ?? 0;
+    const weight = (value - rest) / (1 - rest);
+    const delta = readAccessor(json, bin, position);
+    for (let i = 0; i < out.length; i += 1) out[i] += weight * delta[i];
+  });
+  return out;
+}
+
+/** A band's midline column as `[height, depth]` pairs, nearest the viewer last. */
+function midline(vertices: number[]): Array<[number, number]> {
+  const column: Array<[number, number]> = [];
+  for (let i = 0; i < vertices.length; i += 3) {
+    if (Math.abs(vertices[i]) < 1e-6) column.push([vertices[i + 1], vertices[i + 2]]);
+  }
+  return column.sort((a, b) => b[0] - a[0]);
 }
 
 function primitiveTriangles(primitive: Primitive, accessors: Accessor[]): number {
@@ -128,6 +200,9 @@ describe("drawing-buffer ceiling", () => {
  * lateral onset, and on a narrower face that onset moves in while the box does
  * not. Her row says so. The values are no longer TARA-SPECIFIC.
  */
+/** What every shipped GLB's copyright field must carry besides our own grant. */
+const OWED = [/MediaPipe/, /Apache-2\.0/, /modified/i, /ICT-FaceKit/, /MIT/];
+
 const CHARACTERS = [
   {
     name: "tara",
@@ -181,21 +256,163 @@ const CHARACTERS = [
       { name: "nose", u: 0.12, v: [0.33, 0.60] },
     ],
   },
+  {
+    // Under her hair she is tess's shape - ears clear, a rigid `Hair` shell -
+    // because the hair that hangs is not on the head at all: it is a
+    // `HairLayer` of its own, present because her directory holds
+    // `hair-layer.png` (`scripts/hair_layer.py`).
+    name: "tanvi",
+    hairLayer: true,
+    interior: [
+      { name: "eyes", u: 0.30, v: [0.52, 0.68] },
+      { name: "mouth", u: 0.20, v: [0.12, 0.30] },
+      { name: "nose", u: 0.12, v: [0.33, 0.60] },
+    ],
+  },
 ];
 
-describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
+describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair, hairLayer }) => {
   const asset = new URL(`../../assets/${name}.glb`, import.meta.url);
 
   // The code in this package is MIT and the binaries beside it are not:
   // they are artwork, CC-BY 4.0 (`assets/README.md`). A published GLB is copied
   // out of a dependency tree, renamed and handed on, so the terms are written
-  // into the file itself — `scripts/build_tara.COPYRIGHT`, through the glTF
+  // into the file itself — `scripts/build_character.COPYRIGHT`, through the glTF
   // exporter's copyright field. Nothing else can check this: a licence that
   // lives only in a manifest is a licence the file loses on its first copy.
   it("carries its own licence", async () => {
     const copyright = jsonChunk(await readFile(asset)).asset?.copyright ?? "";
     expect(copyright).toMatch(/Voqalize/);
     expect(copyright).toMatch(/CC-BY-4\.0/);
+  });
+
+  // The same argument run the other way, and it is the stricter one: our grant
+  // travelling in the file is a courtesy, and someone else's notice travelling
+  // in the file is a condition of using their mesh at all. A rebuild that drops
+  // it — `scripts/head_mesh.NOTICES` going missing, an exporter argument going
+  // back to the bare constant — breaks that silently and publishes.
+  //
+  // It is asserted on every character because every character now incurs it:
+  // the shell is MediaPipe's canonical mesh and the arch is measured off
+  // ICT-FaceKit, for all of them (`canonical/mediapipe/README.md`). It was one
+  // row's field while one face stood on published work, and a per-row field is
+  // the shape that goes quietly wrong the day a second face does.
+  it("carries what it owes others", async () => {
+    const copyright = jsonChunk(await readFile(asset)).asset?.copyright ?? "";
+    for (const pattern of OWED) expect(copyright).toMatch(pattern);
+  });
+
+  // Behind the lips are four surfaces and nothing but their depth order, and
+  // the order is invisible to every other check in this suite: a cavity that
+  // has come out in front of the tongue still mounts, still has finite targets,
+  // still passes the conformance sweep, and draws an open mouth as a flat dark
+  // hole. It shipped that way. The cavity's lower rows followed the lip down
+  // the chin still carrying the depth of the lip bump they started on
+  // (`scripts/morphs.cavity_targets`), so C had no tongue in it at all, H's L
+  // was a stub, and D wore the crossover between the two surfaces as a hard
+  // scalloped edge.
+  //
+  // D is the widest aperture and H is the L — the two tiles where the tongue is
+  // most of what a viewer sees. At the midline both bands have a column of
+  // their own, which is where they can be compared without interpolating twice.
+  it.each(["D", "H"])("shows tongue rather than dark at viseme %s", async (letter) => {
+    const glb = await readFile(asset);
+    const json = jsonChunk(glb);
+    const bin = binChunk(glb);
+    const pose = shapeFor(letter) as Record<string, number>;
+    const column = (part: string) => {
+      const mesh = (json.meshes ?? []).find((m) => m.name === part);
+      expect(mesh, part).toBeDefined();
+      return midline(posed(json, bin, mesh!, pose));
+    };
+    const cavity = column("Cavity");
+    const tongue = column("Tongue");
+    const depthAt = (height: number): number => {
+      for (let i = 1; i < cavity.length; i += 1) {
+        const [above, back] = cavity[i - 1];
+        const [below, front] = cavity[i];
+        if (height <= above && height >= below) {
+          return back + (front - back) * ((height - above) / (below - above));
+        }
+      }
+      return NaN;
+    };
+    const inside = tongue.filter(([height]) => Number.isFinite(depthAt(height)));
+    expect(inside.length, "tongue rows inside the cavity's band").toBeGreaterThan(1);
+    for (const [height, depth] of inside) {
+      expect(depth - depthAt(height), `at height ${height.toFixed(3)}`).toBeGreaterThan(0);
+    }
+  });
+
+  // What is seen of the lower arch is a difference between two much larger
+  // travels — the lip peeling off it on `mouthOpen`, the mandible carrying it
+  // down on `jaw` — so it is the one surface in the mouth that a small change
+  // anywhere can close up entirely, and nothing else here would notice. It has
+  // gone twice. Once in the asset: tess's arch sat deeper behind her lip than
+  // tara's and never cleared it, which `morphs.OPEN_DN`'s floor now corrects
+  // per character. Once in a driver: mocap composed `jaw` off ARKit's raw
+  // `jawOpen` instead of `JAW_OF_OPEN` of it, and the mandible fell as fast as
+  // the lip uncovering it, so the mouth opened wide with no lower teeth in it
+  // at any aperture.
+  //
+  // So the check is against `shapeFor`'s own pairing, not against numbers
+  // retyped here: the asset owes a visible crown to the composition the library
+  // actually sends it, and D is the widest aperture it sends.
+  it("uncovers the lower arch as the mouth opens", async () => {
+    const glb = await readFile(asset);
+    const json = jsonChunk(glb);
+    const bin = binChunk(glb);
+    const named = (part: string) => {
+      const mesh = (json.meshes ?? []).find((m) => m.name === part);
+      expect(mesh, part).toBeDefined();
+      return mesh!;
+    };
+    const head = named("Head");
+    const arch = named("Teeth_Lower");
+
+    // The lower lip's inner rim, identified by what it does rather than by an
+    // index: of the vertices near the midline it is the one the peel alone
+    // carries furthest down.
+    const shut = posed(json, bin, head, {});
+    const peeled = posed(json, bin, head, { mouthOpen: 1 });
+    let rim = -1;
+    let furthest = 0;
+    for (let i = 0; i < shut.length; i += 3) {
+      if (Math.abs(shut[i]) > 0.012) continue;
+      const fell = shut[i + 1] - peeled[i + 1];
+      if (fell > furthest) [rim, furthest] = [i, fell];
+    }
+    expect(rim, "a midline vertex that the lip peel moves").toBeGreaterThanOrEqual(0);
+
+    const clearance = (pose: Record<string, number>) => {
+      const lip = posed(json, bin, head, pose)[rim + 1];
+      const crown = midline(posed(json, bin, arch, pose))[0]?.[0] ?? NaN;
+      return crown - lip;
+    };
+
+    // The peel, against a mandible held still: how far the lip travels past an
+    // arch that has not moved. This is the one number the characters are built
+    // to hold in common — `morphs.OPEN_DN` carries tara's, and its floor adds
+    // back whatever more of their own lip a character has to peel through — so
+    // it is the one that catches an arch set too deep to be uncovered at all.
+    expect(clearance({ mouthOpen: 1 }), "the lip peels past a still arch")
+      .toBeGreaterThan(0.05);
+
+    // And the composition the library actually sends has to uncover rather than
+    // cover. Their difference is what collapses when a driver picks its own
+    // ratio: `jaw` at 1:1 with the aperture leaves a third of this on tara,
+    // which is a mouth that opens wide with no lower teeth in it.
+    //
+    // Per unit of D's aperture, because the defect is a ratio and the table's
+    // size is not this test's business: a D calibrated smaller shows less arch
+    // and is still a mouth with teeth in it. 0.018 is the 0.015 this held at
+    // an absolute when D opened 0.83 past rest; 1:1 leaves a third of what a
+    // healthy asset shows.
+    const d = shapeFor("D") as Record<string, number>;
+    const x = shapeFor("X") as Record<string, number>;
+    const speaking = (clearance(d) - clearance(x)) / (d.mouthOpen - x.mouthOpen);
+    expect(speaking, "arch D shows over silence, per unit of D's aperture")
+      .toBeGreaterThan(0.018);
   });
 
   // The reach across the package wall is the point of the test. tara's morph
@@ -278,8 +495,14 @@ describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
       // same two names as the neck's roll pair, deliberately: it is the same
       // channel driving the same rotation, and only the angle the rig hands them
       // differs — held back at rest, and swinging either side of that while it
-      // settles (`tara-rig.HAIR_ROLL`).
+      // settles (`character-rig.HAIR_ROLL`).
       ...(hair ? { Hair: ["headRoll", "headRoll_q"] } : {}),
+      // Hair lying over the body, on a layer of its own: the same roll hold as
+      // a hanging `Hair` shell, a hold on the yaw as well - its inner edge is
+      // the neck's outline, which does not turn - and below the chin the shrug
+      // of the shoulders it lies on (`morphs.hair_layer_targets`).
+      ...(hairLayer ? { HairLayer: ["headRoll", "headRoll_q", "headYaw", "headYaw_q",
+                                    "shoulderL", "shoulderR"] } : {}),
     });
   });
 
@@ -302,7 +525,7 @@ describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
   // The head channels are displacements, and the export is where a sign gets
   // lost: Blender (x, y, z) leaves as glTF (x, z, -y), so +X and +Z survive
   // intact and only +Y flips. Both copies of the yaw negated it anyway — in
-  // `build_tara.py` and in `src/tara-rig.ts` together — so neither disagreed
+  // `build_character.py` and in `src/character-rig.ts` together — so neither disagreed
   // with the other and tara turned her head away from her own eyes, because
   // `gaze.js` feeds `pupilX` and `headYaw` one aversion term. This reads the
   // shipped asset in the frame three.js reads it in, and asserts what
@@ -338,7 +561,7 @@ describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
    * in the rig without rebuilding drew a second jawline across the throat. This
    * test used to guard exactly that. It no longer needs to:
    * `scripts/morphs.neck_targets` authors the rotation's two angle-free terms
-   * (`A P` and `A^2 P`) and `tara-rig.neckInfluence` supplies `sin(th)` and
+   * (`A P` and `A^2 P`) and `character-rig.neckInfluence` supplies `sin(th)` and
    * `1 - cos(th)`, so the follow is exact at any angle and the envelope is a
    * runtime number the asset never sees.
    *
@@ -353,6 +576,42 @@ describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
     expect(extras.face_height_units, "one unit is one face height").toBe(true);
     expect(extras.head_degrees_per_unit,
       "the envelope is the rig's, not the asset's — see neck_targets").toBeUndefined();
+  });
+
+  /**
+   * Where this head turns and tilts, and what rides its skull.
+   *
+   * These are facts about *this* head — the jaw angle, the chin, the parts the
+   * build grouped — so the asset carries them and the rig reads them
+   * (`stamp_abi`). Until 2026-09-23 they were typed into `character-rig.ts` by
+   * hand, through a frame conversion (Blender x, y, z is glTF x, z, −y), with
+   * nothing on either side to catch a disagreement: the audit tool that reads
+   * both reads the pivots out of the rig alone, so it would have reported
+   * agreement with a build that used something else entirely.
+   *
+   * Held against the rig's own fallbacks, which is the point. They are what an
+   * asset built before the stamp is driven by, so the day they stop matching is
+   * the day one character moves and the character beside it does not — and the
+   * only difference a viewer sees is that a small turn stops swinging the chin.
+   */
+  it("says where its head turns, and hands the rig the same numbers", async () => {
+    const glb = await readFile(asset);
+    const json = jsonChunk(glb);
+    const extras = json.scenes?.[0]?.extras ?? {};
+    for (const [key, fallback] of [["head_pivot", PIVOT], ["roll_pivot", ROLL_PIVOT]] as const) {
+      const stamped = extras[key] as number[] | undefined;
+      expect(stamped, `${name}.glb stamps ${key} — rebuild it`).toHaveLength(3);
+      expect(stamped, `${key}: the rig's fallback and the build have parted`)
+        .toEqual([fallback.x, fallback.y, fallback.z].map((n) => expect.closeTo(n, 6)));
+    }
+    // What this head has, in the rig's own order — so it is the asset being
+    // asked and not the rig's list copied back. tanya's hair covers her ears
+    // and she is built without them; a skull part left behind in the body's
+    // frame does not fail, it just stops turning with the head, which is the
+    // silence this closes.
+    const nodes = new Set((json.nodes ?? []).map((n) => n.name));
+    expect(extras.head_parts, `${name}.glb stamps head_parts — rebuild it`)
+      .toEqual(HEAD_PARTS.filter((part) => nodes.has(part)));
   });
 
   /**
@@ -451,7 +710,8 @@ describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
     // the silhouette at ear height it is drawn in the atlas and the hair shell
     // carries it (`face_texture.EAR_SHELL`), so what must be checked is that
     // every shell that exists carries the field, not that a fixed five do.
-    const globes = ["Eye_L", "Eye_R", "Hair", "Head"];
+    // A hair layer turns with the skull as the shells do.
+    const globes = ["Eye_L", "Eye_R", "Hair", ...(hairLayer ? ["HairLayer"] : []), "Head"];
     const shells = new Set((json.meshes ?? []).map((mesh) => mesh.name));
     expect([...carriers].sort()).toEqual(
       shells.has("Ears") ? ["Ears", ...globes] : globes);
@@ -483,11 +743,19 @@ describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
     // TARA-SPECIFIC: her jaw's rim turns about 0.11 in front of the face plane.
     expect(extras.jaw_shadow_rim_z as number).toBeGreaterThan(0.05);
     expect(extras.jaw_shadow_rim_z as number).toBeLessThan(0.2);
+    // And how far that rim goes down at a full jaw, without which the shadow
+    // rotates with the head but stays banded across the throat while the chin
+    // descends through it. It has to be a real share of the rim's own travel
+    // and stay inside the tile the lookup is clamped to, or the shadow would
+    // slide off the bottom of its own map at an open mouth.
+    const drop = extras.jaw_shadow_drop as number | undefined;
+    expect(drop, "Neck extras.jaw_shadow_drop").toBeGreaterThan(0.03);
+    expect(drop).toBeLessThan((extent?.[3] ?? 0) - (extent?.[2] ?? 0));
   });
 
   /**
    * The expression maps (`scripts/expression_maps.py`), on the carrier the rig
-   * takes out of the scene (`tara-rig.ts`, `expressive`). The rig reads the
+   * takes out of the scene (`character-rig.ts`, `expressive`). The rig reads the
    * strip only through these extras, and a strip read with the wrong layout
    * shifts every map onto its neighbour's face — a raised brow's lines on a
    * smiling cheek — with no error. That the image itself survived the exporter
@@ -530,8 +798,8 @@ describe.each(CHARACTERS)("$name GLB", ({ name, interior, hair }) => {
     expect(primitives.length).toBeLessThanOrEqual(HARD_BUDGET.drawCalls);
     expect(triangles).toBeLessThanOrEqual(HARD_BUDGET.triangles);
     // Per-mesh is what a GPU pays for; the total is what an author maintains.
-    // Both are held, because 19 targets on one shell is cheap and 40 scattered
-    // over five meshes is not maintainable.
+    // Both are held, because the face's targets on one shell are cheap and the
+    // whole budget scattered over every mesh is not maintainable.
     for (const primitive of primitives) {
       expect(primitive.targets?.length ?? 0).toBeLessThanOrEqual(HARD_BUDGET.morphTargets);
     }

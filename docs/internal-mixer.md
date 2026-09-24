@@ -15,38 +15,6 @@
 > integrator copies from, so the app takes the published `createAvatar` and
 > nothing else ([apps/studio/README.md § The rule](../apps/studio/README.md)).
 
-Everything below is reachable from one import:
-
-```js
-import { createAvatar } from './src/avatar.js';
-import peep from './src/face-peep.js';
-const avatar = createAvatar({ mount: '#avatar', face: peep });
-```
-
-`mount` and one of `face` / `rig` are required — `createAvatar` throws without
-them. A face is the `{ create, meta }` value a face module default-exports, not
-a name: a name would need a table, and a table would pull all three drawings
-into a consumer's bundle to render one. The rest are optional:
-`theme` (palette overrides), `rig` + `rigOptions` (a non-SVG renderer, which
-suppresses `face`), `hand: false` and `handSide` (the frame-edge hand),
-`sequences` (the renderer's own addressable motions, which can only add to
-this renderer's published ones) and `actions` (the renderer's own *shape* for a
-published action — same id, same intent, keys sized for its body; an id this
-renderer does not publish throws, so it can reshape the catalogue and never grow
-it),
-`mouthGain`, `gestureGain`, `motionGain`, `prosodyHeadGain`, `prosodyFaceGain`,
-`saccadeGain` and `aversionGain` (eye-movement sizes for a face whose pupil
-units are small), `trunkFollow` (the trunk's share of a sustained head turn,
-0.45 unless a rig sizes it), `oculomotor` (the eye-head calibration, § Gaze),
-`states` (a rig's own rendering of a state: each entry replaces that state's
-fields whole, and an unknown state throws), and `manual` (no internal rAF loop —
-you call `tick` yourself, which is how the headless tools get deterministic
-frames).
-
-All setters are chainable. Unknown state, action and gesture ids **throw**;
-unknown emotion falls back to `neutral` silently; unknown gaze falls back to
-`USER` silently.
-
 ## States — `setState(name, { emotion?, intensity?, gaze?, keepGaze? })`
 
 A state is a *condition*, not an event: it holds until replaced. Each state
@@ -58,22 +26,15 @@ copy.** Each entry carries the perceptual reasoning for its own numbers in a
 comment above it — why `THINKING` averts *downward*, why `CANT_HEAR`'s brows go
 down rather than up, why `WORKING` looks at `OWN_SCREEN` and not `SCREEN_WORK`. A
 table here would be a second copy that nothing forces anyone to update, and the
-one that used to be here rotted exactly that way: it documented a `TYPING` state
-for weeks after the state was renamed `WORKING`.
+one that used to be here rotted exactly that way.
 
 The enum is exported as `STATE_NAMES`, and every recipe as `STATES`.
-
-Nine of them are the behavior vocabulary — `IDLE`, `LISTENING`, `CANT_HEAR`,
-`THINKING`, `WORKING`, `MUTED`, `SPEAKING`, `DEGRADED`, `OFFLINE`
-([contract-behavior.md](contract-behavior.md)), of which a server may send three.
-The rest are render states reachable only through `setState`, which is whose
-states they are.
 
 ## Emotion — `setEmotion(name, intensity = 1)`
 
 Affect is a separate axis from state, so the enums don't multiply.
-Six values (`EMOTION_NAMES`): `neutral`, `warm`, `curious`, `concerned`,
-`encouraging`, `thoughtful`. `intensity` scales the pose linearly toward
+The values are `EMOTION_NAMES` in `packages/avatar/src/emotions.js`.
+`intensity` scales the pose linearly toward
 neutral; it is not clamped, but past ~1.3 poses saturate against channel
 clamps. Entering a state *adopts that state's default emotion* unless you pass
 one explicitly.
@@ -82,25 +43,9 @@ one explicitly.
 
 Semantic directions; the client does the oculomotor work (ballistic eyes,
 lagging under-rotated head, a blink whose odds grow with the size of the shift —
-Evinger: small shifts rarely carry one, large ones nearly always do). Fourteen
-names (`GAZE_NAMES`):
-
-| target | meaning |
-|---|---|
-| `USER` | down the webcam barrel — the conversational default |
-| `USER_EAR` | still on the user, head cheated aside so an ear favors the speaker — the "trying to hear you" attitude. Head-follow and pupils point opposite ways, which is what keeps it reading as contact |
-| `SCREEN_CENTER` / `SCREEN_LEFT` / `SCREEN_RIGHT` / `SCREEN_TOP` / `SCREEN_BOTTOM` | regions of the shared screen |
-| `SCREEN_WORK` | lower-left work area of the shared screen |
-| `NOTES` | down-right glance at the agent's own notes |
-| `OWN_SCREEN` | the agent's own display, just under the camera — eyes a little down, head nearly level. Where `WORKING` reads and `OFFLINE` waits |
-| `AWAY_THINKING` | up-left "recalling" break of eye contact — the stylized "let me think" beat |
-| `AWAY_RIGHT` | up-right variant |
-| `AWAY_DOWN` | down-left considering — measured cognitive aversion is mostly downward, but on a realistic face a down look reads as downcast, so `THINKING` keeps it to a fifth of its looks |
-| `AWAY_SIDE` | level, to the right — the sideways third of cognitive aversions |
-
-Escape hatch: `setGaze('CUSTOM', { x, y })` with normalized −1..1 screen
-coordinates, for when the server knows exactly where something is. (Any name
-plus a `custom` object works; the coordinates win.)
+Evinger: small shifts rarely carry one, large ones nearly always do). The
+targets, and what each one is for, are `GAZE_TARGETS` in
+`packages/avatar/src/gaze.js`; `GAZE_NAMES` is the enum.
 
 **Floor-passing rule (server-side):** do not command a gaze aversion in the
 final ~2.4 s of the agent's own utterance. Human speakers return to mutual
@@ -112,7 +57,7 @@ of the cue track as far as it has arrived.
 Gaze is also set implicitly by states; an action may temporarily override it,
 then releases it when the action lands. Between turns the state the server
 sends can change several times a second (`THINKING`, `WORKING`, `CANT_HEAR`), so among
-those three the eyes change over only once the new state has held for half a
+those the eyes change over only once the new state has held for half a
 second (`GAP_SETTLE` in `packages/avatar/src/avatar.js`); the pose changes at
 once. `SPEAKING` and `LISTENING` are never held back.
 
@@ -120,7 +65,7 @@ once. `SPEAKING` and `LISTENING` are never held back.
 so a look can live in the eyes. On a face whose eye turns a few degrees a
 pupil unit, the same numbers park the iris in the corner of the socket —
 side-eye, not thought. The `oculomotor` option sizes the system per rig
-(tara's is `TARA_TUNING` in `packages/avatar/client/three/tara-rig.ts`, with the
+(tara's is `CHARACTER_TUNING` in `packages/avatar/client/three/character-rig.ts`, with the
 reasoning for each number):
 
 - `angles` — degrees per pupil unit and per head unit, so blink odds and the
@@ -145,24 +90,11 @@ A face that passes none of it keeps the line-face behaviour exactly.
 ## Actions — `action(id)`
 
 Finite authored clips with baked plausible timings, so they are convincing with
-**no audio attached**. `packages/avatar/src/interjections.js` holds two lists, each clip's
-duration and keyframes beside its intent:
-
-- `ACTION_IDS` / `ACTIONS` — the seven *this renderer* publishes, which is not
-  the wire's vocabulary: that one is open and requires only `ACKNOWLEDGE` and
-  `RESPONSE_INTERRUPTED` ([contract-wire.md](contract-wire.md) § Action).
-  `ACKNOWLEDGE` is absent from the list because it is not a clip — `action()`
-  resolves it on the floor, to `ACK_NOD` while the user is speaking and
-  `ACK_RECEIVE` once they have stopped. An id in neither list and in no
-  `sequences`/`actions` an avatar passed is a **no-op**, not a throw, because an
-  open vocabulary makes a name this face cannot draw the expected case.
-- `INTERNAL_CLIPS` — the full authoring library the seven are drawn from, ~33
-  clips. It is a *timeline* library, not a second action vocabulary: nothing on
-  the mixer's surface takes one of its ids, and the instrument that reviews them
-  — Studio's filmstrip — drives a bare `ClipPlayer` instead. That
-  asymmetry is on purpose — publishing a clip says a server that knows this
-  renderer is mounted may ask for it, and that should cost an edit to
-  `ACTION_IDS`.
+**no audio attached**. `packages/avatar/src/interjections.js` holds the
+published ids and the authoring library they are drawn from, each clip's
+duration and keyframes beside its intent. Publishing a clip says a server that
+knows this renderer is mounted may ask for it, which is why it costs an edit to
+`ACTION_IDS` rather than being the default.
 
 The rules that are not visible in the keyframes:
 
@@ -185,9 +117,8 @@ harder than their length suggests.
 
 ## Hand gestures
 
-`GESTURE_GREET`, `GESTURE_GOODBYE`, `GESTURE_APPROVE` and `GESTURE_WAIT`
-compose a face half and a hand half. A hand rises into the bottom of the frame;
-hosts never address the halves separately.
+The hand gestures compose a face half and a hand half; a hand rises into the
+bottom of the frame and hosts never address the halves separately.
 
 What the widget guarantees, and why it is stated here rather than left to the
 drawing: **nothing but a single digit ever passes the mouth.** Mouth sync is
@@ -218,22 +149,8 @@ The headline feature. A **cue** is:
   i: 0.8 }   // optional 0..1 loudness; omit for 1
 ```
 
-Letters are the Rhubarb Lip Sync alphabet (a condensation of the Preston Blair
-set): `A` closed (P/B/M), `B` teeth together (most consonants), `C` open,
-`D` wide open, `E` rounded, `F` puckered, `G` lip-to-teeth (F/V), `H` tongue up
-(L), `X` silence. Exported: `VISEME_LETTERS`, `VISEME_SHAPES`.
-
-Rules the widget enforces (`normalizeCues`, applied to every track):
-
-- cues are sorted by `t`; consecutive duplicates merge;
-- cues shorter than **30 ms** are dropped — except that a closure (`A`/`G`)
-  replaces the cue it collapses into, because closures carry the most
-  lip-reading information;
-- unknown letters become `X`.
-
-So the server may emit noisy tracks; it should still try to end every
-utterance with an explicit `X` cue (the track only completes on a trailing
-`X`).
+Letters are the Rhubarb Lip Sync alphabet, a condensation of the Preston Blair
+set; `VISEME_LETTERS` and `VISEME_SHAPES` are the one copy of what each one is.
 
 **Clock.** Cues are scheduled against an utterance clock. Pass `audio` (an
 `HTMLMediaElement`; the widget uses `currentTime` and will call `play()` if
@@ -333,63 +250,14 @@ conversational reaction.
 
 ## Composing behavior: `perform(actions, { audio?, clock?, onAction? })`
 
-The composition surface. A **performance** is a list of timed verbs fired
-against a clock; each verb resolves to one of the enums above. This is how a
-backend assembles a turn locally: it sequences from a constrained vocabulary and
-cannot invent motion — every visible move is something that was authored
-and tuned on the rig.
-
-```js
-{ "t": 4200, "do": "emotion", "name": "warm", "i": 0.8 }
-{ "t": 5100, "do": "gaze",    "name": "SCREEN_WORK" }
-{ "t": 6300, "do": "action",  "id": "ACK_NOD" }
-{ "t": 8000, "do": "state",   "name": "WAITING_FOR_USER" }
-```
-
-| verb | args | dispatches to |
-|---|---|---|
-| `state` | `name`, `keepGaze?` (default **true**) | `setState(name, {keepGaze})` |
-| `emotion` | `name`, `i?` 0..1 (default 1) | `setEmotion(name, i)` |
-| `gaze` | `name` | `setGaze(name)` |
-| `action` | `id` | `action(id)` |
-
-**A server cannot send one of these.** `perform` is not on the wire, and
-deliberately so; this is a local authoring surface only.
-Studio's scripted take reads a turn as data and plays it through them:
-
-```js
-avatar.speak({ cues, audio });          // the utterance
-avatar.perform(turn.beats, { audio });  // its choreography, same clock
-```
-
-Rules:
-
-- **Clock** resolves like `speak()`: explicit `clock` fn > `audio.currentTime`
-  > ms elapsed since the call. Ride the audio element you speak with.
-  `perform` never starts or stops audio — `speak` owns the sound.
-- **Times fire verbatim** — no `LEAD_MS`. Visemes lead the audio because
-  phoneme sync is frame-critical; gestures arrive through their channels'
-  smoothing lag, and any deliberate lead is authored into `t` by the composer.
-- **There is no `speak` verb.** Speech defines the clock a performance rides
-  on; a timeline that could start new audio would be a clock inside a clock,
-  and stopping it would have to answer for the cue track too. The utterance
-  and its choreography stay sibling calls against the same element.
-- **`state` defaults to `keepGaze: true`** inside a performance: a timeline
-  that wants the gaze moved says so with a `gaze` verb at the moment it means.
-- **Hygiene** (`normalizeActions`, exported): actions are sorted by `t`;
-  entries with no finite `t`, an unknown verb, or a missing `name`/`id` are
-  dropped with a console warning. Enum values are checked when the verb
-  *fires*: a bad one warns and is skipped. A malformed action never breaks the
-  performance around it.
-- A new `perform()` replaces the running one. The returned handle's `stop()`
-  cancels **future actions only** — an in-flight clip finishes, a live
-  cue track is untouched — and `performEnd` does not fire. A handle whose
-  performance was already replaced is a no-op.
-- `on('performEnd')` fires when the last action has *fired*, not when its
-  effects finish rendering.
-- `onAction(a)` is called after each verb dispatches — the telemetry/log hook.
-- Seeking the audio backward does not re-fire earlier actions.
-
+The composition surface: a list of timed verbs fired against a clock, each
+resolving to one of the enums above. **A server cannot send one of these** —
+`perform` is not on the wire, and deliberately so; this is a local authoring
+surface only. **There is no `speak` verb**: speech defines the clock a
+performance rides on, and a timeline that could start new audio would be a
+clock inside a clock, which would then have to answer for the cue track too.
+The verbs, their arguments and their hygiene rules are in
+`packages/avatar/src/avatar.js`.
 ## Smoothing — what a keyframe actually renders as
 
 Every channel is a first-order chase toward its target with its own time
@@ -414,11 +282,11 @@ is usually a channel whose τ you have paid for twice.
 
 ## The held-head budget — `headHold`
 
-Four layers hold a head pose and none of them knows about the others: the
-state's attitude, the gaze (a look's head share, and its drift), a phrase's
-pose while speaking, and the idle posture. Each stays small; every so often
-they all point the same way, and the head arrives somewhere no one layer asked
-for. On a drawing that is merely a large turn. On a 2.5-D photograph it is
+The layers that hold a head pose — the state's attitude, the gaze (a look's
+head share, and its drift), a phrase's pose while speaking, and the idle posture
+— do not know about each other. Each stays small; every so often they all point
+the same way, and the head arrives somewhere no one layer asked for. On a
+drawing that is merely a large turn. On a 2.5-D photograph it is
 past where the asset holds together — and since the two conversational states
 are almost the whole of a call, it is where the face is judged.
 
@@ -436,30 +304,6 @@ An axis left out is unbudgeted, which is every face that has never been
 measured. `packages/avatar/test/three/presence.test.ts` is where the two states
 are measured against it, in degrees.
 
-## Events, gains, introspection
-
-- `on('state', fn)` — state changed (fires with the new name)
-- `on('speakEnd', fn)` — cue track completed
-- `on('clipEnd', fn)` — action finished (fires with its id)
-- `on('performEnd', fn)` — a performance's last action has fired
-- `on('gestureEnd', fn)` — a hand gesture's timeline has run out (fires with
-  its id). Tracked from the semantic gesture, so it fires under `hand: false`
-  too — see § Hand gestures
-- `setMouthGain(g)` — scales viseme excursion away from rest (1 = as authored;
-  useful when the avatar renders small). Never drags a closed mouth open.
-- `setGestureGain(g)` — scales clip deltas; small gestures under-render
-  through the head's smoothing, and this is the knob that compensates.
-- `setMotionGain(g)` — scales the idle liveness layer as a whole: breath,
-  sway, postural weight shifts, the body's share of speech emphasis. A host
-  rendering the avatar into a small tile, or one that re-encodes it into a
-  video stream where motion costs bitrate, can turn it down; 0 freezes the
-  body without freezing blinks, gaze or visemes. Where "alive" stops and
-  "fidgety" starts moves with tile size and with the audience, so this is
-  deliberately a host decision rather than a constant.
-- Getters: `state`, `emotion`, `gaze`, `speaking`, `performing`, `clip`,
-  `gesturing`, `params` (the live smoothed vector), `svg`, `meta`, `theme`.
-- `setOverrides({channel: value})` — direct parameter injection, post-clamp.
-  For tuning UIs and tests, not production.
-- `blink()`, `step(dt)` (only under `{manual: true}`), `destroy()`.
-
-Types: [`packages/avatar/src/avatar.d.ts`](../packages/avatar/src/avatar.d.ts), hand-maintained beside the code.
+The events, gains and getters are declared and documented in
+[`packages/avatar/src/avatar.d.ts`](../packages/avatar/src/avatar.d.ts),
+hand-maintained beside `avatar.js`.

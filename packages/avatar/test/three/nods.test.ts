@@ -12,15 +12,15 @@
  * Each clip is measured as the difference from the same seeded run with no
  * clip, so idle sway and gaze drift cancel and only the gesture is left.
  *
- * TARA-SPECIFIC: degrees come from `TARA_TUNING`'s head angles, i.e. tara's
+ * TARA-SPECIFIC: degrees come from `CHARACTER_TUNING`'s head angles, i.e. tara's
  * `HEAD_DEG`. A second avatar with its own envelope needs its own run.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACTION_IDS, createAvatar } from "../../src/avatar.js";
 import { BLENDER_ACTIONS, BLENDER_SEQUENCES } from "../../client/three/sequences.js";
-import { HAIR_ROLL, TARA_TUNING, hairRollStep } from "../../client/three/tara-rig.js";
+import { HAIR_ROLL, CHARACTER_TUNING, hairRollStep } from "../../client/three/character-rig.js";
 
-const DEG = TARA_TUNING.oculomotor.angles.head;
+const DEG = CHARACTER_TUNING.oculomotor.angles.head;
 const DT = 1 / 60;
 
 function seeded() {
@@ -37,7 +37,7 @@ function mixer(extra: object = {}) {
   return createAvatar({
     mount: document.createElement("div"), manual: true, hand: false,
     rig: () => ({ apply() {}, destroy() {} }),
-    sequences: BLENDER_SEQUENCES, actions: BLENDER_ACTIONS, ...TARA_TUNING, ...extra,
+    sequences: BLENDER_SEQUENCES, actions: BLENDER_ACTIONS, ...CHARACTER_TUNING, ...extra,
   } as any) as any;
 }
 

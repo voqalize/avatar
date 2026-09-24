@@ -364,6 +364,8 @@ export const AZURE_VISEME_TO_LETTER: Readonly<Record<number, VisemeLetter>>;
 export const SILENT: VisemeLetter;
 /** Pose channels for one letter at `intensity` (0..1), ready to merge into a frame. */
 export function shapeFor(letter: VisemeLetter, intensity?: number): PoseOverrides;
+/** `jaw` per unit of `mouthOpen`, the ratio the mouth's interior is calibrated at. */
+export const JAW_OF_OPEN: number;
 
 /**
  * The mouth clock. Someone has to turn a cue array plus a clock into "which

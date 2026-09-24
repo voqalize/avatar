@@ -9,6 +9,7 @@
  * only reader is `/internal/three`, a separate entry point that ships nothing.
  */
 import { TANYA_GLB } from "./tanya-asset.js";
+import { TANVI_GLB } from "./tanvi-asset.js";
 import { TESS_GLB } from "./tess-asset.js";
 import { TARA_GLB } from "./tara-asset.js";
 import { TUSHAR_GLB } from "./tushar-asset.js";
@@ -18,6 +19,7 @@ export const ASSETS = Object.freeze({
   tushar: TUSHAR_GLB,
   tanya: TANYA_GLB,
   tess: TESS_GLB,
+  tanvi: TANVI_GLB,
 });
 
 /** Every compiled character, in build order. */

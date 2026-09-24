@@ -1,6 +1,6 @@
 {
  "what": "How far each character may HOLD its head off centre, in degrees, measured by eye. A sustained pose is the strict case and this is the strict number: past it a static turn stops reading as a head that turned, because the eye behind a flat projection never foreshortens. `holds.ts` converts these into the mixer's pose units and `test/three/presence.test.ts` gates LISTENING and SPEAKING against them.",
- "versus": "This is not `HEAD_DEG` and is much smaller than it. `HEAD_DEG` (tara-rig.ts) is the envelope any motion may REACH — set by where the projection itself tears, which a rendered ladder put past 21 degrees of yaw on tara. A transient that returns is forgiven what a held pose is not, so a nod may pass through an angle this file will not let the head sit at.",
+ "versus": "This is not `HEAD_DEG` and is much smaller than it. `HEAD_DEG` (character-rig.ts) is the envelope any motion may REACH — set by where the projection itself tears, which a rendered ladder put past 21 degrees of yaw on tara. A transient that returns is forgiven what a held pose is not, so a nod may pass through an angle this file will not let the head sit at.",
  "units": "degrees from rest, either side, per axis driven alone from rest",
  "surface": {
   "cssWidth": 400,
@@ -113,6 +113,10 @@
   },
   "tess": {
    "unmeasured": "Nothing here has been read off her. She was built on 2026-09-20 and the owner has not driven her yet, so this entry carries no angle at all rather than a plausible one: `holds.ts` falls back to the tightest angle still live on each axis, which is the budget the faces nobody doubts are already held to. Drive her with the hold-and-move instrument and this becomes the same shape as the entries above.",
+   "defects": []
+  },
+  "tanvi": {
+   "unmeasured": "Nothing here has been read off her. She was built on 2026-09-23 and the owner has not driven her yet, so this entry carries no angle at all rather than a plausible one: `holds.ts` falls back to the tightest angle still live on each axis. Drive her with the hold-and-move instrument and this becomes the same shape as the entries above.",
    "defects": []
   }
  },

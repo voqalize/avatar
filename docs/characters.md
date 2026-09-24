@@ -1,26 +1,16 @@
 # The 2.5-D characters
 
-The characters ship as compiled binaries: **`tara`**, **`tushar`**, **`tanya`**
-and **`tess`**. Each is a complete `createAvatar` module, imported the same way as
-any other avatar in this package, and driven by the same wire — the same states,
-the same actions, the same cue-synced mouth
-([contract-wire.md](contract-wire.md)).
-
-```js
-import { createAvatar } from '@voqalize/avatar/avatars/tara';
-// or: @voqalize/avatar/avatars/tushar
-//     @voqalize/avatar/avatars/tanya
-//     @voqalize/avatar/avatars/tess
-
-const avatar = createAvatar({ mount: el, client: pipecatClient });
-```
+Each 2.5-D character is a complete `createAvatar` module under
+`packages/avatar/client/three/`, published as
+`@voqalize/avatar/avatars/<name>` and imported the same way as any other avatar
+in this package. They are driven by the same wire — the same states, the same
+actions, the same cue-synced mouth ([contract-wire.md](contract-wire.md)).
 
 Nothing above the renderer changes. They are not a second contract, a second
 lifecycle or a second vocabulary: the mixer that does states, gaze, blinks,
 idle motion, clips and per-channel smoothing for the SVG faces does all of it
 here too, and the only thing that is different is what draws the last frame.
 A server that has never heard of these characters drives one correctly.
-
 ## What they are
 
 A photograph of a face, projected onto shallow geometry, with the parts that
@@ -39,14 +29,14 @@ npm install three        # >=0.180 <0.187
 ```
 
 `three` is declared as an *optional* peer dependency, and the import that needs
-it lives behind these entry points. An SVG or Canvas consumer never
+it lives behind these entry points. An SVG consumer never
 downloads it, and installing this package without it is not a warning to
 suppress — it is the expected case.
 
 ## The asset is fetched at runtime
 
 Each character is one `.glb` in the package's `assets/` directory, between 0.5
-and 0.8 MB, resolved as
+and 1.1 MB, resolved as
 
 ```js
 new URL('../../assets/tara.glb', import.meta.url)
@@ -82,8 +72,7 @@ Exclude the package and it is served from its real path:
 export default { optimizeDeps: { exclude: ['@voqalize/avatar'] } };
 ```
 
-The same applies to the Canvas2D avatars, which locate their rig JSON and
-wardrobe images the same way. Other bundlers do not pre-bundle and need nothing.
+Other bundlers do not pre-bundle and need nothing.
 
 ## Size, and what it costs
 
@@ -100,10 +89,11 @@ shadow pass; the atlases travel inside the file.
 
 ## What they can do that a face cannot
 
-The head turns. Its envelope is `HEAD_DEG` — **15° of yaw, 24° of pitch, 8° of
-roll** — and it is a measured limit rather than a taste: past it the flat
-projection stops reading as a head that turned. The library keeps every head
-motion inside it, so there is nothing to configure and nothing to get wrong.
+The head turns, and its envelope is `HEAD_DEG` in
+`packages/avatar/client/three/character-rig.ts`. It is a measured limit rather
+than a taste: past it the flat projection stops reading as a head that turned.
+The library keeps every head motion inside it, so there is nothing to configure
+and nothing to get wrong.
 
 A pose the head *holds* is a stricter case than a motion that passes through an
 angle and returns, and it has its own per-character numbers — roughly a third of
@@ -111,25 +101,6 @@ the envelope, because the eye behind a flat projection never foreshortens and a
 sustained turn is where that shows. They are measured by eye and recorded in
 `packages/avatar/client/three/motion-limits.json` (exported as `MOTION_LIMITS`), and the
 characters apply them themselves: nothing to set here either.
-
-They also answer to more action ids than the core vocabulary has words for. A
-server asks for `ACKNOWLEDGE` and is never wrong; a server that knows one of
-these is mounted can ask for a particular *kind* of nod instead, because the
-wire's action id is open and an unknown one is ignored in silence. The
-declaration of what a mounted character answers to is its `supports` export
-([design-avatar-interface.md](design-avatar-interface.md)).
-
-## What you cannot do
-
-There is no pose API, no channel access, no per-character tuning beyond the
-gains every avatar takes (`mouthGain`, `gestureGain`, `motionGain`), and no
-renderer interface. The rig, its calibration and the pipeline that compiles a
-character are implementation details, and the pipeline is not published. A
-character is a finished binary here, the same way an SVG face is a finished
-drawing.
-
-They also have no arms, which is the library's oldest standing constraint and
-not an omission ([README.md](../README.md)).
 
 ## Licence
 

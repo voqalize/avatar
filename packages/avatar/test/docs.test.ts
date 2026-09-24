@@ -61,6 +61,11 @@ const CODE_DIRS = [
   // that tree in the corpus, or the check quietly stops covering the names it
   // is being asked about.
   "packages/avatar-3d/scripts",
+  // And each character's own tables, which are code a doc cites by name: the
+  // landmark constants live here, tara's included since her directory stopped
+  // being a special case. Left out, the check quietly passes on every name that
+  // only a character defines.
+  "packages/avatar-3d/characters",
   "packages/avatar-py/src",
   "packages/avatar-py/native",
   "apps/studio/src",
@@ -197,8 +202,8 @@ const isGenerated = (path: string) =>
  * directory appearing in someone's working copy must not silently start
  * validating references to somebody else's source.
  *
- * Five, since the repo went to a `packages/` + `apps/` layout and the headless
- * runners came up to a top-level `tools/` — which also means a manifest's own
+ * The list grew when the repo went to a `packages/` + `apps/` layout and the
+ * headless runners came up to a top-level `tools/` — which also means a manifest's own
  * package-relative claim (`pyproject.toml` saying `src/voqalize_avatar`) no
  * longer starts with a top-level directory and is no longer checked. The claims
  * that matter still are: anything a doc writes repo-relative, and every `docs/…`

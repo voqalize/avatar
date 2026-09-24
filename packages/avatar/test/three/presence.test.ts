@@ -19,7 +19,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAvatar } from "../../src/avatar.js";
 import { BLENDER_ACTIONS, BLENDER_SEQUENCES } from "../../client/three/sequences.js";
 import { headHold } from "../../client/three/holds.js";
-import { EYE_DEG, HEAD_CLAMP, HEAD_DEG, TARA_TUNING } from "../../client/three/tara-rig.js";
+import { EYE_DEG, HEAD_CLAMP, HEAD_DEG, CHARACTER_TUNING } from "../../client/three/character-rig.js";
 import LIMITS from "../../client/three/motion-limits.json";
 
 const DT = 1 / 60;
@@ -46,7 +46,7 @@ function mixer() {
   return createAvatar({
     mount: document.createElement("div"), manual: true, hand: false,
     rig: () => ({ apply() {}, destroy() {} }),
-    sequences: BLENDER_SEQUENCES, actions: BLENDER_ACTIONS, ...TARA_TUNING,
+    sequences: BLENDER_SEQUENCES, actions: BLENDER_ACTIONS, ...CHARACTER_TUNING,
     // The tightest of the three, so one recording answers for all of them: a
     // budget that holds the narrowest face holds the others by construction.
     headHold: tightest(),

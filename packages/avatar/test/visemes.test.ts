@@ -52,4 +52,43 @@ describe("VisemeTrack presentation timing", () => {
     clockMs = 200;
     expect(track.sample()).toMatchObject({ letter: "A", phone: null });
   });
+
+  it("resumes when a later sentence's cues arrive after the track played out", () => {
+    // OmniVoice's next sentence routinely lands after the previous one's tail,
+    // and a track that stayed stopped froze the mouth through audible speech.
+    let clockMs = 0;
+    const track = new VisemeTrack();
+    track.start([
+      { t: 0, v: "C" },
+      { t: 200, v: "X" },
+    ], () => clockMs);
+
+    clockMs = 100;
+    expect(track.sample()?.letter).toBe("C");
+    clockMs = 200 + track.tailMs + 1;
+    expect(track.sample()).toBeNull();
+
+    track.push([
+      { t: 1000, v: "D" },
+      { t: 1300, v: "X" },
+    ]);
+    clockMs = 1100;
+    expect(track.sample()?.letter).toBe("D");
+  });
+
+  it("draws a closure on its own cue, not ahead of it", () => {
+    // The server starts every closure early; a second lead here doubled it.
+    let clockMs = 0;
+    const track = new VisemeTrack();
+    track.start([
+      { t: 0, v: "D" },
+      { t: 200, v: "A" },
+      { t: 300, v: "X" },
+    ], () => clockMs);
+
+    clockMs = 180;
+    expect(track.sample()?.letter).toBe("D");
+    clockMs = 200;
+    expect(track.sample()?.letter).toBe("A");
+  });
 });

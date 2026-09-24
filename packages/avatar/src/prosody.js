@@ -132,7 +132,7 @@ const POSE = {
   // and a knit below it — so a phrase sitting negative is the only route a
   // real furrow has into a sentence. Pinned at zero, half the asset was
   // unreachable by construction. The floor is `thoughtful`'s own -0.14, which
-  // tara-rig's knit weight already cites as a third of the crease; the ceiling
+  // character-rig's knit weight already cites as a third of the crease; the ceiling
   // stays well under a beat's 0.34 so a held level is never read as an accent.
   brow: [-0.14, 0.18],
   browTauS: 0.8,
@@ -244,8 +244,7 @@ const BEAT = {
   // A diagonal nod's yaw, on the turn's side. Raised with the swing above, and
   // for the same reason — a diagonal beat moves the head across the sentence
   // where a pure pitch nod only moves it down and back. The amplitude is
-  // untouched: the nod's read defect was its geometry, never its size
-  // (3d-avatar-motion-audit.md, 2026-09-14).
+  // untouched: the nod's read defect was its geometry, never its size.
   yawP: 0.45,
   yaw: 0.12,
 };
@@ -439,6 +438,11 @@ export class SpeechProsody {
    * The avatar has entered LISTENING: the floor is the user's. A warmth
    * episode, unless something smiled recently — see `LISTEN_SMILE_REST_MS`,
    * which is what stands between this and a face that is always smiling.
+   *
+   * Nothing smiles when the user *starts* talking, on purpose. The client has
+   * no event for that moment, and a smile the renderer timed for itself would
+   * be an acknowledgement nobody sent. The lever for more warmth while
+   * listening is the server sending more `ACK_NOD`s, never a timer here.
    */
   listen() {
     if (this._ms - this._lastWarm < LISTEN_SMILE_REST_MS) return;

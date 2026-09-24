@@ -1,8 +1,8 @@
 {
   "name": "@voqalize/avatar",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "A JavaScript-programmable talking head for AI voice calls: line-art or 2.5-D faces, server-synced lipsync, state through motion, no runtime dependencies.",
-  "license": "MIT AND CC-BY-4.0",
+  "license": "MIT AND CC-BY-4.0 AND Apache-2.0",
   "author": "Voqalize",
   "homepage": "https://github.com/voqalize/avatar#readme",
   "repository": {
@@ -81,53 +81,9 @@
       "types": "./dist/three/tess.d.ts",
       "default": "./dist/three/tess.js"
     },
-    "./avatars/arjun": {
-      "types": "./dist/arjun.d.ts",
-      "default": "./dist/arjun.js"
-    },
-    "./avatars/meera": {
-      "types": "./dist/meera.d.ts",
-      "default": "./dist/meera.js"
-    },
-    "./avatars/vikram": {
-      "types": "./dist/vikram.d.ts",
-      "default": "./dist/vikram.js"
-    },
-    "./avatars/ishita": {
-      "types": "./dist/ishita.d.ts",
-      "default": "./dist/ishita.js"
-    },
-    "./avatars/kabir": {
-      "types": "./dist/kabir.d.ts",
-      "default": "./dist/kabir.js"
-    },
-    "./avatars/naina": {
-      "types": "./dist/naina.d.ts",
-      "default": "./dist/naina.js"
-    },
-    "./avatars/interviewer-male": {
-      "types": "./dist/interviewer-male.d.ts",
-      "default": "./dist/interviewer-male.js"
-    },
-    "./avatars/interviewer-female": {
-      "types": "./dist/interviewer-female.d.ts",
-      "default": "./dist/interviewer-female.js"
-    },
-    "./avatars/professional-male-a": {
-      "types": "./dist/professional-male-a.d.ts",
-      "default": "./dist/professional-male-a.js"
-    },
-    "./avatars/professional-female-a": {
-      "types": "./dist/professional-female-a.d.ts",
-      "default": "./dist/professional-female-a.js"
-    },
-    "./avatars/professional-male-b": {
-      "types": "./dist/professional-male-b.d.ts",
-      "default": "./dist/professional-male-b.js"
-    },
-    "./avatars/professional-female-b": {
-      "types": "./dist/professional-female-b.d.ts",
-      "default": "./dist/professional-female-b.js"
+    "./avatars/tanvi": {
+      "types": "./dist/three/tanvi.d.ts",
+      "default": "./dist/three/tanvi.js"
     },
     "./package.json": "./package.json"
   },
@@ -136,7 +92,8 @@
     "client",
     "dist",
     "assets",
-    "LICENSE-CC-BY-4.0"
+    "LICENSE-CC-BY-4.0",
+    "LICENSE-APACHE-2.0"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -36,25 +36,90 @@
 import {
   CUE_TRACK_LEAD_MS,
   MIN_VISIBLE_CUE_MS,
+  ROUND_LEAD_MS,
   SPEECH_TRACK_TAIL_MS,
 } from './speech-timing.js';
 
+/**
+ * The mouth every face owes the server, at the loudest a cue can say (`i` 1).
+ *
+ * **The apertures are measured speech, not taste.** The anchor is the open
+ * vowel: Huber & Chandrasekaran 2006 (JSLHR 49:1368, Table 2; Optotrak, 30
+ * adults, a sentence read aloud) open "Bobby"'s [ɑ] by 7.84 mm of lower lip
+ * over the jaw, 7.32 of jaw and 2.49 of upper lip — 17.65 mm of inter-lip
+ * opening, pooled over one comfortable and three loud conditions. Their Table 1
+ * puts comfortable at 0.83 of that pool (4.86 mm against a loud 6.06–6.35), so
+ * ordinary speech opens an [ɑ] **14.6 mm**, and `D` is sized so that it does at
+ * `i` 0.5 — which is where PyGato puts an engine's ordinary speaking level
+ * (`pygato.lipsync.intensity`). The same paper is the check on the parts this
+ * does not set: the jaw's share comes out at 6.6 mm against their ~6.1, and the
+ * upper lip at 1.7 mm against ~2.1 — the upper lip is the stable one, a third
+ * of the lower's travel, and the rig already had it so.
+ *
+ * Millimetres are face units at **176.7 mm** a unit (chin to hairline): Lin &
+ * Chen 2017 (PLoS ONE 12:e0188638) give women's menton–sellion as 107.8 mm,
+ * and sellion sits at 0.61 of the unit on every character here. Their mouth
+ * width (44.9 mm) would say 157 — these faces are drawn with slightly wide
+ * mouths, and the vertical measure is the one an aperture is.
+ *
+ * No source reachable gave per-vowel apertures in millimetres, so the other
+ * letters keep the ratios to `D` they were authored with and are scaled by the
+ * same factor (0.617 of their excursion from rest). Upper-teeth show is part
+ * of the opening and scales with it — except on `G`, where teeth on the lip
+ * *is* the shape. A mouth this size is what "the mouth is moving a lot" was
+ * asking for: the table it replaced opened an ordinary [ɑ] 26 mm, as far as the
+ * loud speech in that study opens a shout.
+ */
 export const VISEME_SHAPES = {
   X: { mouthOpen: 0.02, mouthWidth: 0.42, mouthRound: 0.10, mouthPress: 0.15, mouthTuck: 0, teethUpper: 0.00, tongue: 0.0 },
   A: { mouthOpen: 0.00, mouthWidth: 0.40, mouthRound: 0.18, mouthPress: 0.55, mouthTuck: 0, teethUpper: 0.00, tongue: 0.0 },
-  B: { mouthOpen: 0.16, mouthWidth: 0.54, mouthRound: 0.05, mouthPress: 0.10, mouthTuck: 0, teethUpper: 0.75, tongue: 0.0 },
-  C: { mouthOpen: 0.45, mouthWidth: 0.58, mouthRound: 0.05, mouthPress: 0.00, mouthTuck: 0, teethUpper: 0.45, tongue: 0.0 },
-  D: { mouthOpen: 0.85, mouthWidth: 0.52, mouthRound: 0.02, mouthPress: 0.00, mouthTuck: 0, teethUpper: 0.25, tongue: 0.15 },
-  E: { mouthOpen: 0.34, mouthWidth: 0.28, mouthRound: 0.55, mouthPress: 0.00, mouthTuck: 0, teethUpper: 0.15, tongue: 0.0 },
-  F: { mouthOpen: 0.22, mouthWidth: 0.10, mouthRound: 0.95, mouthPress: 0.10, mouthTuck: 0, teethUpper: 0.00, tongue: 0.0 },
-  G: { mouthOpen: 0.20, mouthWidth: 0.46, mouthRound: 0.10, mouthPress: 0.40, mouthTuck: 1.00, teethUpper: 1.00, tongue: 0.0 },
-  H: { mouthOpen: 0.40, mouthWidth: 0.48, mouthRound: 0.05, mouthPress: 0.00, mouthTuck: 0, teethUpper: 0.35, tongue: 0.90 },
+  B: { mouthOpen: 0.11, mouthWidth: 0.54, mouthRound: 0.05, mouthPress: 0.10, mouthTuck: 0, teethUpper: 0.46, tongue: 0.0 },
+  C: { mouthOpen: 0.29, mouthWidth: 0.58, mouthRound: 0.05, mouthPress: 0.00, mouthTuck: 0, teethUpper: 0.28, tongue: 0.0 },
+  D: { mouthOpen: 0.53, mouthWidth: 0.52, mouthRound: 0.02, mouthPress: 0.00, mouthTuck: 0, teethUpper: 0.15, tongue: 0.15 },
+  E: { mouthOpen: 0.22, mouthWidth: 0.28, mouthRound: 0.55, mouthPress: 0.00, mouthTuck: 0, teethUpper: 0.09, tongue: 0.0 },
+  F: { mouthOpen: 0.14, mouthWidth: 0.10, mouthRound: 0.95, mouthPress: 0.10, mouthTuck: 0, teethUpper: 0.00, tongue: 0.0 },
+  G: { mouthOpen: 0.13, mouthWidth: 0.46, mouthRound: 0.10, mouthPress: 0.40, mouthTuck: 1.00, teethUpper: 1.00, tongue: 0.0 },
+  H: { mouthOpen: 0.25, mouthWidth: 0.48, mouthRound: 0.05, mouthPress: 0.00, mouthTuck: 0, teethUpper: 0.22, tongue: 0.90 },
 };
 
 export const VISEME_LETTERS = Object.keys(VISEME_SHAPES);
 
 /** Resting mouth used when nothing is speaking. */
 export const SILENT = 'X';
+
+/** The shapes that are a contact, not an aperture: lips together, lip to teeth. */
+const CLOSURES = new Set(['A', 'G']);
+
+/**
+ * How far the mandible falls for a given aperture — `jaw` is "follows
+ * mouthOpen but slower" (`params.js`) and this is the slower.
+ *
+ * It is exported because it is not a preference: **every amplitude behind the
+ * lips was calibrated at this ratio**, so a driver that picks its own moves the
+ * mandible relative to the lip that hides it. The lower arch is the surface
+ * that shows it, because it rides `jaw` alone while the lip peels off it on
+ * `mouthOpen`: what is seen of the arch is the difference between two much
+ * larger travels (`avatar-3d/scripts/morphs.ARCH_DROP`), so it goes to nothing
+ * at a ratio only a little above this one. A face driven at 1:1 opens wide and
+ * shows no lower teeth at any aperture — the arch descends as fast as the lip
+ * uncovering it, which is what mocap did until it read this number instead of
+ * ARKit's `jawOpen` directly.
+ */
+export const JAW_OF_OPEN = 0.7;
+
+/**
+ * How much of a shape's excursion a cue's loudness buys, as `k = LOUDNESS_FLOOR
+ * + (1 - LOUDNESS_FLOOR) * i`.
+ *
+ * Louder speech is the same movement made bigger, and not by much: +10 dB
+ * opens the lips and jaw 1.28x as far (Huber & Chandrasekaran 2006, Table 1:
+ * 4.86 mm comfortable, 6.06–6.35 loud; Schulman 1989 calls it "amplification
+ * of normal movement patterns"). `i` spans 16 dB with ordinary speech at 0.5,
+ * so 0.5 either side is 8 dB and 1.22x — k runs 0.776 : 1 : 1.224 across it,
+ * which normalised to the loud end is this floor. The quiet side is the loud
+ * side's slope extended; nothing measured it.
+ */
+const LOUDNESS_FLOOR = 0.634;
 
 /**
  * Scale a shape by loudness. Only the "effortful" channels scale — a quiet 'D'
@@ -63,7 +128,7 @@ export const SILENT = 'X';
 export function shapeFor(letter, intensity = 1) {
   const base = VISEME_SHAPES[letter] || VISEME_SHAPES[SILENT];
   const rest = VISEME_SHAPES.X;
-  const k = 0.45 + 0.55 * Math.max(0, Math.min(1, intensity));
+  const k = LOUDNESS_FLOOR + (1 - LOUDNESS_FLOOR) * Math.max(0, Math.min(1, intensity));
   return {
     mouthOpen: rest.mouthOpen + (base.mouthOpen - rest.mouthOpen) * k,
     mouthWidth: rest.mouthWidth + (base.mouthWidth - rest.mouthWidth) * k,
@@ -72,7 +137,7 @@ export function shapeFor(letter, intensity = 1) {
     mouthTuck: base.mouthTuck,
     teethUpper: base.teethUpper * k,
     tongue: base.tongue,
-    jaw: (rest.mouthOpen + (base.mouthOpen - rest.mouthOpen) * k) * 0.7,
+    jaw: (rest.mouthOpen + (base.mouthOpen - rest.mouthOpen) * k) * JAW_OF_OPEN,
   };
 }
 
@@ -127,7 +192,7 @@ export function normalizeCues(cues) {
     if (prev && head.t - prev.t < MIN_VISIBLE_CUE_MS) {
       // Too short to read. Keep whichever is more visually salient: a closure
       // (A/G) carries more lip-reading information than a mid-open vowel.
-      if (v === 'A' || v === 'G') {
+      if (CLOSURES.has(v)) {
         // The short cue can sit between two identical closures (G → F → G).
         // Its replacement would otherwise create a duplicate visible shape;
         // preserving the first G is both the stable wire form and the face the
@@ -209,6 +274,14 @@ export class VisemeTrack {
     this.cues = merged;
     // Re-seek rather than trusting the old index against a re-normalized array.
     this._idx = 0;
+    // A sentence can arrive after the one before it has played out — a TTS
+    // whose next sentence lags its own audio does this routinely — and the
+    // track had stopped at that sentence's tail. Resume on the same clock, or
+    // the face holds still through audio the user can hear.
+    if (!this.playing && this.clock && merged.length) {
+      const last = merged[merged.length - 1];
+      this.playing = last.v !== SILENT || this.clock() + LEAD_MS <= last.t + this.tailMs;
+    }
   }
 
   stop() {
@@ -218,7 +291,19 @@ export class VisemeTrack {
     this._idx = 0;
   }
 
-  /** @returns {{letter: string, intensity: number, phone: string | null} | null} */
+  /**
+   * The shape to aim at now, which is not always the cue under the clock.
+   *
+   * Rounding starts before its sound, because it is the kind of gesture a
+   * viewer reads a word by (speech-timing.js has the measurements): `round`
+   * carries the pucker of a rounded vowel coming up within `ROUND_LEAD_MS`, for
+   * the mixer to hold against the current shape's own. It does not reach
+   * across a rest. A closure's early onset is not drawn here — the server
+   * already starts every closure cue ahead of its phone, and a second lead on
+   * top of that closed the lips a whole vowel early.
+   *
+   * @returns {{letter: string, intensity: number, phone: string | null, round: number} | null}
+   */
   sample() {
     if (!this.playing || !this.cues.length || !this.clock) return null;
     const now = this.clock() + LEAD_MS;
@@ -237,8 +322,17 @@ export class VisemeTrack {
     }
 
     const cue = this.cues[this._idx];
-    if (cue.t > now) return { letter: SILENT, intensity: 1, phone: null };
-    return { letter: cue.v, intensity: cue.i == null ? 1 : cue.i, phone: cue.p ?? null };
+    if (cue.t > now) return { letter: SILENT, intensity: 1, phone: null, round: 0 };
+    let round = 0;
+    for (let j = this._idx + 1; j < this.cues.length; j++) {
+      const ahead = this.cues[j];
+      if (ahead.v === SILENT || ahead.t - now > ROUND_LEAD_MS) break;
+      // Across consonants too: protrusion before a rounded vowel grows with the
+      // consonants in front of it (Noiray et al. 2011, JASA 129:340), so the
+      // lips of "sm-" in "smooth" are already on their way.
+      round = Math.max(round, VISEME_SHAPES[ahead.v].mouthRound);
+    }
+    return { letter: cue.v, intensity: cue.i == null ? 1 : cue.i, phone: cue.p ?? null, round };
   }
 }
 

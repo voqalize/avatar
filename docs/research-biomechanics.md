@@ -1,60 +1,25 @@
 # Research: the biomechanics and craft of a minimal listening face
 
-A citation-backed reference for driving Kiran's ~30-channel parameter rig. Every
-section aims at *numbers you can put in a keyframe* — frequencies, amplitudes,
-durations, phase offsets — rather than restating that faces are expressive.
+A citation-backed reference for driving the pose channels in
+[params.js](../packages/avatar/src/params.js). Every section aims at *numbers you
+can put in a keyframe* — frequencies, amplitudes, durations, phase offsets —
+rather than restating that faces are expressive.
 
-Scope note: Kiran is a head-and-shoulders portrait on a small video-call tile,
-mostly **listening**, with no arms or hands, driven by a server that supplies a
-state enum, a gaze enum, and Rhubarb A–H+X viseme letters. Where the literature
-gives a body-scale number, it is converted here to the channel that survives the
-crop (head, brows, lids, shoulders, torsoLean) and the rest is discarded.
+Scope note: the subject is a head-and-shoulders portrait on a small video-call
+tile, **listening** most of the time, with no arms or hands. Where the
+literature gives a body-scale number it is converted here to the channel that
+survives the crop — head, brows, lids, shoulders, torso — and the rest is
+discarded.
 
 A caution that applies throughout: our channels are normalized `-1..1`, not
 degrees or centimetres, and the mapping from channel to art units differs per
-avatar. Every number below that came from the literature is given in its own
-units *and* as a suggested channel value. Those suggestions were originally
-calibrated against `blue-shirt`, a rig retired on 2026-08-06 — so treat them as
-a starting point to be checked by eye on the rig you are actually driving, per
-the project's verify-visually rule. That was always the instruction; the
-retirement only removes the temptation to trust the second number.
+avatar. Every number below is given in its own units, and what it becomes on the
+rig you are actually driving is a thing to check by eye, per the project's
+verify-visually rule.
 
 ---
 
 ## 1. Classical animation principles applied to minimal rigs
-
-### 1.1 The 12 principles, filtered for a face with no body
-
-Only five of Thomas & Johnston's twelve principles have any purchase on a rig
-that cannot move through space: **anticipation, staging, slow in / slow out,
-secondary action, exaggeration**. Squash-and-stretch, arcs, follow-through,
-overlapping action, straight-ahead-vs-pose-to-pose, solid drawing and appeal
-either don't apply or are already structural in our mixer.
-
-- **Anticipation** — the small reverse move before the main move, which
-  "captivates the viewer for an action that is about to happen, involving a
-  short pause before the act."
-  ([NYFA](https://www.nyfa.edu/student-resources/12-principles-of-animation/),
-  [Animation Mentor](https://www.animationmentor.com/blog/anticipation-the-12-basic-principles-of-animation/))
-  For a head-only rig the two anticipations that pay are: (a) **a blink
-  immediately before a head turn** — "an eye blink before a head turn is an
-  example of anticipation in animation. It makes more sense for the character to
-  blink slightly before turning their head"
-  ([Animation Mentor](https://www.animationmentor.com/blog/anticipation-the-12-basic-principles-of-animation/));
-  and (b) **a brow flick or a small counter-pitch before a nod**, so the nod has
-  somewhere to come from.
-- **Staging** — one idea at a time. On a 200px tile, two simultaneous
-  expressive events cancel. If the brows are doing the work, the mouth should be
-  neutral, and vice versa.
-- **Slow in / slow out** — "real-life things don't start and stop instantly."
-  ([StudioBinder](https://www.studiobinder.com/blog/what-are-the-12-principles-of-animation/))
-  Our exponential per-channel chase already supplies this for free; the
-  consequence to remember is that it *also* attenuates any target that
-  oscillates faster than the channel's `TAU`.
-- **Secondary action** — the supporting motion that reinforces the primary one.
-  In a face this is the shoulder settle after a nod, the lid drop that
-  accompanies a smile, the breath catch before speech.
-- **Exaggeration** — non-negotiable at avatar size. See §2.3.
 
 ### 1.2 Head-turn and eye-lead timings from animation practice
 
@@ -80,250 +45,9 @@ suggests the head's *travel* should be under-rotated rather than merely late,
 which `gaze.js` also does via the `hx`/`hy` multipliers (~0.45 of the pupil
 excursion).
 
-### 1.3 Blink timing as animators write it
-
-Convergent numbers from several practitioner sources:
-
-| Source | Close | Hold | Open | Total |
-|---|---|---|---|---|
-| [CLIP STUDIO TIPS](https://tips.clip-studio.com/en-us/articles/6096) | 2 fr | 1 fr | 3 fr | 6 fr ≈ 250 ms @24 |
-| [Dark Skies](https://darkskiesfilm.com/how-to-make-blinking-animation/) | 3–5 fr | brief | 2–4 fr | 5–9 fr |
-| [Animation Apprentice](https://animationapprentice.blogspot.com/2018/03/why-animators-need-to-blink.html) | — | ~2 fr | — | ~8 fr ≈ 330 ms @24 |
-
-Two invariants across all of them:
-
-1. **Close fast, open slow.** "A basic blinking sequence has the eyes open
-   slower than they close."
-   ([Bloop Animation](https://www.bloopanimation.com/blinking-animation/))
-   Our `idle.js` uses a 35 % close / 65 % open split, which is squarely in the
-   practitioner range.
-2. **The upper lid does most of the movement, with the lower lid catching up** —
-   an argument for keeping `lidL/lidR` as the blink channel and leaving
-   `squintL/squintR` out of it entirely.
-
-Note the practitioner blink (250–330 ms) is *slower* than the measured
-physiological blink (§5, ~100–150 ms). This is deliberate exaggeration for
-readability, and it is the right call at our size — a 110 ms blink at 60fps is
-seven frames and, on a 200px tile, may be missed entirely.
-
-### 1.4 Preston Blair's phoneme chart, and what it means for A–H
-
-Preston Blair's chart is the ancestor of Rhubarb's alphabet. "In this series
-only 10 visemes are used to map to all possible phonemes. Several sounds could
-share the same mouth shape, like a closed mouth could be used during an M, B or
-P sound."
-([Gary C. Martin, Preston Blair phoneme series](https://www.garycmartin.com/mouth_shapes.html),
-[extended series](https://www.garycmartin.com/phoneme_examples.html))
-
-Rhubarb makes the reduction explicit and gives us permission to draw fewer
-shapes than we might think:
-
-> "Rhubarb Lip Sync can use between six and nine different mouth positions. The
-> first six mouth shapes (Ⓐ–Ⓕ) are the basic mouth shapes and the absolute
-> minimum you have to draw for your character. The additional three mouth shapes
-> (Ⓖ, Ⓗ, and Ⓧ) are optional."
-> ([rhubarb-lip-sync README](https://github.com/DanielSWolf/rhubarb-lip-sync/blob/master/README.adoc))
-
-Practical consequences for us:
-- **A/B/C/D/E/F must be mutually distinguishable at avatar size; G/H/X can be
-  softer.** Our discovered G-vs-B collision (noted in CLAUDE.md) is exactly the
-  failure mode the chart is designed to prevent — Blair's shapes differ in
-  *topology* (open/closed, teeth/no-teeth, round/wide), not in amplitude.
-- The Preston Blair working method — "the best trick to getting lip synch
-  looking correct is having an easy way to repeatedly preview your sequence
-  along with your soundtrack ... fine tuning poses" — is what a lipsync review
-  page with a scrubber exists to be, and ours is one.
-
-**Open question — a minimum-perceptible hold.** `MIN_CUE_MS = 30` in
-`visemes.js` is a *drop* threshold (cues closer than that merge), which is a
-different question from whether a shape, once targeted, stays targeted long
-enough to be *seen*. sl-web-speech holds consonants 90 ms explicitly so the eye
-can register them — but its mouth is a hard bitmap swap with no smoothing.
-Ours smooths, so a briefly-targeted shape still bends the trajectory toward
-itself and reads as co-articulation; we plausibly need far less than 90 ms,
-possibly nothing. No number has been derived, and none should be invented:
-if the lipsync eval ever shows fast speech reading as flutter or mush, this is
-the first suspect, and the answer belongs here with a citation. (Raised by the
-2026-08 motion review, §5.2; measured incidence of sub-30 ms collisions in our
-shipped cue tracks is 8 in 1,213 gaps, so the practical stakes today are low.)
-
-### 1.5 Limited animation: UPA, Hanna-Barbera, anime
-
-This is the most directly relevant tradition, because limited animation solved
-*exactly* our problem: convey life with very few moving parts and a hard budget.
-
-Techniques, from
-[TV Tropes: Limited Animation](https://tvtropes.org/pmwiki/pmwiki.php/Main/LimitedAnimation),
-[Grokipedia](https://grokipedia.com/page/Limited_animation), and
-[Illustration History on Hanna-Barbera](https://www.illustrationhistory.org/essays/hanna-barbera-the-architects-of-saturday-morning):
-
-- **Character layering.** "Characters are split up into different levels: only
-  portions of a character, such as the mouth or an arm, would be animated on top
-  of a static cel." Hanna-Barbera's economics ran on this: a held body with an
-  animated mouth. *Our rig is already this, structurally.* The lesson is that
-  it's a legitimate style, not a compromise — a held torso with a live face
-  reads fine, and viewers have been trained on it for seventy years.
-- **Static holds on poses.** Limited animation "incorporat[es] static holds on
-  poses" — a *complete stillness* is a legitimate beat, not a bug. Our
-  perpetually-drifting idle never gives us one. A deliberate hold before an
-  answer is a strong THINKING cue.
-- **Smear frames.** "Movement in only three frames: the beginning state, the
-  ending state, and a 'blur' frame." Not applicable to a smoothed parametric rig
-  directly, but the principle — *a fast move needs only start, end, and a hint*
-  — argues against over-keying our fast gestures.
-- **UPA's contribution** was "a stylized departure from the realism of full
-  animation ... emphasizing artistic design, timing, and suggestion over
-  detailed naturalism." Timing and suggestion, not fidelity. That is the budget
-  argument for spending our effort on *when* things happen rather than on how
-  many channels move.
-
----
-
-## 2. Caricature and cartoon design theory
-
-### 2.1 McCloud: amplification through simplification
-
-Scott McCloud, *Understanding Comics* (1993): "it is by stripping down an image
-to its essential meaning that an artist can amplify that meaning in a way that
-realistic art can't."
-([summary](https://www.mysimpleshow.com/amplification-simplification/),
-[chapter notes](https://kate-nepveu.livejournal.com/116874.html))
-
-The operative reading for a rig: every detail we *don't* draw is attention we
-redirect to the ones we do. Kiran's `peep` avatar is the purest expression — a
-two-value line drawing where the only things that move are the things that
-signify.
-
-### 2.2 The masking effect
-
-"McCloud argues that characters with simple but recognizable designs, which he
-terms 'iconic' characters, allow readers to project themselves into the story by
-using the characters as a 'mask'. ... the more cartoon-looking a human face is,
-the more the number of people it appears to describe."
-([Masking (comics), Wikipedia](https://en.wikipedia.org/wiki/Masking_(comics)))
-
-For an AI interviewer this is a *functional* argument, not an aesthetic one: a
-simplified Kiran is more easily read as attentive-toward-me, because there is
-less specific identity to contradict the projection. It also argues against ever
-making Kiran more photoreal to "improve" the product.
-
-### 2.3 Caricature: exaggerate the deviation from the norm
-
-Rhodes, Brennan & Carey (1987) and Rhodes et al. (1992) established the
-**superportrait effect**: "Although caricatures are often gross distortions of
-faces, they frequently appear to be super-portraits capable of eliciting
-recognition better than veridical depictions. This may occur because faces are
-encoded as distinctive feature deviations from a prototype."
-([Rhodes, *Identification and Ratings of Caricatures*, Cognitive Psychology 19](https://www.harvardlds.org/wp-content/uploads/2018/05/Rhodes-Identification-and-ratings-of-caricatures-implications-for-mental-representations-of-faces..pdf),
-[Rhodes & Tremewan, *Caricature and face recognition*, Memory & Cognition 20(4)](https://link.springer.com/article/10.3758/BF03210927))
-
-The method matters as much as the finding: caricatures were made by "comparing
-the position of facial features ... with the average position for a series of
-faces; deviations from the average were then accentuated by a constant fraction
-(**16, 32 or 48 %**)." Anticaricatures — deviations *reduced* — were recognized
-worse.
-
-**This is directly implementable.** Our REST vector *is* the norm. Any pose
-(emotion, viseme, gesture peak) is a deviation from it. Applying a global
-exaggeration factor of ~1.2–1.5 to `(pose − REST)` is a numerically exact
-analogue of Rhodes's 16–48 % caricature. Two caveats:
-
-- Apply it to *expressive* deviation only, never to the idle layer. Exaggerated
-  idle is jitter, which is what we are specifically avoiding on a video tile.
-- Our `RANGE` already lets `head`, `mouthCorner*` and `browAngle*` past 1.0 to
-  ±1.4 precisely so gesture peaks survive on top of a posed face — that is a
-  caricature headroom of 40 %, in the Rhodes band, arrived at independently.
-
-### 2.4 Simplified faces are more legible, not merely cheaper
-
-- "Studies using high-level simplified non-real faces, such as emoticons and
-  stick figures, show that **emotions are recognized more quickly with these
-  cartoon faces than with real faces**."
-  ([*The Influence of Key Facial Features on Recognition of Emotion in Cartoon Faces*, Front. Psychol. / PMC8382696](https://pmc.ncbi.nlm.nih.gov/articles/PMC8382696/))
-- The same review notes cartoon faces "maintain low-level metric parameters and
-  face proportions but lack high-level information ... such as skin texture,
-  skeletal structure, and anatomic structures" — i.e. they remove exactly the
-  channels that carry no emotion signal.
-- Aneja et al., *Modeling Stylized Character Expressions via Deep Learning*
-  (ACCV 2016), found stylized character expressions "yield clearer expressions
-  than other approaches."
-  ([PDF](https://homes.cs.washington.edu/~shapiro/Deepali1.pdf))
-
-### 2.5 Uncanny valley implications
-
-The uncanny valley literature on agents converges on **mismatch**, not realism
-per se: "Subtle mismatches in an agent's appearance and behavior can lead to
-perceived uncanniness resulting in a disrupted trust during human-agent
-interaction."
-([Tilburg, *Effect of a Virtual Agent's Appearance and Voice on Uncanny Valley and Trust*](https://research.tilburguniversity.edu/en/publications/effect-of-a-virtual-agents-appearance-and-voice-on-uncanny-valley/))
-
-The design rule that falls out: **the behavioural fidelity budget should match
-the visual fidelity budget.** A flat two-colour line drawing is allowed to blink
-in 6 frames, hold perfectly still, and nod in a clean sinusoid. A photoreal head
-doing the same things is a corpse. Our low visual fidelity is a *licence* for
-stylized timing, and we should spend it rather than chase naturalism.
-
 ---
 
 ## 3. Conversation and backchannel science
-
-### 3.1 What a backchannel is, and how often
-
-Yngve (1970) coined the term: the speaker owns the front channel while "the
-listener makes minimal, non-interruptive responses, forming the backchannel."
-([Backchannel (linguistics) overview](https://grokipedia.com/page/Backchannel_(linguistics)))
-
-Rates vary widely and the variance is the finding:
-
-| Study | Language | Rate |
-|---|---|---|
-| Gardner (2001) | English | up to **3.33 / min** |
-| Heinz (2003) | American English | **8.9 / min** |
-| Heinz (2003) | German | **6.2 / min** |
-| Heldner et al. (2013) | Swedish, vocal only | **8.8 / min** |
-| Heldner et al. (2013) | Swedish, multimodal | **13.0 / min** |
-| Mowlaei (2017) | Persian | **1.1 / min** |
-
-(compiled in
-[Frontiers in Communication, "The speaker's *okay* vs the listener's *okay*"](https://www.frontiersin.org/journals/communication/articles/10.3389/fcomm.2025.1655049/full))
-
-For head nods specifically, one frequently-cited figure is "the average rate of
-back-channel nods is about **1 nod every 17 seconds**" (≈3.5/min). A much higher
-figure comes from a 2025 motion-capture corpus of attentive listening (§3.3),
-where nodding occupied **25.9 % of total listening time** across ~654 minutes,
-with 8 681 nod events — **≈13.3 nods/min, one every 4.5 s**.
-
-The gap is real and is about *what counts as a nod*: a professional attentive
-listener nods far more than a casual conversant. Kiran is closer to the former.
-
-**Design band for Kiran while LISTENING: one visible backchannel every 4–9 s**
-(our `idle.js` `minGap = 3.4`, `maxGap = 8.0` is already inside it, on the busy
-end), with the *majority* being the smallest form.
-
-### 3.2 Ward & Tsukahara's low-pitch rule — the one implementable predictor
-
-Ward & Tsukahara (2000), *Prosodic features which cue back-channel responses in
-English and Japanese*, Journal of Pragmatics 32(8):1177–1207. The rule, as
-stated and widely reimplemented:
-
-> Produce a backchannel upon detection of
-> **(a)** a region of pitch less than the **26th percentile** of the speaker's
-> pitch range, **(b)** continuing for at least **110 ms**, **(c)** coming after
-> at least **700 ms** of speech, **(d)** provided you have not output a
-> backchannel within the preceding **800 ms**, **(e)** after a **700 ms**
-> delay.
-
-([CiteSeerX PDF](https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=2c3171870effd15a96ca1378409ae3292ced1efa),
-[ScienceDirect](https://www.sciencedirect.com/science/article/abs/pii/S0378216699001095))
-
-Low-pitch regions "indicate places where back-channel feedback is especially
-appropriate," and "often co-occur with completion of a grammatical clause."
-
-This is a *server-side* rule for us — the client never hears the candidate — but
-it fixes the shape of the contract: the server should emit a backchannel token
-~700 ms after a low-pitch region, and the client should render it fast enough
-that the perceptual moment isn't missed. This is action timing, independent of
-the viseme track's zero renderer lead.
 
 ### 3.3 Nod taxonomy: three types, with measurable amplitudes
 
@@ -409,44 +133,54 @@ nod attenuates to 0.71 and lags 45°. Authored amplitudes must be roughly
 **1.4–1.8× the intended rendered amplitude** in this band — consistent with the
 nod pre-compensation rule in CLAUDE.md § Constraints.
 
-### 3.5 What makes an artificial listener feel attentive vs. creepy
+### 3.5 The two backchannel modalities want different clocks
 
-Gratch et al., *Creating Rapport with Virtual Agents* (IVA 2007) — the Rapport
-Agent. It generated "backchannel continuers (nods, elicited by speaker prosodic
-cues, that signify the communication is working), postural mirroring, and mimicry
-of certain head gestures (e.g., gaze shifts and head nods) ... by real-time
-analysis of acoustic properties of speech."
-([PDF](https://people.ict.usc.edu/~gratch/GratchIVA07-rapport.pdf))
+Truong et al. (Interspeech 2011) coded 3,283 backchannels and found that the
+visual and the vocal channel are not two outputs of one decision. **84 % of
+visual backchannels overlap the speaker's speech**, and they land in pauses
+*less* often than chance (16 % against 28.4 %, p < 0.001) — while *vocal*
+backchannels fall in pauses **above** chance, at 37 %. ALICO replicates the
+shape: head gestures spread uniformly across a turn, verbal feedback clusters at
+turn end. So the design is **nod during speech, vocalize in the gaps**, and one
+scheduler with two output modalities gets one of them wrong by construction.
 
-Findings that constrain design:
+The two also have to be priced differently:
 
-- **Contingency beats frequency.** The study's secondary question was explicitly
-  "Is contingency, not just the frequency of feedback in agents, crucial when it
-  comes to creating rapport?" — and contingency mattered. A **non-contingent**
-  condition with *identical frequency and dynamics* but no coupling to the
-  speaker was constructed as the control, and the responsive agent outperformed
-  it. **Randomly-timed nods at the right rate do not buy rapport.**
-- **Over-feedback backfires.** The paper notes "the Rapport Agent always
-  generates bodily feedback (nods, posture shifts) in response to" speaker cues,
-  and this always-on quality shows up in the results as the agent being rated
-  **more distracting** and **less trustworthy** than a real human listener, and
-  in speakers producing *more disfluencies* with the mediated avatar.
-- **Mirroring works, but with a delay.** Bailenson & Yee's "digital chameleon"
-  result is cited: participants responded better to characters that "mirrored a
-  human listener's head motion with a **four second delay**." Immediate mirroring
-  reads as mockery; ~4 s reads as rapport. (Burleson found no effect from a
-  similar intervention — the effect is real but not robust.)
+- A silent nod scores 4.76/7 on attentiveness but **3.60 on facilitation, the
+  worst of the conditions tested** (Kato 2025, n = 45). It says *I am listening*
+  and fails to say *keep going*.
+- Poppe priced the error. A spurious nod costs 0.36 "yucks", a spurious
+  vocalization **1.02**, and 57.6 % of nods drew no complaint at all against
+  32.6 % of vocalizations. Voice is roughly three times the downside for the
+  larger reward, so it is gated harder, kept quiet and kept short.
+- The failure mode is documented rather than hypothetical: TANDE (N = 36) had
+  15 of 36 participants mixed or negative on its *"mhm"*, one of them reporting
+  *"it felt like I was constantly getting cut off"*. That is a level-and-timing
+  failure, not a modality one — and it is what firing voice on the visual
+  channel's schedule produces.
 
-Direct implication for Kiran: the former autonomous timer in `idle.js` was
-precisely the *non-contingent* condition Gratch used as a negative control. It
-has been removed. Pipecat supplies factual listening posture, while the backend
-is solely responsible for every explicit acknowledgement.
+**Nothing here implements the asymmetry.** It needs no signal we do not already
+have.
 
-SimSensei Kiosk (Gratch, DeVault et al., AAMAS 2014) is the closest published
-system to Kiran's use case — a virtual human interviewer conducting structured
-interviews, tracking "facial expressions, gaze, and fidgeting motions" via
-MultiSense.
-([ACM](https://dl.acm.org/doi/10.5555/2615731.2617415))
+**What a scheduler would be aiming at**, if one is built — the only acceptance
+criterion this cluster has for backchannel placement:
+
+| quantity | target | source |
+|---|---|---|
+| acknowledgements/min | 6–12 | Poppe acceptability band; de Kok 7.7 / 6.8 |
+| opportunities taken | ~42 % | multiple corpora; Gravano's cue stack tops out at 30 % P(backchannel) |
+| visual acks overlapping speech | ~0.84 | Truong 2011 |
+| vocal acks inside pauses | ~0.37 | Truong 2011 |
+| refractory gap | 800–1400 ms | Lala, SIGDIAL 2017 |
+| visual lead over the vocal equivalent | 175–202 ms | Dittmann & Llewellyn 1968; Wlodarczak 2012 |
+
+**The honest ceiling**, stated up front so success is not overclaimed. The best
+published backchannel-timing F1 is 42.85 and the best nod-timing F1 55.93; a
+human eavesdropping judge reaches 61 % precision; and even with every
+backchannel-inviting cue present, only 30 % of opportunities draw a response.
+**A good system declines most opportunities and is wrong about half the time it
+acts.** The consequence is not to chase accuracy — it is to make being wrong
+cheap: small default nods, retractable cues, voice only when confident.
 
 ### 3.6 Blinks as backchannels — the single most surprising finding
 
@@ -473,7 +207,7 @@ turn-constructional-unit boundaries.
 gesture ("got it, move on") that costs nothing in bitrate. Our `idle.js` already
 has a `blinkLong()` at 0.34 s; the literature suggests **0.55–0.65 s** for the
 "move on" reading, and that we should be careful about firing it accidentally,
-because it genuinely shortens what the candidate says.
+because it genuinely shortens what the user says.
 
 ### 3.7 Blink entrainment between speaker and listener
 
@@ -483,8 +217,8 @@ the speaker blinks. This entrainment is selectively triggered by speaker's
 eyeblinks occurring at the end and during pauses in speech."
 ([Nakano & Kitazawa, *Eyeblink entrainment at breakpoints of speech*, Exp Brain Res 2010](https://www.researchgate.net/publication/45604519_Eyeblink_entrainment_at_breakpoints_of_speech))
 
-We cannot see the candidate's blinks, so we cannot entrain. But the *converse*
-matters: Kiran should place its own blinks at its own clause boundaries while
+We cannot see the user's blinks, so we cannot entrain. But the *converse*
+matters: the avatar should place its own blinks at its own clause boundaries while
 SPEAKING, because that is where a human listener expects them and where they
 would entrain if they could.
 
@@ -505,7 +239,10 @@ is now sized against.
 - **How much, in degrees.** Busso et al. 2007 motion-captured an actor reading
   sentences and report, for **neutral speech**, the standard deviation of head
   rotation around its per-sentence mean — **pitch (nod) 3.3°, yaw 0.9°,
-  roll 0.8°** — and mean per-sentence ranges of **9.5°, 2.3° and 2.3°**.
+  roll 0.8°** — and mean per-sentence ranges of **9.5°, 2.3° and 2.3°**. Which
+  physical axis his α carries is unconfirmed against the paper
+  ([research-head-rotation.md](research-head-rotation.md) § 2.3), so the
+  proportions are the usable part and the ranges are indicative.
   Head motion in emotional speech is "much higher" on every axis, and its
   velocity in happy and angry speech about twice neutral's. The first
   canonical correlation between head motion and prosodic features was about
@@ -524,10 +261,29 @@ is now sized against.
   on prosodic events, sometimes together with a nod.
   ([Graf, Cosatto, Strom & Huang, *Visual prosody: facial movements accompanying speech*, IEEE FG 2002](https://ieeexplore.ieee.org/document/1004186))
 - **Stress and juncture.** Hadar et al. 1983 split a speaker's head motion
-  into slow, ordinary and rapid classes by frequency, and found the rapid class
-  tied to **stress** and the pattern of movement against stillness tied to
-  **juncture**, the boundary between phrases.
+  into classes by frequency — **slow 0.2–1.8 Hz, ordinary 1.9–3.6 Hz, rapid
+  3.7–7.0 Hz** — and found the rapid class tied to **stress** and the pattern of
+  ordinary movement against *stillness* tied to **juncture**, the boundary
+  between phrases. That last clause is the research statement of hold-and-move,
+  and it is about a boundary rather than a resting head.
   ([Hadar, Steiner, Grant & Rose, *Head movement correlates of juncture and stress at sentence level*, Language and Speech 1983](https://journals.sagepub.com/doi/10.1177/002383098302600202))
+- **How much of the time it moves at all.** The same group's polarized-light
+  goniometry, recorded continuously against the speech signal, puts non-zero
+  head velocity in **89.9 % of frames during speaking turns** and **12.8 % of
+  frames during pauses and listening turns**. A speaking head is barely ever
+  still; a listening head is still roughly seven eighths of the time. What is
+  held while speaking is the *pose*, not the head — and Hadar's follow-up
+  locates the postural shifts that change it at speech initiation (beginning
+  *before* voice onset), between turns, and at syntactic boundaries inside one.
+  None of those is a clock; they are discourse events.
+  ([Hadar, Steiner, Grant & Rose, *Kinematics of head movements accompanying speech during conversation*, Human Movement Science 1983](https://www.sciencedirect.com/science/article/abs/pii/0167945783900040);
+  [Hadar, Steiner & Rose, *The timing of shifts of head postures during conversation*, Human Movement Science 1984](https://www.sciencedirect.com/science/article/abs/pii/0167945784900186))
+- **How often a boundary arrives.** Speech across **650 recordings in 48
+  languages and 27 families** segments into intonation units at a rate of one
+  every **1.6 s**, near-invariant across the sample. That is the cadence a
+  speaking head's pose changes on, and the reason a phrase-driven layer needs no
+  timer of its own.
+  ([Inbar et al., *A universal of speech timing: Intonation units form low-frequency rhythm*, PNAS 2025](https://www.pnas.org/doi/10.1073/pnas.2425166122))
 
 **What this means for the rig.** Hadar's rapid class is off the table for us — above
 1.5 Hz a head reads as impatient (§3.4), and it costs the user's encoder — so
@@ -563,7 +319,7 @@ Distinguish two things that are often conflated:
   ([Rogers et al., *Using dual eye tracking to uncover personal gaze patterns*, Sci Rep 2018](https://www.nature.com/articles/s41598-018-22726-7))
 - Preferred mutual-gaze bout length is around **3.3 s**, comfort zone **2–5 s**.
 
-**Kiran should therefore not hold `USER` continuously.** Even in LISTENING, gaze
+**So the avatar must not hold `USER` continuously.** Even in LISTENING, gaze
 should break every ~3 s or so — see the next section for the measured numbers.
 
 ### 4.2 Andrist's gaze-aversion parameters — the most directly usable table
@@ -610,43 +366,52 @@ Two controller rules worth copying verbatim:
   then intimacy fills the gaps.
 - **Intimacy aversions are prohibited near the end of an utterance**, "so that
   virtual agents can appropriately pass the floor by maintaining mutual gaze."
-  Kiran must be looking at the candidate when it stops talking.
+  The avatar must be looking at the user when it stops talking.
 
 Note the direction data contradicts the folk conventions: **thinking is mostly
 DOWN (39 %) then side, then up** — not the up-and-left of NLP lore — and
 politeness/intimacy aversion is overwhelmingly **sideways (58 %)**.
 
-### 4.3 Gaze aversion under cognitive load
+### 4.3 The gaze window, and where in it a response belongs
 
-- "We spontaneously and consistently look away from the face of an interlocutor
-  during cognitively demanding activity by engaging in gaze aversion." It "occurs
-  very little when people are listening ... but predominantly occurs while
-  thinking and (albeit to a lesser extent) while speaking."
-  ([Doherty-Sneddon & Phelps, *Gaze aversion: A response to cognitive or social difficulty?*, Memory & Cognition 2005](https://www.researchgate.net/publication/7519027_Gaze_aversion_A_response_to_cognitive_or_social_difficulty);
-  [Doherty-Sneddon et al., development of gaze aversion](https://dspace.stir.ac.uk/bitstream/1893/361/1/gazeaversionpaper9.pdf))
-- Mechanism: "Gaze aversion was assumed to bring the gaze away from
-  environmental distractors to optimize internal cognition such as memory
-  retrieval."
-  ([Salvi et al. / review, *Why and when do you look away when trying to remember?*](https://www.sciencedirect.com/science/article/pii/S0001691823002172))
+Bavelas, Coates & Johnson, *Listener Responses as a Collaborative Process: The
+Role of Gaze*, Journal of Communication 52, 566–580 (2002). Nine dyads of
+strangers telling a close-call story, 154 listener responses.
 
-### 4.4 The NLP eye-direction convention is not supported — use it anyway, carefully
+The gaze pattern is *asymmetrical*: the listener looks at the speaker for long
+stretches while the speaker looks back "for frequent but much shorter periods" —
+**speaker total gaze 31 %**, range 15–62 %. Because of that asymmetry the
+speaker's glances are what decide whether mutual gaze happens at all. A glance
+opens a brief window, the listener responds inside it, and **the response
+terminates the window**: the speaker looks away and keeps talking. Terminating
+without a role exchange is what distinguishes a gaze window from a turn
+exchange.
 
-"The Eye-Accessing Cues (EAC) model of NLP conveys the idea that the direction
-of non-visual eye movements ... indicates the sensory system involved ... memory
-retrieval would be associated with a gaze looking up to the left. However, recent
-reviews showed that **the majority of the studies trying to replicate the
-postulates of the EAC model did not support it**."
-([Ehrlichman & Micic, *Why Do People Move Their Eyes When They Think?*, Curr Dir Psychol Sci 2012](https://journals.sagepub.com/doi/abs/10.1177/0963721412436810);
-[review](https://www.sciencedirect.com/science/article/pii/S0001691823002172))
+| finding | figure |
+|---|---|
+| listener responses falling inside a gaze window | **128 of 154 = 83 %** |
+| proportion of time a window was even available | **p = 0.45** |
+| omnibus | z = 9.43, **p < .01 × 10⁻¹⁰**, and significant in each dyad separately |
+| where in the window the response lands | **0.69 through it** — t(58) = 6.16, p < .001 against a midpoint of .5 |
+| generic against specific responses differ in placement | **no** — χ²(4, N = 173) = .30, p > .05 |
 
-The honest position: there is **no reliable direction** for remembering vs
-imagining, but the *cultural convention* (up-and-away = thinking) is legible to
-audiences regardless of whether it's true of real people. Our `AWAY_THINKING`
-target is up-and-left. Andrist's *measured* data says thinking aversion is more
-often **down**. Recommendation: keep an up-away target for a *stylized* "let me
-think" beat, but add a **down-and-away** target and use it for the longer,
-genuinely-processing THINKING state, where it will read as considering rather
-than as performing.
+The window is direct mutual gaze **plus 0.5 s**, because the speaker can still
+see a response while starting to look away.
+
+We cannot see a window open. The authors report that the opening glance is
+"often redundant" with signals that can be heard — *"the speaker's gaze was
+often redundant with his or her concomitant pauses, intonation contours (e.g.,
+rising pitch), interactive gestures, or facial displays"* — which licenses a
+pause as a proxy for it without attaching a hit rate to it.
+
+**An open defect against this finding.** `api.attend(ms)` in
+[gaze.js](../packages/avatar/src/gaze.js) is the avatar's response to a detected
+window: hold the user's eyes and suppress aversion. It holds for a *flat*
+duration from the moment it is called. Bavelas puts the response 0.69 through
+the window and has the response end it, so the correct shape is hold, emit late
+in the hold, then release — the release being the return to the aversion
+schedule, which is the visible half of terminating the window. The emission side
+does not exist yet, which is why this is recorded rather than fixed.
 
 ### 4.5 Saccade statistics — Lee, Badler & Badler, "Eyes Alive"
 
@@ -668,7 +433,7 @@ movements lasting about **30 to 120 ms** and traversing 15 to 40 degrees."
 For us: `pupilX/pupilY` at `TAU = 0.032 s` gives a 95 % settle in ~96 ms — right
 in the physiological band. The gap is that we don't vary micro-saccade
 statistics by state; `idle.js` uses a fixed 0.7–2.3 s micro-jitter interval
-regardless of whether Kiran is listening, thinking or speaking. Eyes Alive's
+regardless of whether the avatar is listening, thinking or speaking. Eyes Alive's
 central claim is that this interval *should* differ by mode.
 
 ### 4.6 Screen-mediated gaze: the camera-vs-screen problem
@@ -688,127 +453,19 @@ favour.
   important to them."
   ([*Perception of eye contact in video teleconsultation*, J Telemed Telecare 2007](https://pubmed.ncbi.nlm.nih.gov/17288657/))
 
-**Consequences for Kiran:**
-1. Kiran is *rendered*, so Kiran can look straight down the barrel — 0° — and be
-   the only participant in the call capable of real eye contact. This is a
-   genuine advantage and argues for `USER` being a *precise* dead-centre pose.
-2. Because the human never achieves eye contact, Kiran must not interpret the
-   candidate's apparent gaze-down as disengagement, and (more relevantly here)
-   must not itself over-hold `USER` in compensation — it reads as staring.
-3. The 5° threshold gives us a *resolution floor* for gaze channels: gaze
-   deviations smaller than ~5° of apparent eye rotation will not be perceived as
-   "looking away" at all. Sub-threshold pupil jitter is free — it costs bitrate
-   but signals nothing. This is an argument for making our micro-saccades
-   slightly *larger* than natural, or dropping them.
+**Consequences:**
 
-### 4.7 What "distracted" looks like in gaze statistics
-
-Less well-quantified, but the working signatures from the videoconferencing
-literature:
-- "Distraction can be determined based on a direction of gaze with respect to a
-  display device, including when the direction of gaze **does not intersect the
-  display device for a predetermined period**."
-- "Sustained mutual gaze and synchronized gestures indicate higher
-  participation," and its absence indicates the opposite.
-  ([multitasking during video chats, *Communication Studies* 2025](https://www.tandfonline.com/doi/full/10.1080/10510974.2025.2499161))
-
-The legible distinction for a rig is **duration and return behaviour**, not
-direction: an attentive aversion is ~1.1 s and *returns to the user*; a
-distracted aversion is >3 s, returns late, and returns *without* a re-engagement
-beat (no brow raise, no nod). DISTRACTED should therefore be built as "long
-aversions, absent backchannels, delayed return" rather than as any particular
-pose.
-
-### 4.8 How a gaze shift splits between the eyes and the head
-
-The mixer cites Guitton & Volle in exactly one place — the socket range the
-vestibulo-ocular reflex may carry the eye through — and the paper appears
-nowhere else in this repo. This section is that citation's evidence, and more
-usefully, a record of what it does *not* license.
-
-**The primary findings.**
-
-- "Humans have an oculomotor range (OMR) of about **±55 degrees**." Guitton and
-  Volle measured shifts to targets "situated within and beyond the OMR at
-  offsets ranging from **30 to 160 degrees**": past that eccentricity the eye
-  cannot reach the target at all and the head must supply the remainder. Their
-  result that matters to us is about the *transit*, not the endpoint — "the eye
-  saccade amplitude was a function of head velocity: for a given target offset,
-  **the faster the head the smaller the saccade**." The eye's excursion is not
-  fixed by where the target is; it shrinks as the head takes more of the work.
-  ([Guitton & Volle, *J Neurophysiol* 58(3):427–459, 1987](https://pubmed.ncbi.nlm.nih.gov/3655876/))
-- "Head movements did not contribute to the change in gaze position during small
-  gaze shifts (**<20°**) directed along the horizontal meridian, when the eyes
-  were initially centered in the orbits." The head contributes progressively
-  more from 25–90°, and carries most of a shift beyond **50–60°**.
-  ([Freedman, *Exp Brain Res* 190(4):369–387, 2008](https://link.springer.com/article/10.1007/s00221-008-1504-8))
-- Two range measures worth having names for, from Stahl's work as summarised by
-  a recent VR survey: the **Eye-Only Range**, "the range where the probability of
-  an eye-only saccade exceeds 50%", where an eye-only saccade is "one in which
-  any associated head movement does not exceed **10%** of the shift"; and the
-  **customary oculomotor range**, "the angular span of the central 90% of
-  eye-in-head positions".
-  ([Hu, Sidenmark, Lee & Gellersen, arXiv:2602.06164, 2026](https://arxiv.org/abs/2602.06164))
-  The customary range is a *definition* here and not a number — that survey
-  states no degree value for it, and this page does not invent one.
-
-**What this says about tara, which does not flatter the physiology.**
-
-Her calibration is 10.03° of eye a pupil unit horizontally and 6.21° vertically,
-against 6.43° of head a yaw unit and 17.14° a pitch unit. The socket range the
-reflex may use is therefore **8.0° left and right, 2.8° up, 3.1° down** —
-vertically about a twentieth of the human oculomotor range.
-
-Her whole look table, as total gaze angle: USER 0.4°, SCREEN_CENTER 2.8°,
-OWN_SCREEN 3.3°, SCREEN_TOP 6.4°, SCREEN_WORK 7.7°, AWAY_SIDE 7.9°, AWAY_DOWN
-8.8°, SCREEN_LEFT and SCREEN_RIGHT 9.5°, AWAY_RIGHT 10.6°, AWAY_THINKING 11.3°.
-The largest shift available between any two of them is **19.4°**, and that is the
-diagonal from AWAY_RIGHT to AWAY_DOWN — a pairing no state actually makes.
-
-So **tara's entire repertoire lies inside Freedman's eye-only band.** A human
-making any shift she is capable of would make it almost entirely with the eyes
-and leave the head still. She does the opposite: her authored targets put
-**53–87 %** of every look that is not USER onto the head. That inversion is
-deliberate and TARA-SPECIFIC, and its reason is in the rig, not the literature —
-a photographic iris driven a third of the way into the socket reads as side-eye,
-and an iris under the upper lid with white beneath it reads as an eye-roll. The
-albedo rule makes it structural: sclera is geometry, so it cannot be painted out
-at the extremes.
-
-**Consequences for tara:**
-
-1. **Do not derive head recruitment from shift amplitude.** The amplitude law
-   decides when a head *starts* helping, and its threshold sits above her largest
-   shift. Applied here it says "never move the head", which is the behaviour the
-   rig was built to escape. The head-carries-60 % split is right, and it is
-   argued from the face, not from physiology.
-2. **The transit is where the physiology still applies.** Guitton and Volle's
-   head-velocity result describes what the eye does *while* the head is moving,
-   and it is the half of the sentence the mixer's comment does not yet implement.
-   The reflex may currently demand an eye position past the socket range, and a
-   hard clamp answers by pinning the iris there. A real eye reduces its own
-   excursion instead.
-3. **When endpoint accuracy and transit accuracy conflict, keep the endpoint.**
-   At this scale the error the reflex corrects during a ~300 ms transit is not
-   observable — 2.8° is below § 4.6's 5° floor for socially acceptable eye
-   contact. A pinned iris showing sclera is highly observable. The trade is
-   one-sided.
-4. **Do not reach for § 4.6's 15–20° for this.** It is numerically identical to
-   Freedman's threshold and two sections away, which makes it an inviting
-   mistake. It measures the angle between a camera and a screen — where a
-   viewer's gaze points relative to a lens — and not the amplitude of a gaze
-   shift. Nothing in § 4.6 sizes a head-recruitment constant.
-
-**The honest gap.** None of these numbers was measured on anything shaped like
-this problem. They are head-free orienting in a laboratory, to targets tens of
-degrees away, on a whole human. tara is a head-and-shoulders crop whose entire
-vertical eye range is 2.8°, and whose head is a shallow shell tipping on a
-photograph — a pitch that, as the rig's own notes record, reads as a fraction of
-what it is. Freedman's threshold is horizontal and assumes the eyes start
-centred; the case that fails here is vertical, with the eyes already off centre.
-These sources bound the argument. None of them sizes a constant, so a constant
-added for this has to be justified by what it measurably removes from the
-render.
+- The avatar is *rendered*, so it can look straight down the barrel — 0° — and
+  be the only participant in the call capable of real eye contact. This is a
+  genuine advantage and argues for `USER` being a *precise* dead-centre pose.
+- Because the human never achieves eye contact, the avatar must not read their
+  apparent gaze-down as disengagement, and (more relevantly here) must not
+  itself over-hold `USER` in compensation — it reads as staring.
+- The 5° threshold gives us a *resolution floor* for gaze channels: gaze
+  deviations smaller than ~5° of apparent eye rotation will not be perceived as
+  "looking away" at all. Sub-threshold pupil jitter is free — it costs bitrate
+  but signals nothing. This is an argument for making our micro-saccades
+  slightly *larger* than natural, or dropping them.
 
 ---
 
@@ -825,15 +482,6 @@ render.
 
 The three-to-one spread between reading (~8/min) and conversation (~20/min) is
 the actionable part: **blink rate is itself a state signal.**
-
-### 5.2 Duration
-
-- Physiological: "spontaneous blinking produces about **110 ms** of visual
-  blackout each time"; single blinks range **100–400 ms**.
-  ([Medical News Today summary](https://www.medicalnewstoday.com/articles/323963))
-- Communicatively manipulated: **208 ms = "short", 607 ms = "long"** (Hömke et
-  al., §3.6) — and the difference is behaviourally consequential.
-- Animator's blink: **250–330 ms** (§1.3), i.e. deliberately between the two.
 
 ### 5.3 Blinks and cognitive events
 
@@ -879,16 +527,6 @@ is a good LISTENING default and a poor everything-else.
 **A blink placed at a clause boundary is worth several blinks placed randomly.**
 Since the server already sends us a viseme stream with silences in it, clause
 boundaries are inferable client-side at zero protocol cost.
-
-### 5.5 Asymmetry
-
-The animation-practice claim ("blinks are asymmetric" — already in our
-`idle.js`) is not something the physiology literature strongly supports for
-*spontaneous* blinks, which are highly synchronous. It is nonetheless a
-well-established stylization: a 1–2 frame offset between lids reads as organic
-rather than mechanical, in the same way a perfectly-symmetric smile reads as
-false. Keep it, but understand it as a *drawing* convention (§2.5 — our low
-visual fidelity licenses stylized timing), not a biomechanical one.
 
 ---
 
@@ -999,277 +637,44 @@ There is no direct literature on this; the reconstruction from adjacent findings
 - **Shoulders**: slightly raised and asymmetric (the classic hands-on-keyboard
   posture), and *held* — reduced sway, matching the cognitive-task
   sway-suppression finding.
-- **Micro-freeze**: limited animation's "static hold" (§1.5) is exactly the
-  right idiom. A busy person's idle motion *stops*, punctuated by discrete
-  moves.
+- **Micro-freeze**: a *complete stillness* is a legitimate beat rather than a
+  bug, which is limited animation's oldest trick and the one our perpetually
+  drifting idle never takes. A busy person's idle motion *stops*, punctuated by
+  discrete moves.
 
-The trap: without arms, "typing" can only be *implied*. Kiran should read as
+The trap: without arms, "typing" can only be *implied*. The avatar should read as
 "attending to something else, on a stable target, still present" — which is a
 credible and honest rendering of a server doing work, and does not require the
 viewer to believe in invisible hands.
 
 ---
 
-## 7. Practice: virtual agents, VTubers, game NPCs
-
-### 7.1 Idle-animation design in games
-
-From the practitioner literature
-([MoCap Online, idle animation guide](https://mocaponline.com/blogs/mocap-news/idle-animation-game-dev-guide),
-[MoCap Online, idle loops](https://mocaponline.com/blogs/mocap-news/idle-animation-loop),
-[Genius Crate](https://www.geniuscrate.com/the-science-of-idle-animations-and-why-they-matter-in-modern-games),
-[Game AI Pro 2, ch. 36, *Realizing NPCs*](https://www.gameaipro.com/GameAIPro2/GameAIPro2_Chapter36_Realizing_NPCs_Animation_and_Behavior_Control_for_Believable_Characters.pdf)):
-
-- The idle is the **most-seen animation in the product**. A player standing
-  still briefly, repeatedly, across a 20-hour campaign "sees the idle animation
-  for over 50 minutes of total playtime." For Kiran the ratio is far more
-  extreme — LISTENING is the majority state of every interview. **The idle loop
-  is the product.**
-- The canonical recipe: "an idle that loops seamlessly with subtle movement —
-  slight breathing, a weight shift, a small head adjustment — signals to the
-  player that the character is a living entity."
-- **Layered structure**: a *base* idle (breathing + weight shift) plus
-  *variation* animations ("look-arounds, posture adjustments, and
-  character-specific personality gestures that trigger on a randomized
-  schedule"). This is exactly our additive base-idle + `IdleBackchannel` clip
-  architecture, independently arrived at.
-- "Head turns, weight shifts, arm adjustments, and subtle breathing add
-  disproportionate realism for **minimal animation investment**."
-- The governing constraint, stated plainly: "balancing enough movement to feel
-  alive while keeping it subtle enough not to distract."
-
-### 7.2 VTuber / Live2D practice
-
-([Live2D standard parameter list](https://docs.live2d.com/en/cubism-editor-manual/standard-parameter-list/),
-[VTube Studio model settings wiki](https://github.com/DenchiSoft/VTubeStudio/wiki/VTS-Model-Settings),
-[physics settings explainer](https://vtubermodelcommissions.com/live2d-vtuber-model-physics-settings-explained/))
-
-- Live2D ships a **standard parameter list** — a fixed named vocabulary
-  (`ParamAngleX/Y/Z`, `ParamEyeLOpen`, `ParamBrowLY`, `ParamMouthOpenY`,
-  `ParamMouthForm`, `ParamBreath`, `ParamBodyAngleX/Y/Z`) that is
-  recognizably the same ~25-channel decomposition our `params.js` reached
-  independently. Useful as external validation that the channel set is close to
-  a natural minimum.
-- **`ParamBreath` is a first-class standard parameter**, driven by an auto-breath
-  toggle — breath is treated as infrastructure, not as a gesture.
-- The interaction gotcha, which we have an analogue of: "if a parameter is
-  overwritten by the Live2D physics system, it will be ignored in the idle
-  animation." Their layering conflict is our `MOUTH_LOCK` priority rule.
-- Practical advice: "limit physics inputs to what actually matters, as too many
-  inputs cause unstable motion" — the same argument as CLAUDE.md's warning
-  against adding channels only one avatar can render.
-
-### 7.3 Virtual agent findings on nonverbal behaviour
-
-- Nodding in VR functions as a genuine social signal and improves interaction
-  quality.
-  ([*Nonverbal communication in virtual reality: Nodding as a social signal*, IJHCS 2022](https://www.sciencedirect.com/science/article/pii/S1071581922000489))
-- Backchannel *timing prediction* is the active research problem, not backchannel
-  *rendering* — several systems "focused on predicting the appropriate timing for
-  a robot's backchannel behavior."
-  ([*A Robot That Listens*, arXiv 2509.07873](https://arxiv.org/pdf/2509.07873))
-  This is more evidence for our constraint 1: the hard part is server-side, and
-  our job is to render whatever it decides, well and on time.
-- Survey: [*Examining the Use of Nonverbal Communication in Virtual Agents*,
-  IJHCI 2021](https://www.tandfonline.com/doi/full/10.1080/10447318.2021.1898851).
-
----
-
-## Design implications for our rig
-
-Twenty-two recommendations, each tagged with the state it serves and the channels
-it touches. Ordered roughly by expected value per unit of work.
-
-1. **Split `NOD_SMALL` into three nod clips with the corpus's proportions.**
-   `short` ~0.83 s / low amplitude (50 % of firings), `long` ~1.42 s / larger
-   (40 %), `long_p` ~1.75 s *starting with an upward swing* (12 %). — *LISTENING*
-   — `headPitch`. (§3.3)
-
-2. **Give every multi-cycle nod declination and final lowering.** Cycle
-   magnitude should decay ~10 % per cycle with an extra drop on the last, and a
-   long nod should *start* bigger than a short one. Currently our repeated cycles
-   are flat, which is the tell. — *LISTENING* — `headPitch`. (§3.4)
-
-3. **Keep all nod fundamentals below 1.5 Hz.** Above that line the gesture flips
-   meaning from "I'm with you" to "hurry up." Target 0.9–1.3 Hz, and remember
-   the mixer attenuates a 1.5 Hz `headPitch` target to 0.55 of its authored
-   amplitude — author at ~1.6× intended. — *LISTENING* — `headPitch`. (§3.4)
-
-4. **Add a long "move-on" blink (≈0.6 s) co-fired with a nod, and treat it as a
-   loaded gesture.** Hömke et al. showed it shortens speaker answers by ~3 s.
-   Use it deliberately when Kiran wants to move to the next question; *never* let
-   the idle layer fire it at random. Our current `blinkLong()` at 0.34 s is
-   between the two studied values and probably reads as neither. — *LISTENING /
-   floor management* — `lidL`, `lidR` + `headPitch`. (§3.6)
-
-5. **Make blink rate state-dependent.** LISTENING gap 3.3–4.0 s (~16/min),
-   THINKING 2.1–2.7 s (~25/min), TYPING/BUSY 6.0–7.5 s (~9/min), DISTRACTED
-   ~2.5–3.0 s but with high variance. One constant per state, and it is probably
-   the cheapest state differentiation available to us. — *all states* — `lidL`,
-   `lidR`. (§5.1, §5.3)
-
-6. **Place blinks at clause boundaries, not on a free-running timer.** While
-   SPEAKING, blink at viseme-stream silences; while LISTENING, blink on the
-   server's backchannel opportunities. A boundary-placed blink is worth several
-   random ones. — *SPEAKING, LISTENING* — `lidL`, `lidR`. (§5.4, §3.7)
-
-7. **Blink on every head turn, slightly ahead of it.** Fire the blink ~60–80 ms
-   before `headYaw` starts moving, and add a transient `headPitch` dip during the
-   turn. This is the one anticipation that a head-only rig can always afford. —
-   *all states* — `lidL/R`, `headYaw`, `headPitch`. (§1.2)
-
-8. **Implement Andrist's gaze-aversion controller with his measured numbers.**
-   Cognitive aversion: 3.54 s long, starting 1.32 s *before* the thinking event.
-   Intimacy aversion while listening: 1.14 s long, every 7.21 s. While speaking:
-   1.96 s every 4.75 s. Turn-taking aversion at 73 % of utterance starts, 2.30 s
-   long, beginning 1.03 s before the utterance. — *LISTENING, THINKING,
-   SPEAKING* — `pupilX/Y`, `headYaw/Pitch`. (§4.2)
-
-9. **Never look away in the last ~2.4 s before Kiran stops talking.** Andrist's
-   controller explicitly prohibits intimacy aversion near an utterance end so the
-   agent can pass the floor with mutual gaze. This is a floor-management rule
-   with a number on it. — *SPEAKING → LISTENING transition* — `pupilX/Y`. (§4.2)
-
-10. **Add a `AWAY_THINKING_DOWN` gaze target and use it for genuine processing.**
-    Measured cognitive aversion is 39 % down, 31 % side, 29 % up — the opposite
-    of the NLP convention our current up-left `AWAY_THINKING` encodes. Keep the
-    up-away target for a short stylized "let me think" beat; use down-away for
-    anything over ~2 s. — *THINKING* — `pupilY`, `headPitch`. (§4.2, §4.4)
-
-11. **Make intimacy-modulating aversions sideways.** 57.5 % of them are lateral.
-    A brief 1.1 s side-glance every ~7 s while listening is what stops Kiran
-    reading as a stare — and it is the cheapest anti-creepy measure available. —
-    *LISTENING* — `pupilX`. (§4.2, §4.1)
-
-12. **Hold `USER` dead-centre and exact.** Kiran is the only participant in the
-    call who can achieve true 0° eye contact; the human is structurally stuck at
-    15–20° off-axis. Precision here is a real product advantage, and any residual
-    offset in the `USER` pose is throwing it away. — *LISTENING, SPEAKING* —
-    `pupilX`, `pupilY`. (§4.6)
-
-13. **Reconsider sub-5° micro-saccades.** Gaze deviations under ~5° of apparent
-    eye rotation are not perceived as looking away at all, so our 0.7–2.3 s
-    micro-jitter may be paying video-encoder cost for zero signal. Either enlarge
-    it past the threshold or cut it and rely on the aversion controller. —
-    *LISTENING* — `pupilX`, `pupilY`. (§4.6, constraint 8)
-
-14. **Use server-contingent backchannels; no autonomous timer.**
-    Gratch's negative control was *exactly* our `IdleBackchannel`: correct
-    frequency, no contingency — and it did not create rapport, while an
-    always-on responsive agent was rated more distracting and less trustworthy
-    than a human. Pipecat VAD may drive posture, but clip firing stays explicit
-    backend/application policy. — *LISTENING* — clip firing policy. (§3.5)
-
-15. **Adopt a caricature gain on expressive deviation from REST, ~1.2–1.5×.**
-    This is Rhodes's 16–48 % exaggeration applied to our parameter space, where
-    REST *is* the norm. Apply it to emotion and gesture layers only — never to
-    idle, which would just become jitter. Our existing ±1.4 `RANGE` headroom on
-    head, mouth corners and brow angle is already this idea. — *emotions,
-    SPEAKING* — all expressive channels. (§2.3)
-
-16. **`torsoLean` is the highest-value channel for LISTENING and is currently
-    under-used.** Forward lean raised rapport ratings at p < .001 independent of
-    content. A sustained +0.15–0.25 lean during attentive listening, relaxing
-    toward 0 during THINKING and slightly negative during TYPING/BUSY, is a
-    three-state signal in one number. — *LISTENING / THINKING / BUSY* —
-    `torsoLean`. (§6.3)
-
-17. **Modulate breath by state.** Resting 12–20 breaths/min bounds our 0.23 Hz
-    (13.8/min) as correct for LISTENING. THINKING: raise ~15–20 % (to ~0.27 Hz)
-    and cut amplitude ~30 %, which is the measured cognitive-load signature.
-    SPEAKING: a fast inbreath then a long decay across the phrase. — *all
-    states* — `breath`. (§6.1)
-
-18. **Use a shoulder rise + breath spike as the pre-speech / floor-claim beat.**
-    In a head-and-shoulders crop it is the most legible "I'd like to come in"
-    signal available, and `params.js` already identifies it as such. Fire it
-    ~250–400 ms before the first viseme. — *SPEAKING onset* — `shoulderL`,
-    `shoulderR`, `breath`. (§6.1)
-
-19. **Build TYPING/BUSY from four cheap cues, not from implied hands.**
-    (a) blink suppressed to ~9/min; (b) gaze parked on a *stable* off-user target
-    (`SCREEN_WORK`); (c) small high-frequency low-amplitude `headPitch`
-    scan motion replacing the slow sway; (d) shoulders slightly raised, held,
-    with sway amplitude cut ~40 %. Stability of target is what separates BUSY
-    from DISTRACTED. — *TYPING/BUSY* — `lidL/R`, `pupilX/Y`, `headPitch`,
-    `shoulderL/R`. (§6.4, §5.3)
-
-20. **Build DISTRACTED as aversion *statistics*, not as a pose.** Long aversions
-    (>3 s), wandering rather than stable targets, absent backchannels, and a
-    *late* return to `USER` with no re-engagement beat. The absence of the nod
-    is as diagnostic as the presence of the look-away. — *DISTRACTED* —
-    `pupilX/Y`, clip suppression. (§4.7)
-
-21. **Use deliberate stillness as a THINKING cue.** Limited animation's static
-    hold is a legitimate beat and we currently never take one: our idle drifts
-    forever. Freezing sway to near-zero for 0.8–1.5 s before an answer, then
-    releasing, is both a strong cognitive signal and a bitrate *saving*. —
-    *THINKING* — global idle amplitude. (§1.5, §6.2)
-
-22. **Ensure A–F visemes differ in topology, not amplitude; G/H/X may be
-    softer.** Rhubarb explicitly treats A–F as the mandatory set and G/H/X as
-    optional, and Preston Blair's chart differentiates by open/closed,
-    teeth/no-teeth, round/wide. Our discovered G-vs-B collision was an amplitude
-    difference where a shape difference was needed — check the remaining pairs on
-    the contact sheet's mouth crop at avatar size, which is the only place the
-    failure is visible. — *SPEAKING* — mouth group. (§1.4, constraint 2)
-
-### Two cross-cutting rules
-
-- **Behavioural fidelity should match visual fidelity.** A flat two-value line
-  drawing has a licence to blink in six frames, hold perfectly still, and nod in
-  a clean sinusoid. Uncanniness comes from *mismatch* between appearance and
-  behaviour, not from stylization. Spend the licence. (§2.5)
-- **The idle loop is the product.** Kiran is LISTENING for the overwhelming
-  majority of every interview. Effort spent on the listening loop compounds
-  across every second of every call in a way that effort spent on any single
-  gesture cannot. (§7.1)
-
----
-
 ## Sources
 
-- Argyle, M. & Dean, J. (1965). *Eye-Contact, Distance and Affiliation*. Sociometry 28(3). https://janetdeanfodor.wordpress.com/wp-content/uploads/2016/06/argyle-and-dean-1965-eye-contact.pdf
 - Andrist, S., Tan, X.Z., Gleicher, M. & Mutlu, B. (2013). *Conversational Gaze Aversion for Virtual Agents*. IVA 2013. https://pages.cs.wisc.edu/~bilge/pubs/2013/IVA13-Andrist.pdf
 - Andrist, S. et al. (2014). *Conversational Gaze Aversion for Humanlike Robots*. HRI 2014. https://dl.acm.org/doi/10.1145/2559636.2559666
-- Aneja, D. et al. (2016). *Modeling Stylized Character Expressions via Deep Learning*. ACCV. https://homes.cs.washington.edu/~shapiro/Deepali1.pdf
-- Blair, P. — phoneme series, via Gary C. Martin. https://www.garycmartin.com/mouth_shapes.html and https://www.garycmartin.com/phoneme_examples.html
-- Doherty-Sneddon, G. & Phelps, F. (2005). *Gaze aversion: A response to cognitive or social difficulty?* Memory & Cognition. https://www.researchgate.net/publication/7519027_Gaze_aversion_A_response_to_cognitive_or_social_difficulty
+- Argyle, M. & Dean, J. (1965). *Eye-Contact, Distance and Affiliation*. Sociometry 28(3). https://janetdeanfodor.wordpress.com/wp-content/uploads/2016/06/argyle-and-dean-1965-eye-contact.pdf
+- Bavelas, J.B., Coates, L. & Johnson, T. (2002). *Listener Responses as a Collaborative Process: The Role of Gaze*. Journal of Communication 52(3), 566–580.
+- Busso, C., Deng, Z., Grimm, M., Neumann, U. & Narayanan, S. (2007). *Rigid Head Motion in Expressive Speech Animation: Analysis and Synthesis*. IEEE TASLP 15(3). https://sail.usc.edu/publications/files/bussotaslp2007.pdf
 - Doughty, M.J. (2001). *Consideration of Three Types of Spontaneous Eyeblink Activity in Normal Humans*. Optom Vis Sci. https://www.researchgate.net/publication/11653609_Consideration_of_Three_Types_of_Spontaneous_Eyeblink_Activity_in_Normal_Humans_during_Reading_and_Video_Display_Terminal_Use_in_Primary_Gaze_and_while_in_Conversation
-- Ehrlichman, H. & Micic, D. (2012). *Why Do People Move Their Eyes When They Think?* Curr Dir Psychol Sci. https://journals.sagepub.com/doi/abs/10.1177/0963721412436810
-- Eibl-Eibesfeldt, I. — the eyebrow flash (~1/6 s), via Grammer et al., *Patterns on the Face: The Eyebrow Flash in Crosscultural Comparison*, Ethology 77. https://ui.adsabs.harvard.edu/abs/1988Ethol..77..279G/abstract
-- Freedman, E.G. (2008). *Coordination of the eyes and head during visual orienting*. Exp Brain Res 190(4). https://link.springer.com/article/10.1007/s00221-008-1504-8
 - Frontiers (2021). *The Role of Eye Gaze in Regulating Turn Taking in Conversations*. https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2021.616471/full
 - Frontiers (2023). *Head movement and its relation to hearing*. https://www.frontiersin.org/journals/psychology/articles/10.3389/fpsyg.2023.1183303/full
-- Frontiers (2025). *The speaker's "okay" vs. the listener's "okay"* (backchannel rate compilation). https://www.frontiersin.org/journals/communication/articles/10.3389/fcomm.2025.1655049/full
-- Game AI Pro 2, ch. 36. *Realizing NPCs: Animation and Behavior Control for Believable Characters*. https://www.gameaipro.com/GameAIPro2/GameAIPro2_Chapter36_Realizing_NPCs_Animation_and_Behavior_Control_for_Believable_Characters.pdf
-- Gratch, J. et al. (2007). *Creating Rapport with Virtual Agents*. IVA 2007. https://people.ict.usc.edu/~gratch/GratchIVA07-rapport.pdf
-- Gratch, J., DeVault, D. et al. (2014). *SimSensei Kiosk: A Virtual Human Interviewer for Healthcare Decision Support*. AAMAS. https://dl.acm.org/doi/10.5555/2615731.2617415
-- Guitton, D. & Volle, M. (1987). *Gaze control in humans: eye-head coordination during orienting movements to targets within and beyond the oculomotor range*. J Neurophysiol 58(3). https://pubmed.ncbi.nlm.nih.gov/3655876/
+- Graf, H.P., Cosatto, E., Strom, V. & Huang, F.J. (2002). *Visual Prosody: Facial Movements Accompanying Speech*. Proc. IEEE Automatic Face and Gesture Recognition. https://ieeexplore.ieee.org/document/1004186
+- Hadar, U., Steiner, T.J., Grant, E.C. & Clifford Rose, F. (1983). *Kinematics of head movements accompanying speech during conversation*. Human Movement Science 2(1–2), 35–46. https://www.sciencedirect.com/science/article/abs/pii/0167945783900040
+- Hadar, U., Steiner, T.J., Grant, E.C. & Rose, F.C. (1983). *Head Movement Correlates of Juncture and Stress at Sentence Level*. Language and Speech 26(2). https://journals.sagepub.com/doi/10.1177/002383098302600202
+- Hadar, U., Steiner, T.J. & Rose, F.C. (1984). *The timing of shifts of head postures during conversation*. Human Movement Science 3(3), 237–245. https://www.sciencedirect.com/science/article/abs/pii/0167945784900186
 - Hömke, P., Holler, J. & Levinson, S.C. (2018). *Eye blinks are perceived as communicative signals in human face-to-face interaction*. PLOS ONE. https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0208030
-- Hu, J., Sidenmark, L., Lee, H.S. & Gellersen, H. (2026). *The Eye-Head Mover Spectrum: Modelling Individual and Population Head Movement Tendencies in Virtual Reality*. arXiv:2602.06164. https://arxiv.org/abs/2602.06164
+- Inbar, M. et al. (2025). *A universal of speech timing: Intonation units form low-frequency rhythms*. PNAS. https://doi.org/10.1073/pnas.2425166122
 - Ito, K. et al. (2025). *Real-time Generation of Various Types of Nodding for Avatar Attentive Listening System*. ICMI 2025. https://arxiv.org/pdf/2507.23298
 - Lee, S.P., Badler, J.B. & Badler, N.I. (2002). *Eyes Alive*. SIGGRAPH 2002. https://repository.upenn.edu/hms/51/
-- Live2D Cubism — Standard Parameter List. https://docs.live2d.com/en/cubism-editor-manual/standard-parameter-list/
-- McCloud, S. (1993). *Understanding Comics: The Invisible Art* — amplification through simplification, the masking effect. https://en.wikipedia.org/wiki/Masking_(comics)
 - Mehrabian, A. (1971). *Silent Messages* — immediacy. Summarized: https://www.frontiersin.org/journals/education/articles/10.3389/feduc.2025.1726842/full
-- MoCap Online. *Idle Animation for Games: Design Guide*. https://mocaponline.com/blogs/mocap-news/idle-animation-game-dev-guide
 - Munhall, K.G. et al. (2004). *Visual Prosody and Speech Intelligibility: Head Movement Improves Auditory Speech Perception*. Psychological Science 15(2). https://www.queensu.ca/psychology/sites/psycwww/files/uploaded_files/Faculty/Kevin%20Munhall/Munhall_Psyc_Sci.pdf
-- Busso, C., Deng, Z., Grimm, M., Neumann, U. & Narayanan, S. (2007). *Rigid Head Motion in Expressive Speech Animation: Analysis and Synthesis*. IEEE Transactions on Audio, Speech, and Language Processing 15(3). https://sail.usc.edu/publications/files/bussotaslp2007.pdf
-- Graf, H.P., Cosatto, E., Strom, V. & Huang, F.J. (2002). *Visual Prosody: Facial Movements Accompanying Speech*. Proc. IEEE Automatic Face and Gesture Recognition. https://ieeexplore.ieee.org/document/1004186
-- Hadar, U., Steiner, T.J., Grant, E.C. & Rose, F.C. (1983). *Head Movement Correlates of Juncture and Stress at Sentence Level*. Language and Speech 26(2). https://journals.sagepub.com/doi/10.1177/002383098302600202
 - Nakano, T. & Kitazawa, S. (2010). *Eyeblink entrainment at breakpoints of speech*. Exp Brain Res. https://www.researchgate.net/publication/45604519_Eyeblink_entrainment_at_breakpoints_of_speech
 - PLOS ONE (2018). *Effects of breathing movement on the reduction of postural sway during postural-cognitive dual tasking*. https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0197385
 - PLOS ONE (2025). *Structure of nods in conversation*. https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0323448
 - Rac-Lubashevsky, R. et al. (2017). *Tracking Real-Time Changes in Working Memory Updating and Gating with the Event-Based Eye-Blink Rate*. Sci Rep. https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5451427/
-- Rhodes, G., Brennan, S. & Carey, S. (1987). *Identification and ratings of caricatures: implications for mental representations of faces*. Cognitive Psychology 19. https://www.harvardlds.org/wp-content/uploads/2018/05/Rhodes-Identification-and-ratings-of-caricatures-implications-for-mental-representations-of-faces..pdf
-- Rhodes, G. & Tremewan, T. (1992). *Caricature and face recognition*. Memory & Cognition 20(4). https://link.springer.com/article/10.3758/BF03210927
 - Rogers, S.L. et al. (2018). *Using dual eye tracking to uncover personal gaze patterns during social interaction*. Sci Rep. https://www.nature.com/articles/s41598-018-22726-7
-- Thomas, F. & Johnston, O. — the 12 principles. Summaries: https://www.nyfa.edu/student-resources/12-principles-of-animation/ and https://www.studiobinder.com/blog/what-are-the-12-principles-of-animation/
 - Trout, D.L. & Rosenfeld, H.M. (1980). *The effect of postural lean and body congruence on the judgment of psychotherapeutic rapport*. J Nonverbal Behav. https://link.springer.com/article/10.1007/BF00986818
-- TV Tropes / Grokipedia — Limited Animation. https://tvtropes.org/pmwiki/pmwiki.php/Main/LimitedAnimation , https://grokipedia.com/page/Limited_animation
-- Ward, N. & Tsukahara, W. (2000). *Prosodic features which cue back-channel responses in English and Japanese*. Journal of Pragmatics 32(8). https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=2c3171870effd15a96ca1378409ae3292ced1efa
-- Wolf, D. — *Rhubarb Lip Sync* README (A–H+X mouth shapes). https://github.com/DanielSWolf/rhubarb-lip-sync/blob/master/README.adoc
-- Zhang, Y. et al. (2021). *The Influence of Key Facial Features on Recognition of Emotion in Cartoon Faces*. Front. Psychol. https://pmc.ncbi.nlm.nih.gov/articles/PMC8382696/
+- Truong, K.P. et al. (2011). Interspeech — an analysis of 3,283 vocal and visual backchannels: 84 % of visual backchannels overlap speech; vocal ones fall in pauses at 37 %.
 - *Perception of eye contact in video teleconsultation* (2007). J Telemed Telecare. https://pubmed.ncbi.nlm.nih.gov/17288657/
 - *User interface for a better eye contact in videoconferencing* (2016). Displays. https://www.sciencedirect.com/science/article/abs/pii/S0141938216300944

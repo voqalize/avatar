@@ -21,29 +21,30 @@ named, because the incident is the evidence.
 
 ## 1. What this face is for (the goals the science serves)
 
-Four jobs, equal rank. A face that nails three and fails one fails the product.
+The jobs below are of equal rank. A face that nails all but one of them fails
+the product.
 
-1. **Be likable enough to sit opposite for an hour.** §3–§6.
-2. **Communicate what the assistant is doing** — distinct, emotionally legible
-   states. §7.
-3. **Buy time while feeling responsive.** The "mirrors in lifts" effect:
-   the famous operations story is that buildings cut elevator-wait complaints
-   not by speeding up the lifts but by installing mirrors — the wait stayed,
-   the *experienced* wait shrank. (Folklore-grade citation, but the underlying
-   result is solid HCI: users tolerate delay when there is visible, plausible
-   activity; feedback is required past ~1 s and attention collapses near ~10 s
-   — Nielsen's response-time limits,
-   [nngroup.com](https://www.nngroup.com/articles/response-times-3-important-limits/).)
-   The avatar **is the mirror**: THINKING / TYPING / SEARCHING motion converts
-   dead air into perceived progress. Latency masking is a first-class design
-   goal, not a decoration — it is most of why the widget exists instead of a
-   spinner.
-4. **Show "I am listening and following along."** The psychological load-bearer
-   is *contingency*, not frequency: one nod timed to the user's pause-onset is
-   worth ten nods on a random timer, and a mistimed backchannel is worse than
-   none (it reveals the listener isn't tracking). This is why the codebase's
-   rule is *autonomy is contingent, never decorative* — the science and the
-   convention agree.
+- **Be likable enough to sit opposite for an hour.** §3–§6.
+- **Communicate what the assistant is doing** — distinct, emotionally legible
+  states. §7.
+- **Buy time while feeling responsive.** The "mirrors in lifts" effect:
+  the famous operations story is that buildings cut elevator-wait complaints
+  not by speeding up the lifts but by installing mirrors — the wait stayed,
+  the *experienced* wait shrank. (Folklore-grade citation, but the underlying
+  result is solid HCI: users tolerate delay when there is visible, plausible
+  activity; feedback is required past ~1 s and attention collapses near ~10 s
+  — Nielsen's response-time limits,
+  [nngroup.com](https://www.nngroup.com/articles/response-times-3-important-limits/).)
+  The avatar **is the mirror**: THINKING / TYPING / SEARCHING motion converts
+  dead air into perceived progress. Latency masking is a first-class design
+  goal, not a decoration — it is most of why the widget exists instead of a
+  spinner.
+- **Show "I am listening and following along."** The psychological load-bearer
+  is *contingency*, not frequency: one nod timed to the user's pause-onset is
+  worth ten nods on a random timer, and a mistimed backchannel is worse than
+  none (it reveals the listener isn't tracking). This is why the codebase's
+  rule is *autonomy is contingent, never decorative* — the science and the
+  convention agree.
 
 ## 2. Where the eye lands: face perception at tile size
 
@@ -195,12 +196,3 @@ likability. The tests:
   size; separations must be authored as shape differences** and verified on
   the mouth-detail crop row, never the full-head row.
 
----
-
-## Applying this doc
-
-The staged authoring process and the verification checklist that operationalize
-everything above live in [authoring-a-face.md](authoring-a-face.md) — likeness
-stage, production-calibration stage, independent review stage. The division of
-labour: that doc says *what to do and in what order*; this one says *why, and
-what to measure when a judgement call is contested*.

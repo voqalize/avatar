@@ -21,3 +21,12 @@ export const INTERJECTION_TRACK_TAIL_MS = 60;
 /** First-order response constants: lips settle before the jaw does. */
 export const MOUTH_RESPONSE_TAU_S = 0.042;
 export const JAW_RESPONSE_TAU_S = 0.07;
+
+/**
+ * How far ahead of a rounded vowel the lips begin to round. Anticipatory
+ * rounding is among the longest-range coarticulation there is — 100–300 ms
+ * before an audible [y]/[u] (Schwartz & Savariaux 2014) — and this is the
+ * bottom of that range, because running speech compresses it and a pucker
+ * spread across a whole preceding word reads as a pout.
+ */
+export const ROUND_LEAD_MS = 100;

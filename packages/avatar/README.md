@@ -7,9 +7,7 @@ call has started and stopped.
 
 No video track, no per-minute avatar vendor, no second media path. SVG faces
 and 2.5-D characters ship with it, one per entry point, so you pay for the one
-you import, and you can author your own. Canvas2D identities also ship and are
-frozen: they still work, they get no further work,
-and they come out in 0.5.0 (below).
+you import, and you can author your own.
 
 This is the browser half. The pipeline half is
 [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) on PyPI; they are
@@ -17,7 +15,7 @@ two ends of one wire format and release independently, kept compatible by the
 wire contract rather than a shared version number
 ([RELEASING.md § Compatibility](https://github.com/voqalize/avatar/blob/main/RELEASING.md#compatibility)).
 
-**Licence: MIT for the code and the SVG and Canvas2D avatars, CC-BY 4.0 for the
+**Licence: MIT for the code and the SVG avatars, CC-BY 4.0 for the
 2.5-D character binaries** (`assets/*.glb` — see `assets/README.md` for the
 credit line). Which applies is decided by the kind of avatar, so adding a
 character never moves the line. The manifest declares the pair as
@@ -66,12 +64,6 @@ That is the integration, both halves of it. Neither takes an argument.
 embodiment of your `PipecatClient` and reacts to it, so there is no avatar to
 drive and no state to read back.
 
-**Works the same with or without `@pipecat-ai/voice-ui-kit`.** All `createAvatar`
-needs is the `PipecatClient` instance — however you built your call UI, if you
-have that instance you can mount an avatar next to it. voice-ui-kit's
-components (buttons, visualizers, transport controls) are chrome around the
-same client; they neither wrap nor gate it.
-
 ## What you get for free
 
 Most of the avatar works on any pipecat application without customization — not
@@ -87,9 +79,9 @@ always the renderer's.
 What is left over is small, specific, and each item is a case the library
 refuses to guess at — a deliberate nod or greeting, a tool whose calls never
 enter your pipeline, a pose richer than the core states, a backend that is not
-ours. [The architecture
-page](https://github.com/voqalize/avatar/blob/main/docs/architecture.md) is the
-canonical reference for all of it.
+ours. [The wire
+contract](https://github.com/voqalize/avatar/blob/main/docs/contract-wire.md) is
+the canonical reference for all of it.
 
 ## The wire protocol
 
@@ -136,52 +128,6 @@ createAvatar({ mount, client, face: myna });
 A name would need a table, and a table is a dynamic index no bundler can shake —
 every drawing in every consumer's bundle to render one.
 
-## Professional avatars — frozen, removed in 0.5.0
-
-**Do not start here.** These are a Canvas2D renderer that ended up in the
-wrong place: more expensive to author than an SVG drawing and less expressive
-than the 2.5-D characters, which is the whole range it was meant to sit between.
-They still work and they are still tested, but they get no further work, and
-their entry points come out in 0.5.0. Pick an SVG face or a 2.5-D character
-instead; both are below.
-
-Complete, code-authored avatars, each its own `createAvatar` module:
-
-```js
-import { createAvatar } from '@voqalize/avatar/avatars/arjun';
-// or: @voqalize/avatar/avatars/meera
-//     @voqalize/avatar/avatars/vikram
-//     @voqalize/avatar/avatars/ishita
-//     @voqalize/avatar/avatars/kabir
-//     @voqalize/avatar/avatars/naina
-
-const avatar = createAvatar({ mount, client: pipecatClient });
-```
-
-`arjun`/`meera` are the original interviewer pair; `vikram`/`ishita` and
-`kabir`/`naina` are further wardrobe/hair directions on the same rig. The
-entry points `interviewer-male`, `interviewer-female`, `professional-male-a`,
-`professional-female-a`, `professional-male-b` and `professional-female-b`
-still work — they are `@deprecated` aliases for the names above, kept so
-existing imports do not break, and should not be used in new code.
-
-They depict Indian professionals in their late twenties, without caricature
-or regional costume cues. They are calibrated at call-tile size and preserve
-every expression target, continuous visemes, gaze, blink, head motion, and
-the frame-edge gesture hand. Each module is a complete identity, not a face
-value: import one instead of the default module and do not pass a `face`
-option.
-
-Their faces use low-contrast, landmark-driven nose planes rather than an
-outlined nose glyph. A few identity-specific freckles or a small mole add depth
-only in low-motion upper-cheek areas; none are used as demographic cues.
-
-They use the same public contract and the same Pipecat lifecycle/viseme driver
-as the SVG avatars. Their private renderer is Canvas2D; its rig data and bitmap
-wardrobe assets are implementation details and no Canvas or pose API is added
-to the package surface. Like the SVG faces they are code, MIT, and ask for no
-attribution.
-
 ## The 2.5-D characters
 
 The characters ship as compiled binaries, each its own `createAvatar` module:
@@ -191,6 +137,7 @@ import { createAvatar } from '@voqalize/avatar/avatars/tara';
 // or: @voqalize/avatar/avatars/tushar
 //     @voqalize/avatar/avatars/tanya
 //     @voqalize/avatar/avatars/tess
+//     @voqalize/avatar/avatars/tanvi
 
 const avatar = createAvatar({ mount, client: pipecatClient });
 ```
@@ -198,13 +145,15 @@ const avatar = createAvatar({ mount, client: pipecatClient });
 A photograph of a face projected onto shallow geometry, with the parts that have
 to move — eyes, teeth, the lip line — built as geometry rather than painted.
 Three.js is an *optional* peer (`three`, `>=0.180 <0.187`) behind those
-entry points only, so an SVG or Canvas consumer never downloads it, and the `.glb`
+entry points only, so an SVG consumer never downloads it, and the `.glb`
 is fetched when the avatar mounts.
 
 Nothing above the renderer changes: the same wire, the same states, the same
 cue-synced mouth, and a server that has never heard of these characters drives one
-correctly. The head turns 15° of yaw and 24° of pitch, which is a measured limit
-rather than an option.
+correctly. How far a character's head may turn is not an option either: it is a
+limit read off that face by eye, carried per character in
+`client/three/motion-limits.json`, which `HEAD_DEG` in
+`client/three/character-rig.ts` turns into a pose channel's degrees.
 
 **The binaries are artwork under CC-BY 4.0**, separately from the MIT code
 around them; the credit line is in `assets/README.md`. Mounting, sizing, the asset
@@ -236,39 +185,3 @@ Omitting it is conforming.
 **There is deliberately no renderer interface.** The pose channels our SVG mixer
 uses to talk to our faces are internal, and a second public contract stays
 premature until a second renderer says what it needs.
-
-## What is in this tarball
-
-`dist/` is the compiled client — `AvatarClient`, the avatar entry points and the
-React binding. `src/` is the widget itself: the mixer, the SVG rig and drawings,
-plus the private Canvas2D interviewer rigs and their assets, as dependency-free
-ES modules with no build step, imported by `dist/` through ordinary relative
-paths. `client/` is the TypeScript those `dist/` files were compiled from, so
-the source maps resolve. `assets/` is the compiled characters and their
-licence note — the only non-JavaScript thing here, fetched at runtime by URL.
-
-The contract documents do not ship here. They live in the repository, which is
-where they are kept current:
-[github.com/voqalize/avatar](https://github.com/voqalize/avatar).
-
-## License
-
-**MIT for the code, CC-BY 4.0 for the artwork**, and Voqalize holds the
-copyright on all of it. The licence follows the kind of avatar, not the roster:
-
-- **SVG faces and Canvas2D identities are code** — MIT, no attribution. Each is
-  drawn by the function that ships it; a Canvas2D identity's rig data and
-  wardrobe bitmaps are implementation details of that function, not artwork you
-  are licensing.
-- **2.5-D characters are artwork** — `assets/*.glb`, and nothing else in the
-  tarball, under CC-BY 4.0. `assets/README.md` carries the credit line.
-
-MIT is usable anywhere, including in closed-source products. The manifest
-declares the package as `MIT AND CC-BY-4.0`, which is what a licence scanner
-reports whether or not you import a 2.5-D character.
-
-The drawing idiom `peep` is authored in is
-[Open Peeps](https://www.openpeeps.com/) (CC0) — no artwork is copied. The
-`avatarsync` aligner that produces the mouth shapes is a fork of
-[Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync) (MIT) and
-ships in the Python package, not this one.

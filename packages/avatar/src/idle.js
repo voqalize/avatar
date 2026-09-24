@@ -77,6 +77,14 @@ const rand = ([a, b]) => a + Math.random() * (b - a);
 // is two large gaze shifts a second apart and carries one blink, not two; and
 // a state change that lands on a gaze shift is one event to the eyelids.
 const BLINK_REFRACTORY = 1.5;
+// How long an ordinary blink takes, open to open, in seconds. Centred on the
+// 208 ms "short" blink Hömke et al. gave their avatar listener
+// (research-biomechanics.md §3.6) — the one their listeners read as nothing
+// but a blink. It was 0.11–0.15 s, and in a recorded call on 2026-09-24 a
+// photographic lid covered that in two or three frames: open, shut, open, a
+// pop rather than a lid travelling, which is the flicker a reviewer calls
+// ghosting. A line face swallowed it; a photograph shows every frame.
+const BLINK_DUR = [0.19, 0.23];
 
 // How far into the current gap an odds-rolled evoked blink may land, as a
 // fraction of that gap. A state that moves its gaze oftener than it blinks —
@@ -226,7 +234,7 @@ export class IdleLayer {
     this.talk = 0;
     this._nextBlink = 2 + Math.random() * 3;
     this._blinkT = -1;
-    this._blinkDur = 0.13;
+    this._blinkDur = BLINK_DUR[0];
     this._lastBlinkAt = -Infinity;
     // Two incommensurate frequencies per axis so the sway never visibly loops.
     this._ph = [Math.random() * 9, Math.random() * 9, Math.random() * 9];
@@ -318,7 +326,7 @@ export class IdleLayer {
       const gap = this._nextBlink - this._lastBlinkAt;
       if (!forced && this.t - this._lastBlinkAt < EVOKED_EARLIEST * gap) return;
     }
-    this._startBlink(0.11 + Math.random() * 0.04);
+    this._startBlink(rand(BLINK_DUR));
   }
 
   _startBlink(dur) {

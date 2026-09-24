@@ -1,23 +1,9 @@
 # The character binaries
 
-The 2.5-D characters, one compiled file each:
+The 2.5-D characters, one compiled file each: `tara.glb`, `tushar.glb`,
+`tanya.glb`, `tess.glb`, `tanvi.glb`.
 
-| file | character | what it is |
-|---|---|---|
-| `tara.glb` | tara | the first; shallow geometry under a projected portrait |
-| `tushar.glb` | tushar | the second, her scripts with his landmarks |
-| `tanya.glb` | tanya | the third, built from supplied reference images |
-| `tess.glb` | tess | the fourth, from a single supplied reference sheet |
-
-They are loaded for you. `@voqalize/avatar/avatars/tara` resolves the file beside
-itself and hands it to a loader; you never name a path, and the only reason to
-know these are here is the licence below. `three` is an *optional* peer of this
-package, so importing a drawing instead of a character downloads none of this.
-
-Each file carries geometry, one morph target per pose channel, and its texture
-atlases as WebP — which is most of the bytes, because the atlases are
-photographs. **They are build outputs. Do not hand-edit one**; there is nothing
-in this directory to regenerate it from, and the next release overwrites it.
+**They are build outputs. Do not hand-edit one.**
 
 ## Licence: CC-BY 4.0
 
@@ -36,6 +22,31 @@ retexturing a character does not oblige you to publish the result.
 The licence is also written inside each file, in the glTF copyright field. A
 binary gets copied out of a dependency tree and passed around; a string in the
 file is the only way terms travel with it.
+
+## What in these files is not ours
+
+The difference is the mesh. Every character here carries one *canonical*
+topology that other people published, fitted to that character's face — the
+geometry is no longer authored per face, which is what makes a landmark table
+the only thing that distinguishes one file from the next. **The obligations
+below travel with every file, so they are named here and again in each one's
+glTF copyright field.** Neither one restricts what the rest of this package is
+licensed for.
+
+- **The face shell is MediaPipe's canonical face mesh** — Copyright The
+  MediaPipe Authors, **Apache License 2.0**, the full text in
+  `LICENSE-APACHE-2.0` at the package root. **Modified**: the triangles closing
+  the eyes and the lips are removed so a blink and a viseme have an opening to
+  be; every edge is subdivided once; rings are appended outside its face oval to
+  reach the hair and the neck; and every vertex is moved onto landmarks measured
+  from a photograph, which is what makes it a face rather than the reference
+  head. What survives unmodified is the topology — which vertex is which point,
+  and what joins them.
+- **The dental arch is fitted from ICT-FaceKit** — Copyright (c) 2020 USC
+  Institute for Creative Technologies, **MIT**, the same terms as this package's
+  own `LICENSE`. What was taken is a measurement rather than geometry: the
+  curvature of its upper arch, read off its generic head and carried here as the
+  coefficients of a polynomial. None of its mesh is in this file.
 
 ## The faces are synthetic
 

@@ -187,9 +187,7 @@ function chase(pos, vel, gx, gy, dt, accel, speed) {
  * costs η²ₚ = .52–.56 with post-hoc d of 1.09–2.69, with partial inattention
  * costing most of what total inattention costs. So this is not "look away
  * sometimes" — it is a narrow band, and the numbers below are Andrist's measured
- * ones rather than a taste call (docs/research-biomechanics.md §4.2). The spike
- * that arrived at this band, and what it measured on peep, is
- * docs/research-active-listening.md.
+ * ones rather than a taste call (docs/research-biomechanics.md §4.2).
  *
  * `every`/`dur` are seconds. `dirs` are unit-ish directions weighted by how
  * often each is taken; magnitude is scaled per-fire.

@@ -1,7 +1,7 @@
 /**
  * The 2.5-D rig, below the `createAvatar` modules — `/internal`, no semver promise.
  *
- * A character's own module — `tara.ts`, `tushar.ts`, `tanya.ts`, `tess.ts` — is
+ * A character's own module — `tara.ts`, `tushar.ts`, `tanya.ts`, `tess.ts`, `tanvi.ts` — is
  * what a consumer gets: one `createAvatar` each, the mixer behind it, nothing to
  * configure. This is the other door, for a page whose subject is the *rig*
  * rather than the call — the renderer with no mixer in front of it, every
@@ -18,8 +18,9 @@
 export { ASSETS as CHARACTERS } from "./assets.js";
 export type { CharacterName } from "./assets.js";
 
-export { createTaraRig, EYE_DEG, HEAD_CLAMP, HEAD_DEG, TARA_TUNING } from "./tara-rig.js";
-export type { TaraRigOptions } from "./tara-rig.js";
+export { createCharacterRig, EYE_DEG, HEAD_CLAMP, HEAD_DEG, CHARACTER_TUNING,
+  HEAD_PARTS, PIVOT, ROLL_PIVOT } from "./character-rig.js";
+export type { CharacterRigOptions } from "./character-rig.js";
 export { HARD_BUDGET, pixelRatioFor, SHIPPING_SURFACE } from "./budgets.js";
 
 /**

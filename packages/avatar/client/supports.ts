@@ -1,13 +1,12 @@
 /**
- * `supports` for every avatar this package ships — the SVG faces and the six
- * canvas identities alike.
+ * `supports` for every avatar this package ships.
  *
- * It is one constant and one file because they are one renderer: the canvas
- * avatars mount the same mixer with the same clip library, so a second list
- * would be the same list with a second chance to be wrong. It is not in
+ * It is one constant and one file because they are one renderer: every avatar
+ * mounts the same mixer with the same clip library, so a second list would be
+ * the same list with a second chance to be wrong. It is not in
  * `createAvatar.ts`, where the type is documented, because a value is imported
- * for real — reading it from there would pull `peep`'s drawing into a canvas
- * avatar's bundle.
+ * for real — reading it from there would pull `peep`'s drawing into every
+ * consumer's bundle.
  *
  * The two required ids first, then this renderer's own catalogue. `ACTION_IDS`
  * already carries `RESPONSE_INTERRUPTED` as this renderer's shape for it, so

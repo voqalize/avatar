@@ -9,73 +9,11 @@ That is the whole public contract. `client` is a required `PipecatClient`.
 avatar state beyond what `PipecatClient` exposes, and the caller does not get to
 read the avatar's internal state — we do not commit to any such behaviour.
 
-Code: [`packages/avatar/client/createAvatar.ts`](../packages/avatar/client/createAvatar.ts).
-
-## Adding an avatar
-
-Publish a module that exports `createAvatar`. Import yours instead of ours.
-
-```js
-import { createAvatar } from "@acme/our-mascot";
-```
-
-No registry, no loader, no plug-in system, no asset resolution. Duck typing on
-the top-most layer: an Avatar *is* the API. Everything underneath is
-implementation detail and may be shared — `@voqalize/avatar/internal` exists for
-exactly that — but externally it is only `createAvatar`.
-
-Ours ships `peep`, `wren`, `myna` as `{ face }` — a value imported from
-`@voqalize/avatar/faces/<name>`, never a name looked up in a table, so importing
-one costs one drawing. Every other option belongs to whoever wrote the
-implementation; nothing reads them but them.
-
-Ours also ships six Canvas2D implementations, at
-`@voqalize/avatar/avatars/{arjun,meera,vikram,ishita,kabir,naina}`. Each exports
-the same `createAvatar` function and fixes one identity behind it. Their shared
-renderer, pose evaluator, rig data and wardrobe images are private code reuse,
-not another public interface and not a registry. (The original entry points —
-`interviewer-male`/`interviewer-female`/`professional-male-a`/`professional-female-a`/`professional-male-b`/`professional-female-b`
-— still work as `@deprecated` aliases for the names above.)
-
-Those six are **frozen and come out in 0.5.0**. What they proved is the part
-worth keeping: a whole second renderer arrived, and nothing was added to this
-interface to admit it.
-
-## The one optional export
-
-A module may also export `supports`, and nothing else is ever added beside
-`createAvatar`.
-
-```ts
-export const supports: AvatarSupport = { actions: ["ACKNOWLEDGE", …] };
-```
-
-It exists for a page that *drives* an avatar rather than one that mounts it.
-The wire's action id is open and an unknown one is ignored in silence
-([contract-wire.md](contract-wire.md) § Action), which is the right behaviour
-for a protocol and useless for a control surface: a button per name cannot
-tell "this face has no such motion" from "nothing happened". The avatar is the
-only thing that knows, so this is it saying so, and `states` says the narrower
-thing again — which of the nine it draws *distinguishably*, since every avatar
-must accept all nine and drawing two of them alike is conforming.
-
-Three properties, and they are what keep it from becoming a second contract:
-
-- **Nothing reads it but a UI.** `createAvatar` does not take it, the library
-  never consults it, and no behaviour changes if it is wrong.
-- **It is a declaration, not a capability check.** Nobody verifies it. A list
-  that has drifted from the drawing is a bug in the avatar.
-- **Omitting it is conforming.** The right answer to `undefined` is to show
-  every action the server offers, which is what a driving page did before this
-  existed.
-
-Ours: [`packages/avatar/client/supports.ts`](../packages/avatar/client/supports.ts)
-for every SVG face and Canvas identity — one renderer, one list — and
-`BLENDER_SUPPORTS` in
-[`packages/avatar/client/three/sequences.ts`](../packages/avatar/client/three/sequences.ts)
-for the 3-D characters, which is that list plus their own nod names. Both are
-derived from the tables rather than written out, because a hand-kept copy could
-only disagree with them.
+The options, the return value and `supports` — the one optional export beside
+`createAvatar` — are documented where they are declared:
+[`packages/avatar/client/createAvatar.ts`](../packages/avatar/client/createAvatar.ts).
+The entry points and what each one costs a consumer are in
+`packages/avatar/package.json`.
 
 ## Why there is no renderer interface
 
@@ -98,47 +36,13 @@ moves up to the client, and there is deliberately no second public contract:
 designing a render interface is premature until a second renderer has told us
 what it needs.
 
-## What is shared, and what is not
+## What is deliberately not in the interface
 
-| | |
-|---|---|
-| **the viseme clock** | `VisemeTrack` — cues + clock → which letter is on screen now. Every renderer needs it, none should write it twice. A library class to construct, not a contract to implement. `@voqalize/avatar/internal`. |
-| **compound behaviour** | Necessary for SVG, unnecessary for a renderer that authors its own transitions — a Rive state machine, say, is this layer and the rig fused. Stays inside our implementation ([`packages/avatar/src/behavior.js`](../packages/avatar/src/behavior.js), the mixer in [`packages/avatar/src/avatar.js`](../packages/avatar/src/avatar.js)). |
-| **gaze** | Not in the interface, and not by omission. The question is what gaze *communicates*. The action should be *"highlight that element"* and gaze follows it — not a lower-level gaze point. Deferred until a need names itself. |
+**Gaze**, and not by omission. The question is what gaze *communicates*. The
+action should be *"highlight that element"* and gaze follows it — not a
+lower-level gaze point. Deferred until a need names itself.
 
-## Layers
-
-Three, and only the first is public.
-
-| | owns | code |
-|---|---|---|
-| **Avatar** | `createAvatar`, the pipecat binding, effective-state precedence, cue-clock anchor | `packages/avatar/client/{createAvatar,AvatarClient}.ts` · [contract-wire.md](contract-wire.md), [pipecat-lifecycle-protocol.md](pipecat-lifecycle-protocol.md) |
-| **Behavior** | states → sustained pose/gaze/idle, actions → finite clips | `packages/avatar/src/behavior.js` · [contract-behavior.md](contract-behavior.md) |
-| **Renderer** | the SVG mixer, the pose channels, the faces | `packages/avatar/src/avatar.js`, `packages/avatar/src/rig.js`, `packages/avatar/src/face-*.js` · [internal-rig.md](internal-rig.md) |
-
-An avatar author reads the first two. The third is our implementation's internal
-reference, published under `/internal` with no semver promise.
-
-## Entry points
-
-| | |
-|---|---|
-| `@voqalize/avatar` | `createAvatar`, and `supports`. Framework-free; `@pipecat-ai/client-js` is a type-only import, so even that peer stays genuinely optional at runtime. Carries one drawing: `peep`, the default `face`. |
-| `@voqalize/avatar/faces/{peep,wren,myna}` | One drawing each, to pass as `face`. Separate entry points because a name-keyed table is a dynamic index no bundler can shake — the others would ship with it. |
-| `@voqalize/avatar/react` | `<Avatar client create options>`. Separate so `createAvatar` costs a non-React caller nothing. |
-| `@voqalize/avatar/internal` | The SVG widget, the behavior catalog, `VisemeTrack`. **No semver promise** — moves in any minor. |
-
-React is the forgiving layer: `client` may be `null` and nothing mounts until it
-isn't. The factory stays strict.
-
-## Consequences
-
-- No `onPresenceChange`, no `onRemoteAudioLevel`, no `data-avatar-state`. A
-  callback is a contract — publishing one obliges every implementation to emit
-  the seven states with our precedence rules, which is the second public
-  contract this design exists to avoid.
-- `<Avatar>` renders a static `role="img"`. The implementation owns the DOM
-  inside the mount and is the only thing that knows what it is portraying.
-- `WORKING` reaches the renderer as `WORKING`. It used to arrive as `TYPING` —
-  a behaviour named after one rendering of it, telling an implementation what to
-  *draw* rather than what was happening.
+`<Avatar>` renders a static `role="img"`. The implementation owns the DOM inside
+the mount and is the only thing that knows what it is portraying. React is the
+forgiving layer: `client` may be `null` and nothing mounts until it isn't. The
+factory stays strict.

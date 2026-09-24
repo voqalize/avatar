@@ -23,5 +23,5 @@ export const HARD_BUDGET = Object.freeze({
   triangles: 60_000,
   drawCalls: 30,
   bones: 40,
-  morphTargets: 40,
+  morphTargets: 45,
 });

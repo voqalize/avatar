@@ -45,10 +45,10 @@ describe("the export map", () => {
     expect(existsSync(join(ROOT, rel))).toBe(true);
   });
 
-  // The 2.5-D characters and the Canvas2D identities are one shape on
-  // purpose: a consumer reads `./avatars/<name>` and does not learn which
-  // renderer is behind it until they read the install line. A missing row here
-  // is the single way a shipped character becomes unreachable.
+  // `./avatars/<name>` is one shape on purpose: a consumer does not learn
+  // which renderer is behind a name until they read the install line. A
+  // missing row here is the single way a shipped character becomes
+  // unreachable.
   it.each(CHARACTERS)("publishes ./avatars/%s", (name) => {
     expect(Object.keys(manifest.exports)).toContain(`./avatars/${name}`);
   });
@@ -82,8 +82,8 @@ describe("what the tarball carries", () => {
   // does that for that spelling only: the first 0.4.0 pack left CC-BY 4.0 behind
   // while shipping the artwork it covers, and `assets/README.md` pointed the
   // consumer at a file that was not there.
-  it("carries both licence texts", () => {
-    for (const text of ["LICENSE", "LICENSE-CC-BY-4.0"]) {
+  it("carries every licence text it points at", () => {
+    for (const text of ["LICENSE", "LICENSE-CC-BY-4.0", "LICENSE-APACHE-2.0"]) {
       expect(existsSync(join(ROOT, text)), text).toBe(true);
       expect(text === "LICENSE" || manifest.files.includes(text), `${text} in files`).toBe(true);
     }
@@ -91,16 +91,15 @@ describe("what the tarball carries", () => {
 
   it("holds the characters and its own licence note, and nothing else", () => {
     expect(readdirSync(join(ROOT, "assets")).sort())
-      .toEqual(["README.md", "tanya.glb", "tara.glb", "tess.glb", "tushar.glb"]);
+      .toEqual(["README.md", "tanvi.glb", "tanya.glb", "tara.glb", "tess.glb", "tushar.glb"]);
   });
 });
 
 describe("the three-dimensional engine", () => {
-  // Optional, because the six drawings and the six Canvas2D identities are the
-  // reason most consumers are here and none of them should download a 3-D
-  // engine. Declared, because the 2.5-D characters cannot run without one and a
-  // silent `undefined` at import time is a worse failure than a resolution
-  // error.
+  // Optional, because the drawings are the reason most consumers are here and
+  // none of them should download a 3-D engine. Declared, because the 2.5-D
+  // characters cannot run without one and a silent `undefined` at import time
+  // is a worse failure than a resolution error.
   it("is an optional peer", () => {
     expect(manifest.peerDependencies.three).toBeTruthy();
     expect(manifest.peerDependenciesMeta.three?.optional).toBe(true);
