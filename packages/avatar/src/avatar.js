@@ -20,6 +20,7 @@ import { IdleLayer, ListeningEngine } from './idle.js';
 import { ClipPlayer } from './clips.js';
 import { ACTIONS, INTERNAL_CLIPS } from './interjections.js';
 import { VisemeTrack, shapeFor, SILENT } from './visemes.js';
+import { LIP_CONTACT_AIM } from './speech-timing.js';
 import { SpeechProsody, UNCALIBRATED_HEAD_GAIN } from './prosody.js';
 import { HEAD_AXES, soften } from './head.js';
 import { PerformTrack } from './perform.js';
@@ -568,9 +569,9 @@ export function createAvatar(opts = {}) {
   const target = Object.assign({}, REST);
   // The head axes again, carrying only what is held (step 6b).
   const hold = { headYaw: 0, headPitch: 0, headRoll: 0 };
-  // What the rig is handed: `cur` with the reflex applied to the eyes. The
-  // same object when there is no reflex.
-  const shown = vor ? Object.assign({}, REST) : cur;
+  // What the rig is handed: `cur` with the reflex applied to the eyes and the
+  // lips stopped at shut.
+  const shown = Object.assign({}, REST);
 
   function applyGaze(blink) {
     const g = gazeOverrideByClip || gazeName;
@@ -886,6 +887,10 @@ export function createAvatar(opts = {}) {
       const r = RANGE[c];
       target[c] = clamp(target[c], r[0], r[1]);
     }
+    // 7a. a bilabial aims past shut (`LIP_CONTACT_AIM`), after the clamp
+    //     because it is the one target no pose is allowed to hold: only the
+    //     chase sees it, and step 8b stops what is drawn at shut.
+    if (mouth && mouth.letter === 'A') target.mouthOpen = -LIP_CONTACT_AIM;
     if (il.blink > 0) {
       target.lidL = Math.max(target.lidL, il.blink);
       target.lidR = Math.max(target.lidR, il.blink);
@@ -896,11 +901,14 @@ export function createAvatar(opts = {}) {
     // 8. smooth toward the target — this is where co-articulation happens
     for (const c of CHANNELS) cur[c] = approach(cur[c], target[c], TAU[c], dt);
 
-    // 8b. The vestibulo-ocular reflex. Here and not in the gaze layer because
+    // 8b. What is drawn: the lips stop at shut however far past it they aimed.
+    Object.assign(shown, cur);
+    if (shown.mouthOpen < 0) shown.mouthOpen = 0;
+
+    // 8c. The vestibulo-ocular reflex. Here and not in the gaze layer because
     //     only here is the head that is actually drawn known: prosody, clips
     //     and idle all land after gaze.
     if (vor) {
-      Object.assign(shown, cur);
       if (!overrides || overrides.pupilX === undefined) {
         shown.pupilX = clamp(reflexX(cur.pupilX), RANGE.pupilX[0], RANGE.pupilX[1]);
       }

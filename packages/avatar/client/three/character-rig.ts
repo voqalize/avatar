@@ -11,7 +11,7 @@
  * state or an emotion; it receives a fully mixed pose and moves geometry.
  */
 
-import { REST } from "../internal.js";
+import { JAW_OF_OPEN, REST, VISEME_SHAPES } from "../internal.js";
 import type { AvatarFrame, AvatarRig, RigPose } from "../internal.js";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -449,21 +449,15 @@ const INTERIOR: ReadonlyArray<readonly [number, readonly [number, number, number
 ];
 
 /**
- * The same photograph across the opening: the middle two-fifths hold the
- * midline's colour and the rest falls to a fifth of it at the commissure — her
- * 0.65 of enamel at the widest row is 0.44 halfway out and 0.1–0.2 at the
- * corner. `from` is where the fall starts and `to` what is left at the corner,
- * both as a share of the opening's half-width.
- */
-const INTERIOR_RIM = { from: 0.4, to: 0.2 };
-
-/**
  * The photograph's enamel is 158 of 255 and the rendered upper arch's is about
  * 232, so the profile is carried over at the ratio of the two: the interior is
  * as dark *against the teeth* as hers is, which is the only comparison anyone
  * makes looking into a mouth.
  */
 const INTERIOR_GAIN = 232 / 158;
+
+/** The same, applied to the photograph in linear light, where its tile is read. */
+const INTERIOR_GAIN_LINEAR = INTERIOR_GAIN ** 2.2;
 
 /**
  * How open her mouth is in that photograph: 185 px between the inner rims at the
@@ -481,10 +475,13 @@ const OPENNESS = `sqrt(clamp(uAperture.w / (2.0 * uAperture.z * ${INTERIOR_OPEN.
 
 /**
  * Where a raised tongue is read from: `tongue` = 1 paints the surface it lifts
- * into the opening as if it were at this depth — the photograph's brightest
- * row — rather than in the shadow of the upper arch it has moved into.
+ * into the opening from `from` down to `at` — `at` the photograph's brightest
+ * row — rather than in the shadow of the upper arch it has moved into. A span
+ * and not a row: read at one row, every height of it took the same texels,
+ * and the photograph's tongue drew as vertical streaks down a slab. Squeezed
+ * into the span it keeps its crown, rolling off toward the teeth.
  */
-const TONGUE_LIFT_AT = 0.60;
+const TONGUE_LIFT = { from: 0.25, at: 0.60 };
 
 /** An `INTERIOR` knot as linear light, at `INTERIOR_GAIN`. */
 function interiorKnot(rgb: readonly [number, number, number]) {
@@ -521,14 +518,26 @@ function interiorProfile() {
  * Emitted rather than lit, and entirely: this is sampled light, like the 75%
  * of the face that is the photograph verbatim, and a key from above lights the
  * dorsum brightest at its back, which is the one thing a mouth never looks
- * like. Both surfaces take the same profile, so her mouth's absence of any
+ * like. Both surfaces read the same picture, so her mouth's absence of any
  * tongue-to-cavity edge carries over; only a raised tongue is told apart, by
  * `lift`, because a tongue tip at the teeth is what viseme H is.
  */
 function mouthInterior(base: THREE.MeshStandardMaterial,
-                       aperture: { value: THREE.Vector4 }, lift: { value: number }) {
+                       aperture: { value: THREE.Vector4 }, lift: { value: number },
+                       extent: readonly number[] | null) {
   const material = base.clone();
-  const profile = interiorProfile();
+  // The photograph itself where the asset carries it (`project_albedo.project_interior`),
+  // and its midline where it does not.
+  const tiled = material.map !== null && extent !== null;
+  let paint: string;
+  if (tiled) {
+    const [s0, s1, a0, a1] = extent!;
+    paint = `vec2 tileAt = clamp(vec2((mouthX - ${s0.toFixed(3)}) / ${(s1 - s0).toFixed(3)},`
+      + ` (mouthA - ${a0.toFixed(3)}) / ${(a1 - a0).toFixed(3)}), 0.0, 1.0);\n`
+      + `vec3 interior = min(texture2D(map, tileAt).rgb * ${INTERIOR_GAIN_LINEAR.toFixed(4)}, vec3(1.0));\n`;
+  } else {
+    paint = interiorProfile();
+  }
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uAperture = aperture;
     shader.uniforms.uMouthLift = lift;
@@ -541,18 +550,17 @@ function mouthInterior(base: THREE.MeshStandardMaterial,
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>",
         "#include <common>\nvarying vec2 vMouthAt;\nuniform vec4 uAperture;\nuniform float uMouthLift;")
-      .replace("#include <map_fragment>",
-        "#include <map_fragment>\ndiffuseColor.rgb = vec3(0.0);")
+      .replace("#include <map_fragment>", "diffuseColor.rgb = vec3(0.0);")
       .replace("#include <emissivemap_fragment>",
         "#include <emissivemap_fragment>\n"
-        + "float mouthA = (uAperture.y - vMouthAt.y) / uAperture.w;\n"
-        + `mouthA = mouthA < ${TONGUE_LIFT_AT.toFixed(2)} ? mix(mouthA, ${TONGUE_LIFT_AT.toFixed(2)}, uMouthLift) : mouthA;\n`
-        + "float mouthS = abs(vMouthAt.x - uAperture.x) / uAperture.z;\n"
-        + profile
-        + `interior *= ${OPENNESS};\n`
-        + `totalEmissiveRadiance = interior * mix(1.0, ${INTERIOR_RIM.to.toFixed(2)}, smoothstep(${INTERIOR_RIM.from.toFixed(2)}, 1.0, mouthS));`);
+        + "float mouthA0 = (uAperture.y - vMouthAt.y) / uAperture.w;\n"
+        + `float mouthA = mouthA0 < ${TONGUE_LIFT.at.toFixed(2)} ? mix(mouthA0, ${TONGUE_LIFT.from.toFixed(2)}`
+        + ` + max(mouthA0, 0.0) * ${((TONGUE_LIFT.at - TONGUE_LIFT.from) / TONGUE_LIFT.at).toFixed(4)}, uMouthLift) : mouthA0;\n`
+        + "float mouthX = (vMouthAt.x - uAperture.x) / uAperture.z;\n"
+        + paint
+        + `totalEmissiveRadiance = interior * ${OPENNESS};`);
   };
-  material.customProgramCacheKey = () => "mouth-interior";
+  material.customProgramCacheKey = () => (tiled ? "mouth-interior-tile" : "mouth-interior");
   return material;
 }
 
@@ -1196,6 +1204,27 @@ const influence = (channel: string, value: number): number => {
   return channel === "squintL" || channel === "squintR" ? squintCurve(i) : i;
 };
 
+/**
+ * The jaw a closure lets through. This shell hangs the lower lip from the
+ * mandible (`morphs._mandible`), and the jaw is the slower of the two to settle
+ * (`JAW_RESPONSE_TAU_S`), so into an [m] the lips have shut while the jaw is
+ * still coming up. That pulls the lower lip back off the upper, and the teeth
+ * show through the seam. A real lower lip closes over a jaw that is still
+ * open. A press is what a seal looks like on these channels, so in proportion
+ * to the press past rest the jaw is held to what the lips' own aperture
+ * implies. The cost is a chin that arrives with the lips rather than just
+ * after them, and that is not what a viewer looks at during an [m].
+ */
+const SEAL_FROM = VISEME_SHAPES.X.mouthPress ?? REST.mouthPress;
+const SEAL_FULL = VISEME_SHAPES.A.mouthPress ?? 1;
+function sealed(pose: RigPose): RigPose {
+  const { jaw, mouthOpen = 0, mouthPress } = pose;
+  if (jaw === undefined || mouthPress === undefined) return pose;
+  const seal = Math.min(1, Math.max(0, (mouthPress - SEAL_FROM) / (SEAL_FULL - SEAL_FROM)));
+  const excess = jaw - JAW_OF_OPEN * mouthOpen;
+  return seal > 0 && excess > 0 ? { ...pose, jaw: jaw - seal * excess } : pose;
+}
+
 /** One side's weights for the asset's expression maps, in its order. A
  *  channel with no side (`mouthPress`) weighs the same on both. */
 const expressionWeights = (pose: RigPose, side: "L" | "R", expression: Expression,
@@ -1364,7 +1393,8 @@ export function createCharacterRig(mount: HTMLElement, options?: unknown): Avata
   observer.observe(mount);
   resize();
 
-  const applyPose = (pose: RigPose) => {
+  const applyPose = (given: RigPose) => {
+    const pose = sealed(given);
     headRollRad = radians(((pose.headRoll ?? 0) / HEAD_CLAMP) * HEAD_DEG.roll);
     // The first pose is a starting point, not a movement: seed the hair where it
     // would have settled, so a tool that sets one pose and screenshots it gets
@@ -1633,7 +1663,10 @@ export function createCharacterRig(mount: HTMLElement, options?: unknown): Avata
                      .filter((e): e is [string, number[]] => Array.isArray(e[1]) && e[1].length === 4) };
       for (const [name, lift] of [["Cavity", { value: 0 }], ["Tongue", tongueLift]] as const) {
         const mesh = head.getObjectByName(name) as THREE.Mesh | undefined;
-        if (mesh) mesh.material = mouthInterior(mesh.material as THREE.MeshStandardMaterial, mouthOpening, lift);
+        if (!mesh) continue;
+        const extent = mesh.userData?.interior_extent;
+        mesh.material = mouthInterior(mesh.material as THREE.MeshStandardMaterial, mouthOpening, lift,
+                                      Array.isArray(extent) && extent.length === 4 ? extent : null);
       }
       const lower = head.getObjectByName("Teeth_Lower") as THREE.Mesh | undefined;
       if (lower) lower.material = lowerArch(lower.material as THREE.MeshStandardMaterial, mouthOpening);
