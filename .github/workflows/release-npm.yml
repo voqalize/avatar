@@ -53,6 +53,17 @@ jobs:
             *-*) echo "dist-tag=next" >> "$GITHUB_OUTPUT" ;;
             *) echo "dist-tag=latest" >> "$GITHUB_OUTPUT" ;;
           esac
+      # The shim imports its runtime from avatar.voqalize.com at the URL in
+      # shim/pin.ts, and the runtime fetches its characters from beside it. A
+      # shim published before those are uploaded is an avatar that never
+      # appears for every customer who installs it, and an npm version cannot
+      # be reused. So ask the host, the way a browser will, before anything
+      # else runs; the upload is the private side's, before it tags.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: everything the shim loads is served
+        run: node packages/avatar/scripts/check-hosted.mjs --production
 
   ci:
     name: ci
