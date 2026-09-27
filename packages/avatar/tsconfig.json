@@ -1,4 +1,7 @@
 {
+  // The published package: the shim, compiled into `dist/`. The runtime it
+  // loads is `client/` (its own tsconfig there), bundled separately and never
+  // on npm.
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
@@ -6,19 +9,13 @@
     "moduleResolution": "NodeNext",
     "jsx": "react-jsx",
     "strict": true,
-    "noFallthroughCasesInSwitch": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-    // `client/three/` reads the measured head envelope as a value, and tsc
-    // copies the file into `dist/` alongside the module that imports it.
-    "resolveJsonModule": true,
     "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "rootDir": "client",
+    "rootDir": "shim",
     "outDir": "dist"
   },
-  "include": ["client"]
+  "include": ["shim"]
 }

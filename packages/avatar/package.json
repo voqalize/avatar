@@ -1,8 +1,8 @@
 {
   "name": "@voqalize/avatar",
-  "version": "0.4.4",
-  "description": "A JavaScript-programmable talking head for AI voice calls: line-art or 2.5-D faces, server-synced lipsync, state through motion, no runtime dependencies.",
-  "license": "MIT AND CC-BY-4.0 AND Apache-2.0",
+  "version": "0.5.0",
+  "description": "A talking head for AI voice calls that embodies your pipecat client. This package loads the Voqalize avatar runtime.",
+  "license": "MIT",
   "author": "Voqalize",
   "homepage": "https://github.com/voqalize/avatar#readme",
   "repository": {
@@ -17,14 +17,8 @@
     "avatar",
     "talking-head",
     "lipsync",
-    "viseme",
-    "rhubarb",
     "pipecat",
-    "voice-agent",
-    "svg",
-    "animation",
-    "3d",
-    "threejs"
+    "voice-agent"
   ],
   "engines": {
     "node": ">=20"
@@ -45,66 +39,20 @@
       "types": "./dist/react.d.ts",
       "default": "./dist/react.js"
     },
-    "./internal": {
-      "types": "./dist/internal.d.ts",
-      "default": "./dist/internal.js"
-    },
-    "./internal/three": {
-      "types": "./dist/three/internal.d.ts",
-      "default": "./dist/three/internal.js"
-    },
-    "./faces/peep": {
-      "types": "./src/face-peep.d.ts",
-      "default": "./src/face-peep.js"
-    },
-    "./faces/wren": {
-      "types": "./src/face-wren.d.ts",
-      "default": "./src/face-wren.js"
-    },
-    "./faces/myna": {
-      "types": "./src/face-myna.d.ts",
-      "default": "./src/face-myna.js"
-    },
-    "./avatars/tara": {
-      "types": "./dist/three/tara.d.ts",
-      "default": "./dist/three/tara.js"
-    },
-    "./avatars/tushar": {
-      "types": "./dist/three/tushar.d.ts",
-      "default": "./dist/three/tushar.js"
-    },
-    "./avatars/tanya": {
-      "types": "./dist/three/tanya.d.ts",
-      "default": "./dist/three/tanya.js"
-    },
-    "./avatars/tess": {
-      "types": "./dist/three/tess.d.ts",
-      "default": "./dist/three/tess.js"
-    },
-    "./avatars/tanvi": {
-      "types": "./dist/three/tanvi.d.ts",
-      "default": "./dist/three/tanvi.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [
-    "src",
-    "client",
-    "dist",
-    "assets",
-    "LICENSE-CC-BY-4.0",
-    "LICENSE-APACHE-2.0"
+    "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prepare": "tsc -p tsconfig.json"
+    "prepare": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json"
   },
   "peerDependencies": {
     "@pipecat-ai/client-js": ">=1.4 <2",
     "react": ">=18",
-    "react-dom": ">=18",
-    "three": ">=0.180 <0.187"
+    "react-dom": ">=18"
   },
   "peerDependenciesMeta": {
     "@pipecat-ai/client-js": {
@@ -115,13 +63,6 @@
     },
     "react-dom": {
       "optional": true
-    },
-    "three": {
-      "optional": true
     }
-  },
-  "devDependencies": {
-    "@types/three": "^0.185.4",
-    "three": "^0.180.0"
   }
 }
