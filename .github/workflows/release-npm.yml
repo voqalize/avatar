@@ -1,8 +1,7 @@
 # Publish `@voqalize/avatar` to npm from an `npm-v<semver>` tag.
 #
-# The JS package releases on its own, independent of `voqalize-avatar`
-# (release-pypi.yml). What keeps the two compatible is the wire contract, not a
-# shared version number — see RELEASING.md § Compatibility.
+# Each release is pinned to the avatar runtime it was released with — see
+# RELEASING.md § Compatibility.
 #
 #   git tag -a npm-v0.3.1 -m "@voqalize/avatar 0.3.1" && git push origin npm-v0.3.1
 #

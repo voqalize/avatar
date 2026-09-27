@@ -11,16 +11,12 @@
   "scripts": {
     "build": "tsc -p packages/avatar/tsconfig.json",
     "typecheck": "tsc -p packages/avatar/tsconfig.json --noEmit",
-    "test": "vitest run",
-    "server:vendor": "esbuild apps/server/vendor.entry.js --bundle --format=esm --outfile=apps/server/vendor/pipecat.js"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@pipecat-ai/client-js": "catalog:",
-    "@pipecat-ai/small-webrtc-transport": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "esbuild": "^0.25.0",
-    "jsdom": "^25.0.1",
     "react": "catalog:",
     "react-dom": "catalog:",
     "typescript": "catalog:",

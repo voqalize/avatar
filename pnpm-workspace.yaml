@@ -1,16 +1,5 @@
-# One lockfile for the whole repo.
-#
-# There were three (`package-lock.json` at the root, in `apps/studio/` and in
-# the tools package), which meant three resolutions of `typescript`, `react` and
-# `@types/*` that could drift apart silently — and did: the root pinned
-# `@pipecat-ai/client-js` at 1.7.0 while `apps/studio/` resolved its own copy,
-# so the IDE and the package under test could have been running different
-# transports.
-#
-# `packages/avatar` is the published one (`@voqalize/avatar`) and, since 0.4.0,
-# the only one: the IDE and the rig workshop are part of the working tree, which
-# is private (CONTRIBUTING.md). The root manifest is a workspace manifest with
-# nothing publishable in it.
+# The workspace is the shim, `@voqalize/avatar`. The root manifest is a
+# workspace manifest with nothing publishable in it.
 packages:
   - "packages/avatar"
 
@@ -19,22 +8,14 @@ packages:
 # cannot end up on different pipecat clients — which is what happened under three
 # lockfiles, and which npm reported as nothing at all.
 #
-# `@pipecat-ai/small-webrtc-transport` tracks `client-js` with a `~` peer, so
-# these two move together or not at all. They sit at the TOP of the
-# `>=1.4 <2` range this package declares in `peerDependencies`; the floor is
-# checked by the `client floor` job in ci-js.yml.
+# `@pipecat-ai/client-js` sits at the TOP of the `>=1.4 <2` range the package
+# declares in `peerDependencies`; the floor is checked by the `client floor`
+# job in ci-js.yml.
 catalog:
   "@pipecat-ai/client-js": "1.13.0"
-  "@pipecat-ai/small-webrtc-transport": "1.10.6"
   react: "^18.3.1"
   react-dom: "^18.3.1"
   "@types/react": "^18.3.3"
   "@types/react-dom": "^18.3.0"
   typescript: "^5.7.3"
 
-# esbuild unpacks its platform binary in an install script, and is a no-op
-# without one: `pnpm run server:vendor` bundles the pipecat client for the demo
-# call. pnpm blocks install scripts by default, so the one that genuinely needs
-# one is named here.
-onlyBuiltDependencies:
-  - esbuild

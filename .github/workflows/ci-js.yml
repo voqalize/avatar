@@ -1,8 +1,7 @@
 # The JS gate: `@voqalize/avatar`, the shim that loads the Voqalize avatar
 # runtime from avatar.voqalize.com. The runtime itself is built and checked where
-# it is developed; what this proves is the loader and the tarball. Its own
-# workflow because it is its own release. release-npm.yml runs this and nothing
-# from the Python side before it publishes.
+# it is developed; what this proves is the loader and the tarball.
+# release-npm.yml runs this before it publishes.
 name: ci-js
 
 on:
@@ -96,7 +95,7 @@ jobs:
           '
 
   # The floor of the declared `@pipecat-ai/client-js` peer range, checked rather
-  # than asserted — the same reason ci-py.yml matrixes pipecat. The import
+  # than asserted. The import
   # is types-only (see shim/index.ts), so a typecheck IS the compatibility
   # test: if 1.4's declarations no longer describe what we call, `>=1.4` in
   # package.json is a promise we are not keeping.
