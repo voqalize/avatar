@@ -1,5 +1,7 @@
 """Driving a browser talking-head avatar from a pipecat pipeline.
 
+**Deprecated.** 0.4.1 is the last release; see the README.
+
 The widget is a state machine wearing a face — it renders a state enum, an
 emotion enum, a gaze enum, interjection and hand-gesture ids, and a stream of
 timed viseme letters, and decides none of them. This package is the half that
@@ -25,14 +27,25 @@ of your own to say something the pipeline cannot infer — that a long tool call
 `frames.py`.
 """
 
-from .frames import AvatarControlFrame
-from .messages import (
+import warnings
+
+# Before the imports, so a consumer sees it even if one of them fails.
+warnings.warn(
+    "voqalize-avatar is deprecated and 0.4.1 is its last release. The Voqalize "
+    "avatar is now driven by the Voqalize platform and mounted with "
+    "@voqalize/avatar on npm; see https://pypi.org/project/voqalize-avatar/",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+from .frames import AvatarControlFrame  # noqa: E402
+from .messages import (  # noqa: E402
     AVATAR_MESSAGE_TYPE,
     AvatarAction,
     AvatarMessage,
     AvatarState,
 )
-from .processor import AvatarProcessor
+from .processor import AvatarProcessor  # noqa: E402
 
 __all__ = [
     "AVATAR_MESSAGE_TYPE",

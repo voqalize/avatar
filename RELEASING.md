@@ -3,18 +3,18 @@
 Two packages, two pipelines, no long-lived credentials. Both publish from this
 repository, which is the only place they ever have.
 
-**The JavaScript arrives here already reviewed.** `packages/avatar/` and
-`docs/` are exported from a private working tree as one commit per release,
-carrying an `Exported-From:` trailer that names the private revision — so
-`@voqalize/avatar`'s version bump belongs in that export commit, and a fix to
-either path is made over there. The Python package and `apps/server/` are this
-repository's own and take pull requests. Why the line is drawn there:
-[CONTRIBUTING.md](CONTRIBUTING.md).
+**The JavaScript arrives here already reviewed.** `packages/avatar/` is
+exported from a private working tree as one commit per release, carrying an
+`Exported-From:` trailer that names the private revision. So
+`@voqalize/avatar`'s version bump belongs in that export commit, and a fix to it
+is made over there. The Python package and `apps/server/` are this repository's
+own, and both are deprecated: `voqalize-avatar` 0.4.1 is its last release
+([CONTRIBUTING.md](CONTRIBUTING.md)).
 
 | package | registry | tag | workflow | what's in it |
 |---|---|---|---|---|
-| [`@voqalize/avatar`](https://www.npmjs.com/package/@voqalize/avatar) | npm | `npm-v<semver>` | `release-npm.yml` | `createAvatar` (`.`), `<Avatar>` (`./react`), the widget (`./internal`) |
-| [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) | PyPI | `py-v<semver>` | `release-pypi.yml` | the pipecat processor, state machine, wire and viseme engine |
+| [`@voqalize/avatar`](https://www.npmjs.com/package/@voqalize/avatar) | npm | `npm-v<semver>` | `release-npm.yml` | the loader: `createAvatar` (`.`) and `<Avatar>` (`./react`) |
+| [`voqalize-avatar`](https://pypi.org/project/voqalize-avatar/) | PyPI | `py-v<semver>` | `release-pypi.yml` | deprecated; the pipecat processor and viseme engine |
 
 Each package releases on its own schedule with its own version number: a
 backend fix neither waits on a client release nor drags one along. Each
@@ -25,39 +25,20 @@ Up to 0.3.0 both shipped together from one `v<semver>` tag. Those tags stay,
 and each of those releases also carries a `py-v`/`npm-v` pair on the same
 commit, so either package's history reads from one tag family.
 
-**What is in the npm tarball, and why.** `files` is `src`, `client`, `dist`,
-`assets`, `LICENSE-CC-BY-4.0`. `dist/` imports `../src/` as an ordinary sibling,
-so the entrypoint dangles without it; `assets/` is the compiled 2.5-D
-characters; and the CC-BY licence has to be named explicitly, because npm
-auto-includes a file called `LICENSE` and nothing else — a second licence file
-that is not in `files` silently does not ship. The manifest declares
-`MIT AND CC-BY-4.0`, and `three` is an *optional* peer reachable only from the
-character entry points. The contract documents deliberately do not ship: a
-second copy of `docs/` going stale on npm is worse than a link to a public
-repository that is current. `packaged.test.ts` is what holds all of this.
+**What is in the npm tarball, and why.** `files` is `dist`, which is the
+compiled loader and the pin naming the runtime it loads. The package has no
+dependencies and ships no characters. The runtime and the characters are hosted
+on `avatar.voqalize.com`, so what a release pins is the runtime URL in
+`dist/pin.js`. `packaged.test.ts` in the private tree, and the package-contents
+step in `ci-js.yml` here, are what hold this.
 
 ## Compatibility
 
-The version numbers do not say which halves work together; the wire does. It
-has no version field (`packages/avatar-py/src/voqalize_avatar/messages.py` says
-why), and the client ignores a `cmd` it does not know. So:
-
-- **Adding** a command, or an optional field, is backward compatible and ships
-  in either package alone. An older client ignores it; a newer client must not
-  depend on receiving it from an older server.
-- **Changing or removing** one is a breaking wire change. It ships as a new
-  minor (a major after 1.0) of *both* packages, released together, and both
-  release notes name the pairing.
-
-**When a wire change does land, browsers move first and the pipeline's pin
-follows.** A newer client reads an older server — 0.4.0 renamed `claim` to
-`state` and still accepts the old spelling at its parse boundary — but the
-reverse is silent: a 0.3.x client's parser drops an unrecognised `cmd` without a
-log line, so a pipeline upgraded ahead of its browsers loses every state and
-action and keeps its lipsync, which looks like a rendering bug and is not one.
-
-The wire itself is [docs/contract-wire.md](docs/contract-wire.md). A consumer
-picks its pair with its own pins.
+A release of `@voqalize/avatar` is pinned to one runtime, and the runtime is
+what talks to the Voqalize platform, so the npm version alone decides what a
+browser runs. Older `@voqalize/avatar` 0.4.x releases, and the
+`voqalize-avatar` releases they were paired with, stay installable and keep
+working together.
 
 ## Cutting a release
 
@@ -71,10 +52,9 @@ git tag -a npm-v0.4.2 -m "@voqalize/avatar 0.4.2"
 git push origin main npm-v0.4.2
 ```
 
-The commit you are tagging is usually the export commit for `@voqalize/avatar`
-and an ordinary pull-request merge for `voqalize-avatar`; the version bump goes
-in whichever of the two it belongs to, and a wire change that breaks both is
-what makes the two tags land on one commit.
+The commit you are tagging is the export commit for `@voqalize/avatar` and an
+ordinary pull-request merge for `voqalize-avatar`; the version bump goes in
+whichever of the two it belongs to.
 
 Push the tag by name. The root `package.json` is the workspace manifest and
 publishes nothing; its version is not read by anything and neither guard reads
@@ -82,7 +62,7 @@ it.
 
 Each workflow runs its own package's CI gate first — `ci-py.yml` is the backend
 tests at both ends of the pipecat range plus the local server's frame contract,
-`ci-js.yml` is the widget sweep, the client tests and the client-js floor —
+`ci-js.yml` is the loader's tests, its packed install and the client-js floor —
 then publishes, then opens a GitHub release whose notes diff against that
 package's previous tag.
 

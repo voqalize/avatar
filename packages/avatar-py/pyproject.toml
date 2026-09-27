@@ -1,7 +1,7 @@
 [project]
 name = "voqalize-avatar"
-version = "0.4.0"
-description = "Drive a browser talking-head avatar from a pipecat pipeline"
+version = "0.4.1"
+description = "Deprecated: drove the Voqalize browser avatar from a pipecat pipeline. No further releases."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -9,7 +9,8 @@ license-files = ["LICENSE"]
 authors = [{ name = "Voqalize" }]
 keywords = ["avatar", "lipsync", "viseme", "rhubarb", "pipecat", "voice-agent"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    # 0.4.1 is the last release (README § Deprecated).
+    "Development Status :: 7 - Inactive",
     "Framework :: AsyncIO",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3.12",
@@ -46,8 +47,6 @@ voqalize-avatar = "voqalize_avatar.cli:main"
 Homepage = "https://github.com/voqalize/avatar"
 Repository = "https://github.com/voqalize/avatar"
 Issues = "https://github.com/voqalize/avatar/issues"
-# The wire format this package speaks, and the widget that renders it.
-Protocol = "https://github.com/voqalize/avatar/blob/main/docs/contract-wire.md"
 
 [build-system]
 # >=1.27 because `license = "MIT"` + `license-files` below is PEP 639 spelling;
@@ -123,3 +122,6 @@ exclude = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# The package warns on import that it is deprecated; `test_deprecation.py`
+# checks that it does, and every other test would repeat it.
+filterwarnings = ["ignore:voqalize-avatar is deprecated:DeprecationWarning"]

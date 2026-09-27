@@ -1,5 +1,13 @@
 # voqalize-avatar
 
+> **Deprecated.** 0.4.1 is the last release of this package, and it gets no
+> fixes. The Voqalize avatar is now driven by the Voqalize platform, which
+> decides what the avatar does on the server, and it is mounted in the browser
+> with [`@voqalize/avatar`](https://www.npmjs.com/package/@voqalize/avatar) on
+> npm. Nothing replaces driving the avatar from a pipecat pipeline of your own.
+> The releases already published stay on PyPI, and they keep working with the
+> `@voqalize/avatar` 0.4.x versions they were released alongside.
+
 The pipecat half of [**voqalize/avatar**](https://github.com/voqalize/avatar) —
 a 2-D talking head for AI voice calls that renders in the browser, not in a
 video track.

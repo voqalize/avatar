@@ -1,5 +1,8 @@
 # The server
 
+> **Deprecated, with `voqalize-avatar`.** This demo call runs the Python
+> package, whose 0.4.1 release is its last. It gets no new features.
+
 A real voice call — your microphone, WebRTC, a live pipecat pipeline — with the
 avatar lipsyncing to the audio the bot is speaking. It runs with no API key, no
 account and no model download, because the first run is the one that decides
