@@ -1,9 +1,8 @@
-# The JS gate: `@voqalize/avatar`. The rig is judged by eye and only
-# *conformance* can be automated; the client is judged by test. Nothing here can
-# tell you whether a face reads as `THINKING` or as asleep — that is what the rig
-# pages are for. Its own workflow because it is its own release —
-# release-npm.yml runs this and nothing from the Python side before it
-# publishes.
+# The JS gate: `@voqalize/avatar`, the shim that loads the Voqalize avatar
+# runtime from avatar.voqalize.com. The runtime itself is built and checked where
+# it is developed; what this proves is the loader and the tarball. Its own
+# workflow because it is its own release. release-npm.yml runs this and nothing
+# from the Python side before it publishes.
 name: ci-js
 
 on:
@@ -20,6 +19,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The id and name predate the shim; kept because a required status check
+  # matches on the name.
   widget:
     name: widget + client
     runs-on: ubuntu-latest
@@ -34,20 +35,13 @@ jobs:
           cache: pnpm
 
       # One install for the workspace, which is one package now. `prepare`
-      # compiles packages/avatar/client/ on install, so this also proves the one
-      # build step in the repo still works.
+      # compiles the shim into packages/avatar/dist on install.
       - run: pnpm install --frozen-lockfile
 
       - name: typecheck
         run: pnpm run typecheck
 
       - name: unit tests
-        # Includes the rig conformance sweep
-        # (`packages/avatar/test/conformance.test.ts`)
-        # — every state, emotion, gaze and semantic action on every shipped
-        # face, asserting finite in-range params and an attached drawing. It
-        # used to be a puppeteer job; the assertions never looked at a pixel,
-        # so a real Chrome was paying for nothing.
         run: pnpm test
 
       - name: consume the tarball
@@ -59,10 +53,9 @@ jobs:
         #
         # Every entry point, because a missing subpath is invisible to a build
         # that imports one — read from the installed `exports` map, so an entry
-        # added or removed is checked without anyone editing this list. The
-        # compiled characters are the reason `three` is installed here; they are
-        # also the only exports that read a file at runtime, and this proves the
-        # import resolves, not that the GLB fetches.
+        # added or removed is checked without anyone editing this list. This
+        # proves the imports resolve, not that the runtime loads: that needs a
+        # browser and the asset host.
         run: |
           cd packages/avatar
           TARBALL="$(pnpm pack | tail -1)"
@@ -70,7 +63,7 @@ jobs:
           cp "$TARBALL" "$WORK/"
           cd "$WORK"
           npm init -y >/dev/null
-          npm i --silent "./$(basename "$TARBALL")" three @pipecat-ai/client-js react react-dom
+          npm i --silent "./$(basename "$TARBALL")" @pipecat-ai/client-js react react-dom
           node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const pkg = JSON.parse(readFileSync("node_modules/@voqalize/avatar/package.json", "utf8"));
@@ -92,14 +85,19 @@ jobs:
         run: |
           pnpm pack --dry-run
           test -f dist/index.js
-          # The one export re-exports the widget by relative path out of dist,
-          # so `src/` has to be in the tarball too or the entrypoint is a
-          # dangling import.
-          test -f src/avatar.js
+          test -f dist/react.js
+          # The shim and nothing else: anything outside dist/ beyond the files
+          # npm adds on its own is something the package was never meant to carry.
+          npm pack --dry-run --json --ignore-scripts | node -e '
+            const [r] = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const extra = r.files.map((f) => f.path)
+              .filter((p) => !p.startsWith("dist/") && !["LICENSE", "README.md", "package.json"].includes(p));
+            if (extra.length) { console.error("unexpected in the tarball:", extra); process.exit(1); }
+          '
 
   # The floor of the declared `@pipecat-ai/client-js` peer range, checked rather
   # than asserted — the same reason ci-py.yml matrixes pipecat. The import
-  # is types-only (see AvatarClient.ts), so a typecheck IS the compatibility
+  # is types-only (see shim/index.ts), so a typecheck IS the compatibility
   # test: if 1.4's declarations no longer describe what we call, `>=1.4` in
   # package.json is a promise we are not keeping.
   client-floor:

@@ -1,7 +1,7 @@
 # What a pull request is allowed to touch, checked rather than asked for.
 #
-# `packages/avatar/` and `docs/` are a build output here: they are developed in a
-# private working tree and overwritten wholesale by one export commit per release
+# `packages/avatar/` is a build output here: it is developed in a private
+# working tree and overwritten wholesale by one export commit per release
 # (RELEASING.md). A pull request against them cannot be merged in any useful
 # sense — it would be reverted by the next release with nobody noticing — so this
 # job says so at the top of the review instead of a maintainer saying it at the
@@ -35,7 +35,7 @@ jobs:
           set -euo pipefail
 
           # Everything this repository is the source of truth for. Anything else
-          # is either exported or artwork.
+          # is exported.
           allowed='^(packages/avatar-py/|apps/server/|\.github/|CONTRIBUTING\.md$)'
 
           git diff --name-only "$BASE" "$HEAD" > /tmp/changed
@@ -47,8 +47,8 @@ jobs:
           echo "This pull request changes paths that are not developed in this repository:"
           grep -vE "$allowed" /tmp/changed | sed 's/^/  /'
           echo
-          echo "packages/avatar/ and docs/ are exported from a private working tree and"
-          echo "are overwritten by the next release; packages/avatar/assets/ is artwork."
+          echo "packages/avatar/ is exported from a private working tree and is"
+          echo "overwritten by the next release."
           echo "See CONTRIBUTING.md. A report of the bug, with a reproduction, is the"
           echo "contribution we can act on for those paths -- and we do act on them."
           exit 1
