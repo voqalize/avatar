@@ -1,6 +1,6 @@
 {
   "name": "@voqalize/avatar",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A talking head for AI voice calls that embodies your pipecat client. This package loads the Voqalize avatar runtime.",
   "license": "MIT",
   "author": "Voqalize",

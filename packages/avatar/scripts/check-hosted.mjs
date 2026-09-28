@@ -14,6 +14,8 @@
  *   - the runtime at the pinned URL: 200, JavaScript, open CORS;
  *   - every `characters/<name>.<hash>.glb` (and `<name>-still.<hash>.webp`) the runtime's text names, resolved
  *     against the runtime's URL the way the runtime resolves it: 200, open CORS;
+ *   - and every such `.glb` sealed: the host serves the runtime's own format
+ *     and never a glTF file, so a character's file must not begin `glTF`;
  *   - `/LICENSE` and `/NOTICE`, which the runtime's banner and every GLB's
  *     copyright field point at: 200.
  *
@@ -57,7 +59,10 @@ export async function checkHosted(runtimeUrl, { fetch: get = fetch } = {}) {
         why.push(`Content-Type ${res.headers.get("content-type") ?? "missing"}`);
       }
       const text = want.body && res.status === 200 ? await res.text() : null;
-      if (!want.body) await res.body?.cancel();
+      if (want.sealed && res.status === 200) {
+        const head = new Uint8Array(await res.arrayBuffer()).subarray(0, 4);
+        if (String.fromCharCode(...head) === "glTF") why.push("a plain glTF file, not sealed");
+      } else if (!want.body) await res.body?.cancel();
       rows.push({ url, ok: why.length === 0, why: why.join(", ") });
       return text;
     } catch (err) {
@@ -72,7 +77,7 @@ export async function checkHosted(runtimeUrl, { fetch: get = fetch } = {}) {
     if (glbs.length === 0) rows.push({ url: runtimeUrl, ok: false, why: "names no character" });
     // `../` because the runtime lives in `runtime/` and the GLBs beside it
     // (scripts/build-runtime.mjs).
-    for (const glb of glbs) await ask(new URL(`../${glb}`, runtimeUrl).href, { cors: true });
+    for (const glb of glbs) await ask(new URL(`../${glb}`, runtimeUrl).href, { cors: true, sealed: glb.endsWith(".glb") });
   }
   for (const name of ["LICENSE", "NOTICE"]) await ask(new URL(`/${name}`, runtimeUrl).href, {});
   return rows;
