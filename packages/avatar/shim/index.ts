@@ -7,6 +7,8 @@
  *     // …
  *     avatar.destroy();
  *
+ *     const roster = await listCharacters();   // every character, to choose from
+ *
  * This package is the loader and nothing else. The avatar itself — the
  * characters, the renderer and everything that reads the call — is the
  * Voqalize avatar runtime, which this module imports from
@@ -48,8 +50,30 @@ export interface AvatarInstance {
   destroy(): void;
 }
 
+/**
+ * A character, as a page choosing one sees it. The words in `gender`,
+ * `ethnicity` and `tags` come from closed lists the runtime keeps, so a filter
+ * built from what one call returns matches what the next returns.
+ */
+export interface CharacterInfo {
+  /** What `createAvatar` takes as `character`. */
+  readonly name: string;
+  /** An image URL: the character at rest. */
+  readonly still: string;
+  readonly gender: string;
+  /** The age the face reads as, in years. */
+  readonly age: { readonly min: number; readonly max: number };
+  readonly ethnicity: readonly string[];
+  /** Dress, hair, jewellery — how the character presents. */
+  readonly tags: readonly string[];
+  /** Voqalize voice ids that suit this face, best first — `"omnivoice/gauri"`,
+   *  for example. Advice only: the avatar never speaks. */
+  readonly suggestedVoices: readonly string[];
+}
+
 interface Runtime {
   mount(request: AvatarOptions & { readonly protocol: number }): AvatarInstance;
+  characters?(): readonly CharacterInfo[];
 }
 
 let runtime: Promise<Runtime> | undefined;
@@ -84,4 +108,16 @@ export function createAvatar(options: AvatarOptions): AvatarInstance {
       instance = undefined;
     },
   };
+}
+
+/**
+ * Every character the runtime can mount, in a stable order — for a page that
+ * lets someone choose one, or filters by what they look like. Loads the runtime
+ * if nothing has yet, so the first call waits for it; the list is the
+ * runtime's own and cannot be changed.
+ */
+export async function listCharacters(): Promise<readonly CharacterInfo[]> {
+  const rt = await load();
+  if (!rt.characters) throw new Error(`[avatar] the runtime at ${RUNTIME_URL} does not list its characters`);
+  return rt.characters();
 }

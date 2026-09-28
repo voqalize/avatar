@@ -46,7 +46,22 @@ appeared.
 `character` names one of the characters you can meet at
 https://voqalize.com/demos/avatar. Each release of this package can mount a
 fixed set of them, and a name it does not have throws, listing the ones it
-does.
+does. `listCharacters()` returns that set:
+
+```js
+import { listCharacters } from "@voqalize/avatar";
+
+for (const c of await listCharacters()) {
+  // c.name, c.still (an image URL), c.gender, c.age.min, c.age.max,
+  // c.ethnicity[], c.tags[], c.suggestedVoices[]
+}
+```
+
+Use it to build a picker or a filter rather than writing the names down. The
+words in `gender`, `ethnicity` and `tags` come from closed lists, so a filter
+you build from one call matches the next. `suggestedVoices` lists the voices
+that suit the face, best first, as Voqalize voice ids such as
+`omnivoice/gauri`. It is advice: the avatar never speaks.
 
 The gains are optional, from `0` to `2`, and `1` is as authored:
 

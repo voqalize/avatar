@@ -22,7 +22,8 @@ let generation = 0;
 function standIn() {
   (globalThis as unknown as { __shim: Log }).__shim = { mounted: [], destroyed: 0 };
   return `data:text/javascript,/*${generation++}*/export function mount(r){globalThis.__shim.mounted.push(r);` +
-    `return {destroy(){globalThis.__shim.destroyed++}}}`;
+    `return {destroy(){globalThis.__shim.destroyed++}}}` +
+    `export function characters(){return [{name:"tara"}]}`;
 }
 
 const mount = {} as HTMLElement;
@@ -76,5 +77,15 @@ describe("the shim", () => {
     expect(() => createAvatar({ client, character: "tara" } as never)).toThrow(/mount/);
     expect(() => createAvatar({ mount, character: "tara" } as never)).toThrow(/client/);
     expect(() => createAvatar({ mount, client } as never)).toThrow(/character/);
+  });
+
+  it("lists the runtime's characters, and says so when an old runtime cannot", async () => {
+    pin.url = standIn();
+    const { listCharacters } = await fresh();
+    expect(await listCharacters()).toEqual([{ name: "tara" }]);
+
+    pin.url = `data:text/javascript,/*${generation++}*/export function mount(){}`;
+    const { listCharacters: old } = await fresh();
+    await expect(old()).rejects.toThrow(/does not list its characters/);
   });
 });

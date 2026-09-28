@@ -33,7 +33,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-const PRODUCTION = "https://avatar.voqalize.com";
+export const PRODUCTION = "https://avatar.voqalize.com";
 
 /** Every hosted character file the runtime's text names, as written there. */
 export function namedCharacters(runtimeText) {
