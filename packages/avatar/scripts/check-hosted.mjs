@@ -12,10 +12,11 @@
  * So this asks the host, from outside, what a customer's browser will ask:
  *
  *   - the runtime at the pinned URL: 200, JavaScript, open CORS;
- *   - every `characters/<name>.<hash>.glb` (and `<name>-still.<hash>.webp`) the runtime's text names, resolved
+ *   - every `characters/<name>.<hash>.glb` (and `<name>-still.<hash>.webp`,
+ *     `<name>-mouth.<hash>.json`) the runtime's text names, resolved
  *     against the runtime's URL the way the runtime resolves it: 200, open CORS;
- *   - and every such `.glb` sealed: the host serves the runtime's own format
- *     and never a glTF file, so a character's file must not begin `glTF`;
+ *   - and every `.glb` and `.json` sealed: the host serves the runtime's own
+ *     format and never a glTF file or readable JSON, so each must begin `VQAV`;
  *   - `/LICENSE` and `/NOTICE`, which the runtime's banner and every GLB's
  *     copyright field point at: 200.
  *
@@ -37,7 +38,7 @@ export const PRODUCTION = "https://avatar.voqalize.com";
 
 /** Every hosted character file the runtime's text names, as written there. */
 export function namedCharacters(runtimeText) {
-  return [...new Set(runtimeText.match(/characters\/[a-z0-9_-]+\.[0-9a-f]{12}\.(?:glb|webp)/g) ?? [])].sort();
+  return [...new Set(runtimeText.match(/characters\/[a-z0-9_-]+\.[0-9a-f]{12}\.(?:glb|webp|json)/g) ?? [])].sort();
 }
 
 /**
@@ -61,7 +62,7 @@ export async function checkHosted(runtimeUrl, { fetch: get = fetch } = {}) {
       const text = want.body && res.status === 200 ? await res.text() : null;
       if (want.sealed && res.status === 200) {
         const head = new Uint8Array(await res.arrayBuffer()).subarray(0, 4);
-        if (String.fromCharCode(...head) === "glTF") why.push("a plain glTF file, not sealed");
+        if (String.fromCharCode(...head) !== "VQAV") why.push("not a sealed file");
       } else if (!want.body) await res.body?.cancel();
       rows.push({ url, ok: why.length === 0, why: why.join(", ") });
       return text;
@@ -77,7 +78,8 @@ export async function checkHosted(runtimeUrl, { fetch: get = fetch } = {}) {
     if (glbs.length === 0) rows.push({ url: runtimeUrl, ok: false, why: "names no character" });
     // `../` because the runtime lives in `runtime/` and the GLBs beside it
     // (scripts/build-runtime.mjs).
-    for (const glb of glbs) await ask(new URL(`../${glb}`, runtimeUrl).href, { cors: true, sealed: glb.endsWith(".glb") });
+    // A GLB and a mouth chart are both sealed; only the still is served as it is.
+    for (const glb of glbs) await ask(new URL(`../${glb}`, runtimeUrl).href, { cors: true, sealed: !glb.endsWith(".webp") });
   }
   for (const name of ["LICENSE", "NOTICE"]) await ask(new URL(`/${name}`, runtimeUrl).href, {});
   return rows;
