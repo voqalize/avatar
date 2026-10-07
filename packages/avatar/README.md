@@ -71,6 +71,38 @@ The gains are optional, from `0` to `2`, and `1` is as authored:
 
 The client must be connected to a Voqalize session that has the avatar turned on.
 
+## Preload before the call
+
+Building a face takes the browser a moment: the runtime, the character, a GPU
+context and its shaders. On a slow phone that is over a second after the call
+connects before the face appears. `preloadAvatar` does that work before the call, off screen, so the
+mount that follows only moves the finished face onto the page:
+
+```js
+import { preloadAvatar, unloadAvatar } from "@voqalize/avatar";
+
+// when the visitor is about to talk: the page with the call button, or hover on it
+const face = preloadAvatar("<name>");
+
+// later, the ordinary mount takes the preloaded face
+createAvatar({ mount, client, character: "<name>" });
+
+// or, if the visitor leaves without calling
+unloadAvatar(face);
+```
+
+- One face is held at a time. Preloading the same character again returns the
+  same handle; preloading another frees the one held.
+- A mount of that character, through `createAvatar` or `<Avatar>`, takes the
+  face. After that the handle holds nothing and `unloadAvatar` does nothing,
+  and `destroy()` frees the face as usual.
+- `face.ready` settles when the face is built, or when it cannot be (no
+  WebGL 2, for example) and the mount will build it the ordinary way. You
+  never need to wait for it before mounting. It rejects only for a name that is
+  no character.
+- `unloadAvatar` frees the GPU context and the character's memory at once,
+  and is safe to call at any time.
+
 ### React
 
 ```jsx
