@@ -94,10 +94,11 @@ describe("preloading", () => {
   /** A stand-in that can preload, and records each call in order. */
   function preloading() {
     (globalThis as unknown as { __pre: string[] }).__pre = [];
-    return `data:text/javascript,/*${generation++}*/const c=globalThis.__pre;` +
+    // Encoded: a bare `?` in a data: URL starts its query, and Node 20 cuts the module there.
+    return "data:text/javascript," + encodeURIComponent(`/*${generation++}*/const c=globalThis.__pre;` +
       `export function mount(r){c.push("mount:"+r.character);return {destroy(){}}}` +
       `export function preload(n){c.push("preload:"+n);return n==="nobody"?Promise.reject(new TypeError("no "+n)):Promise.resolve()}` +
-      `export function unload(n){c.push("unload:"+n)}`;
+      `export function unload(n){c.push("unload:"+n)}`);
   }
   const calls = () => (globalThis as unknown as { __pre: string[] }).__pre;
 
