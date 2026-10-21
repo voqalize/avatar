@@ -44,7 +44,7 @@ export interface AvatarOptions {
   readonly mouthGain?: Gain;
   /** Nods and other gestures. */
   readonly gestureGain?: Gain;
-  /** Idle motion. */
+  /** Idle and speaking motion. */
   readonly motionGain?: Gain;
 }
 
@@ -73,6 +73,10 @@ export interface CharacterInfo {
   /** Voqalize voice ids that suit this face, best first — `"omnivoice/gauri"`,
    *  for example. Advice only: the avatar never speaks. */
   readonly suggestedVoices: readonly string[];
+  /** The languages the first suggested voice speaks, default first: `"en"` or
+   *  `"hi"`. Send one as the `language` of every speech request;
+   *  without it the voice falls back to English. */
+  readonly languages: readonly string[];
 }
 
 /** A face `preloadAvatar` is building, or has built, ahead of its mount. */

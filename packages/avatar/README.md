@@ -53,7 +53,7 @@ import { listCharacters } from "@voqalize/avatar";
 
 for (const c of await listCharacters()) {
   // c.name, c.still (an image URL), c.gender, c.age.min, c.age.max,
-  // c.ethnicity[], c.tags[], c.suggestedVoices[]
+  // c.ethnicity[], c.tags[], c.suggestedVoices[], c.languages[]
 }
 ```
 
@@ -61,13 +61,16 @@ Use it to build a picker or a filter rather than writing the names down. The
 words in `gender`, `ethnicity` and `tags` come from closed lists, so a filter
 you build from one call matches the next. `suggestedVoices` lists the voices
 that suit the face, best first, as Voqalize voice ids such as
-`omnivoice/gauri`. It is advice: the avatar never speaks.
+`omnivoice/gauri`. It is advice: the avatar never speaks. `languages` lists
+the languages the first voice speaks, default first (`"en"` or `"hi"`). Send one as the `language` of every speech request: without it the
+voice falls back to English, and Hindi text comes out with an
+English accent.
 
 The gains are optional, from `0` to `2`, and `1` is as authored:
 
 - `mouthGain` sets how far the mouth moves.
 - `gestureGain` sets the size of nods and other gestures.
-- `motionGain` sets the amount of idle motion.
+- `motionGain` sets the amount of idle and speaking motion: the head, trunk and shoulders. Left out, it is `1`, or `0.5` when the reader's system asks for reduced motion.
 
 The client must be connected to a Voqalize session that has the avatar turned on.
 

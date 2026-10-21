@@ -12,8 +12,11 @@
  * So this asks the host, from outside, what a customer's browser will ask:
  *
  *   - the runtime at the pinned URL: 200, JavaScript, open CORS;
+ *   - every `chunk.<hash>.js` it imports, and every chunk those import (a
+ *     runtime is one file and imports none, but a dev runtime built before
+ *     2026-10-19 split, and the host still serves those): the same;
  *   - every `characters/<name>.<hash>.glb` (and `<name>-still.<hash>.webp`,
- *     `<name>-mouth.<hash>.json`) the runtime's text names, resolved
+ *     `<name>-mouth.<hash>.json`) the runtime's text, or a chunk's, names, resolved
  *     against the runtime's URL the way the runtime resolves it: 200, open CORS;
  *   - and every `.glb` and `.json` sealed: the host serves the runtime's own
  *     format and never a glTF file or readable JSON, so each must begin `VQAV`;
@@ -39,6 +42,11 @@ export const PRODUCTION = "https://avatar.voqalize.com";
 /** Every hosted character file the runtime's text names, as written there. */
 export function namedCharacters(runtimeText) {
   return [...new Set(runtimeText.match(/characters\/[a-z0-9_-]+\.[0-9a-f]{12}\.(?:glb|webp|json)/g) ?? [])].sort();
+}
+
+/** Every chunk a runtime module imports, as written there: beside it, in `runtime/`. */
+export function namedChunks(moduleText) {
+  return [...new Set(moduleText.match(/(?<=["']\.\/)chunk\.[A-Z0-9]+\.js(?=["'])/g) ?? [])].sort();
 }
 
 /**
@@ -74,7 +82,21 @@ export async function checkHosted(runtimeUrl, { fetch: get = fetch } = {}) {
 
   const runtime = await ask(runtimeUrl, { cors: true, type: /javascript/, body: true });
   if (runtime !== null) {
-    const glbs = namedCharacters(runtime);
+    // The runtime's text and every chunk's, read once each: a module the
+    // browser can fetch is a module that must be served.
+    let text = runtime;
+    const seen = new Set([runtimeUrl]);
+    const walk = async (module, url) => {
+      for (const chunk of namedChunks(module)) {
+        const at = new URL(`./${chunk}`, url).href;
+        if (seen.has(at)) continue;
+        seen.add(at);
+        const body = await ask(at, { cors: true, type: /javascript/, body: true });
+        if (body !== null) { text += body; await walk(body, at); }
+      }
+    };
+    await walk(runtime, runtimeUrl);
+    const glbs = namedCharacters(text);
     if (glbs.length === 0) rows.push({ url: runtimeUrl, ok: false, why: "names no character" });
     // `../` because the runtime lives in `runtime/` and the GLBs beside it
     // (scripts/build-runtime.mjs).
