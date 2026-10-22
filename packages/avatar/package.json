@@ -1,6 +1,6 @@
 {
   "name": "@voqalize/avatar",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "A talking head for AI voice calls that embodies your pipecat client. This package loads the Voqalize avatar runtime.",
   "license": "MIT",
   "author": "Voqalize",
@@ -47,6 +47,7 @@
   "scripts": {
     "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo 'run pnpm test from the repo root' >&2 && exit 1",
     "prepare": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json"
   },
   "peerDependencies": {

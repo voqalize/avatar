@@ -45,8 +45,9 @@ appeared.
 
 `character` names one of the characters you can meet at
 https://voqalize.com/demos/avatar. Each release of this package can mount a
-fixed set of them, and a name it does not have throws, listing the ones it
-does. `listCharacters()` returns that set:
+fixed set of them. A name it does not have mounts nothing: `createAvatar`
+still returns, and the error goes to the console, listing the names it does
+have. `listCharacters()` returns that set:
 
 ```js
 import { listCharacters } from "@voqalize/avatar";
@@ -73,6 +74,9 @@ The gains are optional, from `0` to `2`, and `1` is as authored:
 - `motionGain` sets the amount of idle and speaking motion: the head, trunk and shoulders. Left out, it is `1`, or `0.5` when the reader's system asks for reduced motion.
 
 The client must be connected to a Voqalize session that has the avatar turned on.
+Nothing in the transport changes: the avatar draws in the browser from the
+session's data-channel messages, so there is no video track to turn on, and
+`video_out_enabled` (the path for server-rendered video avatars) stays off.
 
 ## Preload before the call
 
