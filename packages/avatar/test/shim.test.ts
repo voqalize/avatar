@@ -28,6 +28,10 @@ function standIn() {
 
 const mount = {} as HTMLElement;
 const client = {} as never;
+/** For a test that something did *not* happen: give it the time it would
+ *  have taken. Where something should happen, the test waits for it instead
+ *  (`vi.waitFor`): under a loaded suite a `data:` import has taken longer than
+ *  this to arrive, and the mount it was waiting for was missed. */
 const flush = () => new Promise((r) => setTimeout(r, 20));
 
 async function fresh() {
@@ -44,8 +48,7 @@ describe("the shim", () => {
     const { createAvatar } = await fresh();
     const avatar = createAvatar({ mount, client, character: "tara", mouthGain: 1.5 });
     expect(log().mounted).toEqual([]);
-    await flush();
-    expect(log().mounted).toEqual([{ mount, client, character: "tara", mouthGain: 1.5, protocol: 7 }]);
+    await vi.waitFor(() => expect(log().mounted).toEqual([{ mount, client, character: "tara", mouthGain: 1.5, protocol: 7 }]));
     avatar.destroy();
     expect(log().destroyed).toBe(1);
   });
@@ -63,13 +66,11 @@ describe("the shim", () => {
     pin.url = "data:text/javascript,throw new Error('no')";
     const { createAvatar } = await fresh();
     createAvatar({ mount, client, character: "tara" });
-    await flush();
-    expect(error).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(error).toHaveBeenCalledOnce());
 
     pin.url = standIn();
     createAvatar({ mount, client, character: "tara" });
-    await flush();
-    expect(log().mounted).toHaveLength(1);
+    await vi.waitFor(() => expect(log().mounted).toHaveLength(1));
   });
 
   it("refuses a missing mount, client or character synchronously", async () => {
@@ -110,7 +111,7 @@ describe("preloading", () => {
     expect(face.character).toBe("tara");
     await face.ready;
     createAvatar({ mount, client, character: "tara" });
-    await flush();
+    await vi.waitFor(() => expect(calls()).toContain("mount:tara"));
     unloadAvatar(face);
     await flush();
     expect(calls()).toEqual(["preload:tara", "mount:tara"]);
@@ -167,8 +168,7 @@ describe("preloading", () => {
     const { preloadAvatar, createAvatar } = await fresh();
     await expect(preloadAvatar("tara").ready).resolves.toBeUndefined();
     createAvatar({ mount, client, character: "tara" });
-    await flush();
-    expect(log().mounted).toHaveLength(1);
+    await vi.waitFor(() => expect(log().mounted).toHaveLength(1));
 
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     pin.url = "data:text/javascript,throw new Error('no')";
