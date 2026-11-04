@@ -21,14 +21,17 @@
  *   - and every `.glb` and `.json` sealed: the host serves the runtime's own
  *     format and never a glTF file or readable JSON, so each must begin `VQAV`;
  *   - `/LICENSE` and `/NOTICE`, which the runtime's banner and every GLB's
- *     copyright field point at: 200.
+ *     copyright field point at: 200;
+ *   - and all of it again on the host's other name (`TWIN_HOSTS`): a page whose
+ *     policy refuses one name loads the runtime and its files from the other,
+ *     so a file missing from either is a face that never appears on some page.
  *
  * It reads the GLB names out of the runtime rather than from a build's output
  * directory, so it needs nothing but the pin and the network, and runs the
  * same in private before the export as in public before the publish.
  *
  *   node packages/avatar/scripts/check-hosted.mjs              # the pin in shim/pin.ts
- *   node packages/avatar/scripts/check-hosted.mjs --production # ...and it must be avatar.voqalize.com
+ *   node packages/avatar/scripts/check-hosted.mjs --production # ...and it must be cdn.voqalize.com
  *   node packages/avatar/scripts/check-hosted.mjs <runtime-url>
  *
  * No dependencies: it runs in the public checkout's release job with nothing
@@ -37,7 +40,30 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-export const PRODUCTION = "https://avatar.voqalize.com";
+export const PRODUCTION = "https://cdn.voqalize.com";
+
+/**
+ * Each avatar host's other name: one bucket behind one load balancer, served
+ * under both. `avatar.voqalize.com` is the name every release before 0.7
+ * pinned, and stays until no page asks for it. The runtime (`client/hosts.ts`)
+ * and the shim (`shim/index.ts`) keep the same pairs; `test/hosts.test.ts`
+ * holds the copies equal.
+ */
+export const TWIN_HOSTS = Object.freeze({
+  "cdn.voqalize.com": "avatar.voqalize.com",
+  "avatar.voqalize.com": "cdn.voqalize.com",
+  "cdn.dev.voqalize.com": "avatar.dev.voqalize.com",
+  "avatar.dev.voqalize.com": "cdn.dev.voqalize.com",
+});
+
+/** `url` on its host's other name, or `null` where the host has none. */
+export function twinUrl(url) {
+  const parsed = new URL(url);
+  const other = TWIN_HOSTS[parsed.host];
+  if (!other) return null;
+  parsed.host = other;
+  return parsed.href;
+}
 
 /** Every hosted character file the runtime's text names, as written there. */
 export function namedCharacters(runtimeText) {
@@ -125,7 +151,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.error("  without RUNTIME_BASE and commit the pin it writes.");
     process.exit(1);
   }
-  const rows = await checkHosted(url);
+  const twin = twinUrl(url);
+  const rows = [...await checkHosted(url), ...(twin ? await checkHosted(twin) : [])];
   for (const { url: u, ok, why } of rows) console.log(`${ok ? "ok  " : "FAIL"}  ${u}${why ? `  (${why})` : ""}`);
   if (rows.some((r) => !r.ok)) {
     console.error("\n! not everything this shim loads is served. Upload first (scripts/upload-runtime.mjs); do not publish.");

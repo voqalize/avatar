@@ -6,7 +6,7 @@ and shows the state of the call: listening, thinking, being interrupted.
 
 This package is the loader. The avatar itself (the characters, the renderer and
 everything that follows the call) is the Voqalize avatar runtime, which this
-package imports from `https://avatar.voqalize.com` when the first avatar mounts.
+package imports from `https://cdn.voqalize.com` when the first avatar mounts.
 Each release of this package is pinned to the runtime it was released with, so
 upgrading the package is how you upgrade the avatar.
 
@@ -124,20 +124,41 @@ the `<div>` the avatar renders into.
 
 ## Content Security Policy
 
-If your page sets a Content-Security-Policy, add these sources:
+If your page sets a Content-Security-Policy, add our host to these directives:
 
-- `script-src https://avatar.voqalize.com`, because the runtime is a module
-  imported from there.
-- `connect-src https://avatar.voqalize.com blob:`, because the runtime fetches
-  the character from there and decodes the character's textures from `blob:`
-  URLs.
-- `img-src https://avatar.voqalize.com blob:`. The asset host serves the
-  still photograph shown where a browser has no WebGL 2, as a call whose other
-  side has turned their camera off; without it that tile shows an empty circle.
-  `blob:` is for Safari before 17 and Firefox before 98, which decode the
-  character's textures through an image element.
+```
+script-src  https://cdn.voqalize.com
+connect-src https://cdn.voqalize.com
+img-src     https://cdn.voqalize.com
+```
 
-The runtime needs nothing else: no workers, no inline styles and no `eval`.
+- `script-src`, because the runtime is a module imported from there.
+- `connect-src`, because the runtime fetches the character from there.
+- `img-src`, for the still photograph shown where a browser has no WebGL 2,
+  as a call whose other side has turned their camera off. Without it that
+  tile shows an empty circle; nothing else is affected.
+
+The runtime needs nothing else: no `blob:`, no `data:`, no workers, no inline
+styles and no `eval`. Safari before 17 and Firefox before 98 try one image from
+a `blob:` URL first; the policy refuses it, the face draws all the same, and a
+policy with a `report-to` gets one report from each such page. Your page's own call (its `connect-src` for the voice
+service, its microphone permission) is not part of this list.
+
+A policy applies to the page that sends it, so only the pages that mount an
+avatar need these lines. To try them before you enforce them, send the policy
+as `Content-Security-Policy-Report-Only`: the browser reports what it would
+refuse and refuses nothing.
+
+### Upgrading from 0.6
+
+Releases before 0.7 load from `https://avatar.voqalize.com` and asked for
+`blob:` as well. That host serves the same files and stays up, and a policy
+written for it keeps working with this release: the runtime is imported from
+whichever name your policy allows (if your policy has a
+`report-to`, expect one report for the name it refuses). Change your policy after you
+upgrade the package, not before: a 0.6 package under the policy above is
+refused its runtime. Once every page runs 0.7 or later you can drop
+`avatar.voqalize.com` and `blob:` from your policy.
 
 ## Bundlers
 
@@ -149,4 +170,4 @@ avatars mount.
 ## Licence
 
 This package is MIT; see [LICENSE](./LICENSE). The runtime it loads is not open
-source. Its terms are at https://avatar.voqalize.com/LICENSE.
+source. Its terms are at https://cdn.voqalize.com/LICENSE.

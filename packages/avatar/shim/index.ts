@@ -15,16 +15,17 @@
  *
  * This package is the loader and nothing else. The avatar itself — the
  * characters, the renderer and everything that reads the call — is the
- * Voqalize avatar runtime, which this module imports from
- * `avatar.voqalize.com` at the version it was released with and which is
- * licensed separately. `createAvatar` returns at once; the face appears when
- * the runtime and the character have arrived.
+ * Voqalize avatar runtime, which this module imports from `cdn.voqalize.com`
+ * at the version it was released with and which is licensed separately.
+ * `createAvatar` returns at once; the face appears when the runtime and the
+ * character have arrived.
  *
- * A page with a Content-Security-Policy needs `https://avatar.voqalize.com` in
+ * A page with a Content-Security-Policy needs `https://cdn.voqalize.com` in
  * `script-src` (the runtime), `connect-src` (the character it fetches) and
- * `img-src` (the camera-off still, where there is no WebGL 2), and `blob:` in
- * `connect-src` (the character's textures are decoded from blob URLs;
- * `img-src` too on Safari before 17 and Firefox before 98).
+ * `img-src` (the camera-off still, where there is no WebGL 2), and nothing
+ * else. A policy written for a release before 0.7 names
+ * `avatar.voqalize.com`, the same host under its old name, and keeps working:
+ * a runtime the page refuses from one name is imported from the other.
  */
 
 import type { PipecatClient } from "@pipecat-ai/client-js";
@@ -96,15 +97,55 @@ interface Runtime {
   unload?(name: string): void;
 }
 
+/**
+ * Each avatar host's other name: one bucket, served under both. The runtime
+ * keeps the same pairs for the files it fetches (`client/hosts.ts` in the
+ * private source; a test holds the copies equal).
+ */
+const TWIN_HOSTS: Readonly<Record<string, string>> = {
+  "cdn.voqalize.com": "avatar.voqalize.com",
+  "avatar.voqalize.com": "cdn.voqalize.com",
+  "cdn.dev.voqalize.com": "avatar.dev.voqalize.com",
+  "avatar.dev.voqalize.com": "cdn.dev.voqalize.com",
+};
+
+/** The pinned runtime on the host's other name, or `null` where it has none. */
+function aliasOf(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const other = TWIN_HOSTS[parsed.host];
+    if (!other) return null;
+    parsed.host = other;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+const importRuntime = (url: string): Promise<Runtime> =>
+  import(/* @vite-ignore */ /* webpackIgnore: true */ url);
+
 let runtime: Promise<Runtime> | undefined;
 
 function load(): Promise<Runtime> {
   // One import per page, however many avatars mount; a failure is forgotten so
-  // the next mount tries again rather than inheriting a dead promise.
-  runtime ??= import(/* @vite-ignore */ /* webpackIgnore: true */ RUNTIME_URL).catch((error) => {
-    runtime = undefined;
-    throw error;
-  });
+  // the next mount tries again rather than inheriting a dead promise. A page
+  // whose policy names the host's other name — every policy written for a
+  // release before 0.7 — refuses the pinned URL, and gets the same file from
+  // the name it allows. Where that fails too, the first failure is the one
+  // reported: a runtime that threw while it ran says why, not the alias.
+  runtime ??= importRuntime(RUNTIME_URL)
+    .catch((error: unknown) => {
+      const alias = aliasOf(RUNTIME_URL);
+      if (!alias) throw error;
+      return importRuntime(alias).catch(() => {
+        throw error;
+      });
+    })
+    .catch((error: unknown) => {
+      runtime = undefined;
+      throw error;
+    });
   return runtime;
 }
 
