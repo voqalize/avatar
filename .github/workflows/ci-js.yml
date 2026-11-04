@@ -1,5 +1,5 @@
 # The JS gate: `@voqalize/avatar`, the shim that loads the Voqalize avatar
-# runtime from avatar.voqalize.com. The runtime itself is built and checked where
+# runtime from cdn.voqalize.com. The runtime itself is built and checked where
 # it is developed; what this proves is the loader and the tarball.
 # release-npm.yml runs this before it publishes.
 name: ci-js

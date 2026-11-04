@@ -19,7 +19,7 @@ uses it: [README.md](README.md). **Everything committed here is public.**
 ## What ships
 
 **`@voqalize/avatar`** (npm, MIT) is a loader and nothing else. It imports the
-Voqalize avatar runtime from `https://avatar.voqalize.com` at the version it
+Voqalize avatar runtime from `https://cdn.voqalize.com` at the version it
 was released with. The runtime, the characters and everything about how the
 avatar talks to the platform are not in this repository and are not described
 here. Keep it that way: a document here does not explain how the avatar works

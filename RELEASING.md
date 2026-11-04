@@ -20,7 +20,8 @@ together from one `v<semver>` tag, and those tags stay as well.
 **What is in the npm tarball, and why.** `files` is `dist`, which is the
 compiled loader and the pin naming the runtime it loads. The package has no
 dependencies and ships no characters. The runtime and the characters are hosted
-on `avatar.voqalize.com`, so what a release pins is the runtime URL in
+on `cdn.voqalize.com` (releases before 0.7 name it `avatar.voqalize.com`,
+the same host under its old name), so what a release pins is the runtime URL in
 `dist/pin.js`. The package-contents step in `ci-js.yml` is what holds this here.
 
 ## Compatibility
