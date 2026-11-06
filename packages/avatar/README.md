@@ -17,9 +17,10 @@ npm install @voqalize/avatar
 ```
 
 The package is ESM, has no runtime dependencies and ships its own types.
-`@pipecat-ai/client-js` (`>=1.4 <2`) and React (`>=18`) are optional peers. The
-pipecat import is used only for types, and React is used only by
-`@voqalize/avatar/react`.
+`@pipecat-ai/client-js` (`>=1.4 <2`) and React (`>=18`) are optional peers, and
+React is used only by `@voqalize/avatar/react`. The `client` you pass is a
+`PipecatClient`, or any client with the members the exported `AvatarClientLike`
+type names; the package imports nothing from pipecat, not even its types.
 
 ## Mount a character
 

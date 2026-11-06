@@ -11,13 +11,12 @@
  */
 
 import { useEffect, useRef, type HTMLAttributes } from "react";
-import type { PipecatClient } from "@pipecat-ai/client-js";
-import { createAvatar, type Gain } from "./index.js";
+import { createAvatar, type AvatarClientLike, type Gain } from "./index.js";
 
 export type AvatarProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
-  /** The live `PipecatClient`, or `null` before connect. Nothing mounts until
-   * it is non-null. */
-  client?: PipecatClient | null;
+  /** The live client (a `PipecatClient`, or any `AvatarClientLike`), or
+   * `null` before connect. Nothing mounts until it is non-null. */
+  client?: AvatarClientLike | null;
   /** Which character, by name. */
   character: string;
   /** Read at mount only. */

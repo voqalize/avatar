@@ -1,5 +1,6 @@
 /**
- * `@voqalize/avatar` — a talking head that embodies a `PipecatClient`.
+ * `@voqalize/avatar` — a talking head that embodies a `PipecatClient`, or any
+ * client with the members `AvatarClientLike` names.
  *
  *     import { createAvatar } from "@voqalize/avatar";
  *
@@ -28,17 +29,32 @@
  * a runtime the page refuses from one name is imported from the other.
  */
 
-import type { PipecatClient } from "@pipecat-ai/client-js";
 import { PROTOCOL, RUNTIME_URL } from "./pin.js";
 
 /** Amplitude, 0..2. `1` is as authored. */
 export type Gain = number;
 
+/**
+ * What the avatar uses of the client, written out rather than imported, so
+ * that any `PipecatClient` is one with no cast and so is a client typed by a
+ * narrower interface of its own. The runtime subscribes with `on` and `off`,
+ * reads the agent's audio from `tracks()`, reports with `sendClientMessage`,
+ * and reads the peer connection from `transport` where there is one.
+ */
+export interface AvatarClientLike {
+  on(event: string, handler: (...args: any[]) => void): unknown;
+  off(event: string, handler: (...args: any[]) => void): unknown;
+  tracks(): { readonly bot?: { readonly audio?: MediaStreamTrack } | null };
+  sendClientMessage(msgType: string, data?: unknown): unknown;
+  readonly transport?: unknown;
+}
+
 export interface AvatarOptions {
   /** The element to render into. The avatar owns its contents. */
   readonly mount: HTMLElement;
-  /** The live `PipecatClient` the avatar embodies. */
-  readonly client: PipecatClient;
+  /** The live client the avatar embodies: a `PipecatClient`, or any
+   * `AvatarClientLike`. */
+  readonly client: AvatarClientLike;
   /** Which character, by name — `"tara"`, for example. */
   readonly character: string;
   /** Mouth movement. */
